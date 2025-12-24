@@ -1,0 +1,21 @@
+# colcon build artifacts
+/build/
+/install/
+/log/
+**/build/
+**/install/
+**/log/
+
+# ROS runtime
+/.ros/
+
+# Python
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# IDE / editor
+.vscode/
+.idea/
+*~
+*.swp

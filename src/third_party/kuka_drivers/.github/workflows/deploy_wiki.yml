@@ -1,0 +1,24 @@
+name: Deploy Wiki
+
+on:
+  push:
+    paths:
+      # Trigger only when wiki directory or pipeline changes
+      - 'doc/wiki/**'
+      - '.github/workflows/deploy_wiki.yml'
+    branches:
+      # And only on master branch
+      - master
+
+jobs:
+  deploy-wiki:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Push Wiki Changes
+      uses: SwiftDocOrg/github-wiki-publish-action@v1
+      with:
+        path: "doc/wiki"
+      env:
+        GH_PERSONAL_ACCESS_TOKEN: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}

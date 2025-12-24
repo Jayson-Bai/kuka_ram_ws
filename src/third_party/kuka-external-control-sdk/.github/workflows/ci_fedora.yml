@@ -1,0 +1,37 @@
+name: CI Fedora
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        fedora_version: [38, 39]
+    container:
+      image: fedora:${{ matrix.fedora_version }}
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        #!/bin/bash
+        dnf install -y cmake gcc-c++ protobuf-devel grpc-devel openssl-devel gtest-devel tinyxml2-devel && mkdir -p kuka_external_control_sdk/build && mkdir -p kuka_external_control_sdk_examples/build
+
+    - name: Build and install
+      run: cmake -DBUILD_TESTING=1 .. && make install
+      working-directory: ./kuka_external_control_sdk/build
+
+    - name: Run tests
+      run: ./test_robot && ./test_message_builder
+      working-directory: ./kuka_external_control_sdk/build/iiqka
+
+    - name: Build and install examples
+      run: cmake -DBUILD_TESTING=1 .. && make
+      working-directory: ./kuka_external_control_sdk_examples/build

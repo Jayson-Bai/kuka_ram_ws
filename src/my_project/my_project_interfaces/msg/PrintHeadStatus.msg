@@ -1,0 +1,13 @@
+builtin_interfaces/Time stamp
+bool ready_for_motion
+uint32 ready_event_seq     
+string ready_event_type    
+bool fan_ok_cf
+bool fan_ok_resin
+float32 current_temp_cf
+float32 target_temp_cf
+float32 current_temp_resin
+float32 target_temp_resin
+int32 current_tool
+int32 error_code
+string raw
