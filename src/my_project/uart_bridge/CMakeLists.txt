@@ -20,7 +20,7 @@ ament_target_dependencies(
   std_msgs
   my_project_interfaces
 )
-target_link_libraries(uart_node PRIVATE Boost::system)
+target_link_libraries(uart_node Boost::system)
 
 install(TARGETS uart_node
   DESTINATION lib/${PROJECT_NAME})
