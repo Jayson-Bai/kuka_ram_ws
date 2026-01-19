@@ -12,6 +12,7 @@
 #include <my_project_interfaces/msg/planned_event.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
+#include <my_project_interfaces/msg/kuka_status.hpp>
 //标准消息头
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32.hpp>
@@ -22,7 +23,10 @@
 #include <unistd.h>
 //并发/容器
 #include <atomic>
+#include <cctype>
+#include <limits>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <thread>
 #include <optional>
@@ -34,6 +38,7 @@ using my_project_interfaces::msg::TrajectoryPoint; //TCP轨迹点
 using my_project_interfaces::msg::PlannedEvent; //打印事件
 using my_project_interfaces::msg::PrintHeadStatus; //打印头状态
 using my_project_interfaces::msg::RsiHeartBeat; //RSI心跳
+using my_project_interfaces::msg::KukaStatus; //KUKA状态
 
 
 class RSINode : public rclcpp::Node
@@ -47,6 +52,7 @@ private:
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr status_sub_; //打印头状态
   //发布 
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr kuka_pub_;  //收到kuka xml
+  rclcpp::Publisher<KukaStatus>::SharedPtr kuka_status_pub_;  //解析后的KUKA状态
   rclcpp::Publisher<RsiHeartBeat>::SharedPtr heartbeat_pub_;  //RSI心跳
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr resync_pub_; //请求中心节点同步
   rclcpp::Publisher<PlannedEvent>::SharedPtr triggered_event_pub_; //转发给UART的事件
@@ -139,6 +145,7 @@ public:
 
     //发布kuka原始消息
     kuka_pub_ = create_publisher<std_msgs::msg::String>("/kuka/raw_xml", 10);
+    kuka_status_pub_ = create_publisher<KukaStatus>("/kuka/status", 10);
 
     //发布RSI心跳
     heartbeat_pub_ = create_publisher<RsiHeartBeat>("/rsi/heartbeat", 10);
@@ -198,6 +205,21 @@ private:
       std_msgs::msg::String raw_msg;
       raw_msg.data = recv_str;
       kuka_pub_ -> publish(raw_msg);     
+
+      //解析KUKA位姿（XYZABC）
+      auto kuka_pose = parse_kuka_xyzabc(recv_str);
+      if (kuka_pose)
+      {
+        KukaStatus status;
+        status.stamp = now();
+        status.x = kuka_pose->x;
+        status.y = kuka_pose->y;
+        status.z = kuka_pose->z;
+        status.a = kuka_pose->a;
+        status.b = kuka_pose->b;
+        status.c = kuka_pose->c;
+        kuka_status_pub_->publish(status);
+      }
 
       //解IPOC
       std::string ipoc = extract_ipoc(recv_str);
@@ -334,6 +356,62 @@ private:
     auto e = xml.find(tag_close, s);
     if (e == std::string::npos) return "0";
     return xml.substr(s, e - s);
+  }
+
+  struct _PoseXYZABC
+  {
+    double x{0.0};
+    double y{0.0};
+    double z{0.0};
+    double a{0.0};
+    double b{0.0};
+    double c{0.0};
+  };
+
+  std::optional<_PoseXYZABC> parse_kuka_xyzabc(const std::string &data_str)
+  {
+    _PoseXYZABC pose;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    pose.x = nan;
+    pose.y = nan;
+    pose.z = nan;
+    pose.a = nan;
+    pose.b = nan;
+    pose.c = nan;
+    bool found_any = false;
+
+    // 仅解析属性格式：X="..." Y="..." Z="..." A="..." B="..." C="..."
+    static const std::regex attr_re(
+      R"re(\b([XYZABC])\s*=\s*"([-+]?\d*\.?\d+)")re",
+      std::regex::icase);
+    try
+    {
+      for (std::sregex_iterator it(data_str.begin(), data_str.end(), attr_re), end; it != end; ++it)
+      {
+        char key = static_cast<char>(std::toupper(static_cast<unsigned char>((*it)[1].str()[0])));
+        double val = std::stod((*it)[2].str());
+        found_any = true;
+        switch (key)
+        {
+          case 'X': pose.x = val; break;
+          case 'Y': pose.y = val; break;
+          case 'Z': pose.z = val; break;
+          case 'A': pose.a = val; break;
+          case 'B': pose.b = val; break;
+          case 'C': pose.c = val; break;
+          default: break;
+        }
+      }
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+
+    if (!found_any) {
+      return std::nullopt;
+    }
+    return pose;
   }
 
   std::string build_reply(const std::string &ipoc, const TrajectoryPoint &tp) 

@@ -32,6 +32,8 @@ ros2 run gcode_planner gcode_planner_npz \
 - --dt: 采样周期秒，默认 0.004（4ms）
 - --chunk-size: npz 分片行数，默认 100000
 
+注意：通过 `ros2 run` 运行安装后的包时，默认 `data_root` 会随安装路径变化，可能落到 `install/.../data`。建议显式传 `--data-root` 或 `--output-dir`。
+
 优先级与路径规则：
 - --out > --output-dir
 - --gcode > --input-gcode-dir > data_root/input_gcode
@@ -128,4 +130,3 @@ ros2 run gcode_planner gcode_planner_npz \
 - `gcode_planner/bspline/BaseFunction.py`: Cox-de Boor 基函数
 - `gcode_planner/bspline/bspline_curve.py`: B 样条曲线插值/逼近
 - `gcode_planner/bspline/bspline_surface.py`: B 样条曲面插值/逼近/采样
-
