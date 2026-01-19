@@ -19,6 +19,12 @@ def generate_launch_description():
     kuka_status_raw = LaunchConfiguration("kuka_status_raw")
     summary_period_ms = LaunchConfiguration("summary_period_ms")
 
+    # System manager params (UI status publisher)
+    ui_publish_period_ms = LaunchConfiguration("ui_publish_period_ms")
+    heartbeat_timeout_s = LaunchConfiguration("heartbeat_timeout_s")
+    traj_queue_limit = LaunchConfiguration("traj_queue_limit")
+    event_queue_limit = LaunchConfiguration("event_queue_limit")
+
     # RSI node params
     sen_type = LaunchConfiguration("sen_type")
     decimal_precision = LaunchConfiguration("decimal_precision")
@@ -71,6 +77,19 @@ def generate_launch_description():
             "e_decimals": e_decimals,
             "kuka_status_raw": kuka_status_raw,
             "summary_period_ms": summary_period_ms,
+        }],
+    )
+
+    system_manager_node = Node(
+        package="control_center",
+        executable="system_manager_node",
+        name="system_manager_node",
+        output="screen",
+        parameters=[{
+            "ui_publish_period_ms": ui_publish_period_ms,
+            "heartbeat_timeout_s": heartbeat_timeout_s,
+            "traj_queue_limit": traj_queue_limit,
+            "event_queue_limit": event_queue_limit,
         }],
     )
 
@@ -147,6 +166,26 @@ def generate_launch_description():
             description="控制中心汇总发布周期（毫秒）。",
         ),
         DeclareLaunchArgument(
+            "ui_publish_period_ms",
+            default_value="200",
+            description="UI 状态发布周期（毫秒）。",
+        ),
+        DeclareLaunchArgument(
+            "heartbeat_timeout_s",
+            default_value="1.0",
+            description="心跳超时时间（秒）。",
+        ),
+        DeclareLaunchArgument(
+            "traj_queue_limit",
+            default_value="5000",
+            description="UI 侧轨迹队列上限。",
+        ),
+        DeclareLaunchArgument(
+            "event_queue_limit",
+            default_value="2000",
+            description="UI 侧事件队列上限。",
+        ),
+        DeclareLaunchArgument(
             "sen_type",
             default_value="PosCorr",
             description="RSI XML 发送类型（需与 KUKA 端配置一致）。",
@@ -178,5 +217,6 @@ def generate_launch_description():
         ),
         rsi_node,
         uart_node,
+        system_manager_node,
         center_delayed,
     ])
