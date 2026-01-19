@@ -99,17 +99,17 @@ namespace cnpy {
             assert(!fortran_order);
 
             if(word_size != sizeof(T)) {
-                std::cout<<"libnpy error: "<<fname<<" has word size "<<word_size<<" but npy_save appending data sized "<<sizeof(T)<<"\n";
+                std::cout<<"libnpy 错误: "<<fname<<" 的字长为 "<<word_size<<"，但 npy_save 追加的数据字长为 "<<sizeof(T)<<"\n";
                 assert( word_size == sizeof(T) );
             }
             if(true_data_shape.size() != shape.size()) {
-                std::cout<<"libnpy error: npy_save attempting to append misdimensioned data to "<<fname<<"\n";
+                std::cout<<"libnpy 错误: npy_save 尝试向 "<<fname<<" 追加维度不匹配的数据\n";
                 assert(true_data_shape.size() != shape.size());
             }
 
             for(size_t i = 1; i < shape.size(); i++) {
                 if(shape[i] != true_data_shape[i]) {
-                    std::cout<<"libnpy error: npy_save attempting to append misshaped data to "<<fname<<"\n";
+                    std::cout<<"libnpy 错误: npy_save 尝试向 "<<fname<<" 追加形状不匹配的数据\n";
                     assert(shape[i] == true_data_shape[i]);
                 }
             }

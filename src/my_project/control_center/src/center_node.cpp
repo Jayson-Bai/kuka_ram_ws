@@ -47,23 +47,9 @@ private:
 
     rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
     rclcpp::Publisher<PlannedEvent>::SharedPtr event_pub_;
-    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr summary_pub_;
-
-    rclcpp::TimerBase::SharedPtr summary_timer_;
-
     std::mutex cache_mutex_;
-    std::optional<std::string> last_kuka_xml_;
-    std::optional<KukaStatus> last_kuka_status_;
-    std::optional<RsiHeartBeat> last_hb_;
     std::optional<PrintHeadStatus> last_printhead_status_;
-    std::optional<uint32_t> last_resync_seq_;
-    rclcpp::Time last_kuka_stamp_;
-    rclcpp::Time last_kuka_status_stamp_;
-    rclcpp::Time last_hb_stamp_;
-    rclcpp::Time last_printhead_status_stamp_;
-    rclcpp::Time last_resync_stamp_;
 
-    int summary_period_ms_{1000};
     bool kuka_status_raw_{false};
     int plan_qos_depth_{2000};
     int traj_prefill_{1000};
@@ -97,9 +83,9 @@ public:
         npz_loader_ = std::make_unique<control_center::NpzLoader>(
             npz_path, static_cast<size_t>(npz_preload));
         if (!npz_loader_->ok()) {
-            RCLCPP_ERROR(get_logger(), "NPZ loader init failed: %s", npz_loader_->error().c_str());
+            RCLCPP_ERROR(get_logger(), "NPZ加载器初始化失败：%s", npz_loader_->error().c_str());
         } else {
-            RCLCPP_INFO(get_logger(), "NPZ loader ready: %s (preload=%ld)",
+            RCLCPP_INFO(get_logger(), "NPZ加载器就绪：%s (预加载=%ld)",
                         npz_path.c_str(), static_cast<long>(npz_preload));
         }
         queue_manager_ = std::make_unique<control_center::QueueManager>(
@@ -110,8 +96,6 @@ public:
         }
 
         kuka_status_raw_ = declare_parameter<bool>("kuka_status_raw", false);
-        summary_period_ms_ = declare_parameter<int>("summary_period_ms", 200);
-
         auto monitor_qos = rclcpp::QoS(10);
         auto plan_qos = rclcpp::QoS(plan_qos_depth_).reliable();
 
@@ -120,24 +104,17 @@ public:
             "/kuka/raw_xml",
             monitor_qos,
             [this](std_msgs::msg::String::SharedPtr msg){
-                std::lock_guard<std::mutex> lk(cache_mutex_);
-                last_kuka_xml_ = msg->data;
-                last_kuka_stamp_ = now();
                 if (kuka_status_raw_){
-                    RCLCPP_INFO(get_logger(), "KUKA端原始xml长度=%zu", last_kuka_xml_ ->size());
+                    RCLCPP_DEBUG(get_logger(), "KUKA端原始XML长度=%zu", msg->data.size());
                 }
             }
         );
 
-        //订阅KUKA状态
+        //订阅KUKA状态（保留话题连接，后续如需再用）
         kuka_status_sub_ = create_subscription<KukaStatus>(
             "kuka/status",
             monitor_qos,
-            [this](KukaStatus::SharedPtr msg){
-                std::lock_guard<std::mutex> lk(cache_mutex_);
-                last_kuka_status_ = *msg;
-                last_kuka_status_stamp_ = now();
-            }
+            [](KukaStatus::SharedPtr) {}
         );
 
         //订阅RSI心跳包
@@ -145,12 +122,8 @@ public:
             "/rsi/heartbeat",
             monitor_qos,
             [this](RsiHeartBeat::SharedPtr msg){
-                {
-                    std::lock_guard<std::mutex> lk(cache_mutex_);
-                    last_hb_ = *msg;
-                    last_hb_stamp_ = now();
-                    last_seq_used_ = msg->seq_used;
-                }
+                std::lock_guard<std::mutex> lk(cache_mutex_);
+                last_seq_used_ = msg->seq_used;
                 publish_from_queue();
             }
         );
@@ -160,11 +133,8 @@ public:
             "printhead/status",
             monitor_qos,
             [this](PrintHeadStatus::SharedPtr msg){
-                {
-                    std::lock_guard<std::mutex> lk(cache_mutex_);
-                    last_printhead_status_ = *msg;
-                    last_printhead_status_stamp_ = now();
-                }
+                std::lock_guard<std::mutex> lk(cache_mutex_);
+                last_printhead_status_ = *msg;
             }
         );
 
@@ -172,10 +142,7 @@ public:
         resync_sub_ = create_subscription<std_msgs::msg::UInt32>(
             "/rsi/resync_request",
             monitor_qos,
-            [this](std_msgs::msg::UInt32::SharedPtr msg){
-                std::lock_guard<std::mutex> lk(cache_mutex_);
-                last_resync_seq_ = msg->data;
-                last_resync_stamp_ = now();
+            [this](std_msgs::msg::UInt32::SharedPtr){
                 {
                     std::lock_guard<std::mutex> qlk(queue_mutex_);
                     if (queue_manager_) {
@@ -190,13 +157,6 @@ public:
         traj_pub_ = create_publisher<TrajectoryPoint>("/planned_trajectory", plan_qos);
         event_pub_ = create_publisher<PlannedEvent>("/planned_events", plan_qos);
 
-        summary_pub_ = create_publisher<std_msgs::msg::String>("/control_center/summary",monitor_qos);
-
-        summary_timer_ = create_wall_timer(
-            std::chrono::milliseconds(summary_period_ms_),
-            [this](){
-                publish_summary(); 
-            });
         initial_prefill();
 
     }
@@ -224,13 +184,13 @@ private:
 
         if (events.size() > static_cast<size_t>(plan_qos_depth_)) {
             RCLCPP_WARN(get_logger(),
-                        "planned_events exceeds QoS depth (%zu > %d), messages may drop",
+                        "计划事件数量超过QoS深度 (%zu > %d)，消息可能丢失",
                         events.size(), plan_qos_depth_);
         }
         for (auto &ev : events) {
             ev.stamp = now();
             event_pub_->publish(ev);
-            RCLCPP_INFO(get_logger(), "publish event seq=%u type=%s payload=%s",
+            RCLCPP_DEBUG(get_logger(), "发布事件 序号=%u 类型=%s 内容=%s",
                         ev.trigger_seq,
                         ev.event_type.c_str(),
                         ev.payload.c_str());
@@ -240,76 +200,8 @@ private:
             tp.stamp = now();
             traj_pub_->publish(tp);
             last_published_traj_seq_ = tp.seq;
-            RCLCPP_INFO(get_logger(), "prefill traj seq=%u tool=%d", tp.seq, tp.tool_id);
+            RCLCPP_DEBUG(get_logger(), "预填充轨迹 序号=%u 工具=%d", tp.seq, tp.tool_id);
         }
-    }
-
-    //各类状态信息
-    void publish_summary()
-    {
-        std::optional<std::string> kuka_xml;
-        std::optional<KukaStatus> kuka_status;
-        std::optional<RsiHeartBeat> hb;
-        std::optional<PrintHeadStatus> printhead_status;
-        std::optional<uint32_t> resync_seq;
-        rclcpp::Time kuka_stamp, kuka_status_stamp, hb_stamp, printhead_status_stamp, resync_stamp;
-
-        {
-            std::lock_guard<std::mutex> lk(cache_mutex_);
-            if(last_kuka_xml_) { kuka_xml = last_kuka_xml_; kuka_stamp = last_kuka_stamp_;}
-            if(last_kuka_status_) { kuka_status = last_kuka_status_; kuka_status_stamp = last_kuka_status_stamp_;}
-            if(last_hb_) { hb = last_hb_; hb_stamp = last_hb_stamp_;}
-            if(last_printhead_status_) {printhead_status = last_printhead_status_; printhead_status_stamp = last_printhead_status_stamp_;}
-            if(last_resync_seq_) { resync_seq = last_resync_seq_; resync_stamp = last_resync_stamp_; }
-        }
-
-        auto now_t = now();
-        std::ostringstream oss;
-        oss << "stamp=" << now_t.seconds();
-
-        if(hb){
-            oss << "seq_used=" << hb->seq_used
-                << "ipoc=" << hb->ipoc
-                << " tool=" << hb->tool_id
-                << "extrude_abs=" << hb->extrude_abs
-                << "hb_age_s=" << (now_t - hb_stamp).seconds();
-        } else {
-            oss << "seq_used=n/a ipoc=n/a tool=n/a extrude_abs=n/a";
-        }
-
-        if(printhead_status){
-            oss << "ready=" << (printhead_status->ready_for_motion ? "1" : "0")
-                << " event_seq=" << printhead_status->ready_event_seq
-                << " event_type=" << printhead_status->ready_event_type
-                << " temp_cf=" << printhead_status->current_temp_cf << "/" << printhead_status->target_temp_cf
-                << " temp_resin=" << printhead_status->current_temp_resin << "/" << printhead_status->target_temp_resin
-                << " fan_cf=" << (printhead_status->fan_ok_cf ? "1" : "0")
-                << " fan_resin=" << (printhead_status->fan_ok_resin ? "1" : "0")
-                << " tool=" << printhead_status->current_tool
-                << " err=" << printhead_status->error_code
-                << " printhead_status_age_s=" << (now_t - printhead_status_stamp).seconds();
-        } else {
-            oss << " ready=n/a event_seq=n/a event_type=n/a";
-        }
-
-        if(kuka_status){
-            oss << "kuka_xyzabc="<<kuka_status->x <<","<<kuka_status->y<<","<<kuka_status->z<<","<<kuka_status->a<<","
-                << kuka_status->b<<","<<kuka_status->c<<","<<"kuka_status_age_s" << (now_t - kuka_status_stamp).seconds();
-        } else if (kuka_xml){
-            oss << " kuka_xml_len=" << kuka_xml->size()
-                << " kuka_xml_age_s=" << (now_t - kuka_stamp).seconds();
-        } else {
-            oss << "kuka_xml_len=n/a";
-        }
-
-        if (resync_seq) {
-            oss << " resync_seq=" << *resync_seq
-            << " resync_age_s=" << (now_t - resync_stamp).seconds();
-        }
-        
-        std_msgs::msg::String out;
-        out.data = oss.str();
-        summary_pub_ -> publish(out);
     }
 
     void publish_from_queue()
@@ -348,9 +240,21 @@ private:
 
         if (backlog_to_report) {
             if (*backlog_to_report < static_cast<uint32_t>(traj_low_)) {
-                RCLCPP_WARN(get_logger(), "traj backlog low: %u (<%d)", *backlog_to_report, traj_low_);
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "轨迹积压过低：%u (<%d)",
+                    *backlog_to_report,
+                    traj_low_);
             } else if (*backlog_to_report > static_cast<uint32_t>(traj_high_)) {
-                RCLCPP_WARN(get_logger(), "traj backlog high: %u (>%d)", *backlog_to_report, traj_high_);
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "轨迹积压过高：%u (>%d)",
+                    *backlog_to_report,
+                    traj_high_);
             }
         }
 
@@ -359,7 +263,7 @@ private:
             tp_to_pub->stamp = now();
             traj_pub_->publish(*tp_to_pub);
             last_published_traj_seq_ = tp_to_pub->seq;
-            RCLCPP_INFO(get_logger(), "publish traj seq=%u tool=%d", tp_to_pub->seq, tp_to_pub->tool_id);
+            RCLCPP_DEBUG(get_logger(), "发布轨迹 序号=%u 工具=%d", tp_to_pub->seq, tp_to_pub->tool_id);
         }
     }
 

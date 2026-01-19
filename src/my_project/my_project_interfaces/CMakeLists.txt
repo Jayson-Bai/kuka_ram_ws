@@ -17,6 +17,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/PrintHeadStatus.msg"
 "msg/KukaStatus.msg"
 "msg/RsiHeartBeat.msg"
+"msg/UiStatus.msg"
 DEPENDENCIES builtin_interfaces std_msgs
 )
 

@@ -63,6 +63,8 @@ void cnpy::parse_npy_header(unsigned char* buffer,size_t& word_size, std::vector
     //std::string magic_string(buffer,6);
     uint8_t major_version = *reinterpret_cast<uint8_t*>(buffer+6);
     uint8_t minor_version = *reinterpret_cast<uint8_t*>(buffer+7);
+    (void)major_version;
+    (void)minor_version;
     uint16_t header_len = *reinterpret_cast<uint16_t*>(buffer+8);
     std::string header(reinterpret_cast<char*>(buffer+9),header_len);
 
@@ -205,6 +207,7 @@ cnpy::NpyArray load_the_npz_array(FILE* fp, uint32_t compr_bytes, uint32_t uncom
     d_stream.avail_in = 0;
     d_stream.next_in = Z_NULL;
     err = inflateInit2(&d_stream, -MAX_WBITS);
+    (void)err;
 
     d_stream.avail_in = compr_bytes;
     d_stream.next_in = &buffer_compr[0];
@@ -335,5 +338,4 @@ cnpy::NpyArray cnpy::npy_load(std::string fname) {
     fclose(fp);
     return arr;
 }
-
 

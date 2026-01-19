@@ -48,7 +48,7 @@ def curve_approximation(D, N, H, k, param, knot):
     '''
     P = []
     if H >= N or H <= k:
-        print('Parameter H is out of range')
+        print('参数 H 超出范围')
         return P
 
     for idx in range(len(D)):

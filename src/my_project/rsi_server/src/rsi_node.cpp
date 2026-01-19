@@ -152,7 +152,7 @@ public:
     //打开UDP
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0); //ipv4 udp套接字
     if (sockfd_ < 0 ){
-      RCLCPP_FATAL(get_logger(), "创建socket失败。");
+      RCLCPP_FATAL(get_logger(), "创建套接字失败。");
       throw std::runtime_error("socket");
     }
     sockaddr_in local{}; 
@@ -161,7 +161,7 @@ public:
     inet_pton(AF_INET, local_ip_.c_str(), &local.sin_addr); //字符串IP转为二进制
     if(bind(sockfd_, reinterpret_cast<sockaddr*>(&local),sizeof(local)) < 0 ) //绑定到本地IP+端口开始监听
     {
-      RCLCPP_FATAL(get_logger(), " 绑定失败 %s:%d", local_ip_.c_str(), local_port_);
+      RCLCPP_FATAL(get_logger(), "绑定失败 %s:%d", local_ip_.c_str(), local_port_);
       throw std::runtime_error("bind");
     }
 
@@ -235,7 +235,13 @@ private:
             }
             else //队头比期望快
             {
-              RCLCPP_WARN(get_logger(), "RSI节点收发顺序错误： 期待 %u, 实际 %u, 正在重发上一帧", next_seq_, tp->seq);
+              RCLCPP_WARN_THROTTLE(
+                  get_logger(),
+                  *get_clock(),
+                  2000,
+                  "RSI节点收发顺序错误：期望 %u，实际 %u，正在重发上一帧",
+                  next_seq_,
+                  tp->seq);
               // 清理队列缓存准备重新同步
               {
                 std::lock_guard<std::mutex> lk(traj_mutex_);

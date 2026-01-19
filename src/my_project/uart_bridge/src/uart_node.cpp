@@ -123,7 +123,7 @@ private:
         serial_.open(port_, ec);
         if(ec)
         {
-            RCLCPP_FATAL(get_logger(),"打开%s失败： %s", port_.c_str(), ec.message().c_str());
+            RCLCPP_FATAL(get_logger(),"打开%s失败：%s", port_.c_str(), ec.message().c_str());
             throw std::runtime_error("串口打开失败");
         }
         //Boost.Asio串口配置
@@ -186,7 +186,12 @@ private:
                     status_.target_temp_resin = target;
                 }
             } catch (const std::exception &e) {
-                RCLCPP_WARN(get_logger(), "heat payload 解析失败: %s", e.what());
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "温控参数解析失败：%s",
+                    e.what());
             }
         }
 
@@ -219,7 +224,12 @@ private:
             std::size_t n = serial_.read_some(boost::asio::buffer(buf),ec);
             if (ec) 
             {
-                RCLCPP_WARN(get_logger(), "读取错误：%s", ec.message().c_str());
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "读取错误：%s",
+                    ec.message().c_str());
                 continue;
             }
             recv_buf_.append(buf.data(), n);
@@ -270,7 +280,14 @@ private:
                 else if (key=="fan_ok_resin") status_.fan_ok_resin = (val=="1");
                 else if (key=="tool") status_.current_tool = std::stoi(val);
                 else if (key=="err") status_.error_code = std::stoi(val);
-            } catch(...) {RCLCPP_WARN(get_logger(), "坏字段: %s", kv.c_str());}
+            } catch(...) {
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "字段解析失败：%s",
+                    kv.c_str());
+            }
         }
     }
 
@@ -333,7 +350,14 @@ private:
         std::lock_guard<std::mutex> lk(serial_write_mutex_);
         boost::system::error_code ec;
         boost::asio::write(serial_, boost::asio::buffer(line), ec);
-        if(ec) RCLCPP_WARN(get_logger(), "写入失败： %s", ec.message().c_str());
+        if(ec) {
+            RCLCPP_WARN_THROTTLE(
+                get_logger(),
+                *get_clock(),
+                2000,
+                "写入失败：%s",
+                ec.message().c_str());
+        }
     }
 };
 

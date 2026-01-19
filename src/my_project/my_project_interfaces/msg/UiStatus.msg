@@ -1,0 +1,31 @@
+builtin_interfaces/Time stamp
+string state
+string last_warn
+string last_error
+
+my_project_interfaces/KukaStatus kuka_status
+bool kuka_status_valid
+float32 kuka_status_age_s
+
+my_project_interfaces/RsiHeartBeat rsi_heartbeat
+bool rsi_heartbeat_valid
+float32 rsi_heartbeat_age_s
+
+my_project_interfaces/PrintHeadStatus printhead_status
+bool printhead_status_valid
+float32 printhead_status_age_s
+
+uint32 traj_next_seq
+uint32 traj_backlog
+uint32 event_next_seq
+uint32 event_pending
+bool ready_for_motion
+
+my_project_interfaces/TrajectoryPoint current_traj
+my_project_interfaces/TrajectoryPoint next_traj
+my_project_interfaces/PlannedEvent current_event
+my_project_interfaces/PlannedEvent next_event
+bool current_traj_valid
+bool next_traj_valid
+bool current_event_valid
+bool next_event_valid

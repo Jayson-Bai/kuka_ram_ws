@@ -240,7 +240,7 @@ class GlobalSplinePlanner:
                 
         except Exception as e:
             # 容错处理
-            print(f"BSpline fitting failed: {e}")
+            print(f"B样条拟合失败：{e}")
             return None
 
         # 挤出量处理

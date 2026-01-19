@@ -38,7 +38,7 @@ def main(argv=None):
 
     gcode_path = args.gcode or _select_default_gcode_file(input_dir)
     if not gcode_path or not os.path.exists(gcode_path):
-        print(f"[ERROR] 未找到 GCode 文件: {gcode_path or '(empty)'}", file=sys.stderr)
+        print(f"[错误] 未找到 GCode 文件: {gcode_path or '(empty)'}", file=sys.stderr)
         return 1
 
     if args.out:
@@ -58,7 +58,7 @@ def main(argv=None):
         dt=args.dt,
         chunk_size=args.chunk_size,
     )
-    print(f"[INFO] 导出完成: {output_path} (npz, chunk={args.chunk_size})")
+    print(f"[信息] 导出完成: {output_path} (npz, chunk={args.chunk_size})")
     return 0
 
 

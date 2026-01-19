@@ -32,6 +32,73 @@ ros2 run gcode_planner gcode_planner_npz \
 - --dt: 采样周期秒，默认 0.004（4ms）
 - --chunk-size: npz 分片行数，默认 100000
 
+优先级与路径规则：
+- --out > --output-dir
+- --gcode > --input-gcode-dir > data_root/input_gcode
+- 
+
+## GCode 输入路径解析规则
+
+优先级（从高到低）：
+1. 显式指定路径（CLI 的 `--gcode` / 节点参数 `gcode_file_path`）
+2. 从输入目录选择首个 `.gcode` 文件（按文件名排序，取第一个）
+
+默认路径规则：
+- data_root 默认值通过代码推算为 `kuka_ram_ws/data`
+- input_gcode_dir 默认值为 `data_root/input_gcode`
+
+
+## 解析规则（GCode -> ParsedCommand）
+
+基础解析：
+- 行内注释以 `;` 截断
+- 指令以空格分词
+- 参数格式：单字母键 + 数值（例如 `X1.0 Y-2.5 E0.1 F600`）
+
+支持的命令：
+- 运动：`G0`/`G1`
+- 坐标模式：`G90`（绝对）、`G91`（相对）
+- 挤出模式：`M82`（绝对）、`M83`（相对）
+- 重置挤出：`G92 E...`
+- 换刀：`Tn`
+- 其他：`M` 指令作为事件解析入口（见“事件映射”）
+
+运动类型判定：
+- `G0` 直接标记为 `TRAVEL`
+- `G1` 当 `delta_e != 0` 标记为 `PRINT`，否则 `TRAVEL`
+- 纯挤出、无位移的指令会被识别为 `EXTRUDE_WAIT`
+
+默认状态：
+- 坐标为绝对（`G90`）
+- 挤出为绝对（`M82`）
+- 默认进给速度 `F = 100 mm/min`
+- 解析器内部初始工具号 `current_tool = 0 (T0)`
+
+## 工具头映射与默认值
+
+内部工具号映射（仅在导出阶段使用）：
+- `T0 -> 1`（纤维）
+- `T1 -> 2`（树脂）
+
+默认工具头：
+- 导出阶段默认工具号为 `2`（树脂 / T1）
+
+## 事件映射（M 指令与换刀）
+
+换刀事件：
+- `T0/T1` 触发事件 `tool_change_cf` / `tool_change_resin`
+
+加热事件：
+- `M104`/`M109` 且包含 `S` 参数
+- 按工具号映射为 `heat_cf` 或 `heat_resin`
+
+风扇事件：
+- `M106`
+- 按工具号映射为 `fan_cf` 或 `fan_resin`
+
+重置挤出事件：
+- `G92 E...` -> `extrude_reset`
+
 
 ## 输出数据格式（npz）
 
@@ -55,11 +122,10 @@ ros2 run gcode_planner gcode_planner_npz \
 - `gcode_planner/polynomial_interpolator.py`: 七阶 S 曲线时间参数化与采样逻辑
 - `gcode_planner/types.py`: 数据结构定义（Position/MoveCommand/GlobalCurveCommand 等）
 
-### gcode_planner/bspline/（开源代码）
+### gcode_planner/bspline/（开源B样条拟合代码）
 - `gcode_planner/bspline/__init__.py`: 子模块初始化
 - `gcode_planner/bspline/parameter_selection.py`: B 样条参数化与节点向量生成
 - `gcode_planner/bspline/BaseFunction.py`: Cox-de Boor 基函数
 - `gcode_planner/bspline/bspline_curve.py`: B 样条曲线插值/逼近
 - `gcode_planner/bspline/bspline_surface.py`: B 样条曲面插值/逼近/采样
-
 

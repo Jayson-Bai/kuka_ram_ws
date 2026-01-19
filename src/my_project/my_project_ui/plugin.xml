@@ -1,0 +1,12 @@
+<?xml version="1.0"?>
+<library path="my_project_ui">
+  <class name="my_project_ui/UiPanel"
+         type="my_project_ui.ui_panel.MyProjectUiPlugin"
+         base_class_type="rqt_gui_py::Plugin">
+    <description>my_project UI status panel</description>
+    <qtgui>
+      <label>MyProject UI</label>
+      <statustip>my_project status monitor panel</statustip>
+    </qtgui>
+  </class>
+</library>

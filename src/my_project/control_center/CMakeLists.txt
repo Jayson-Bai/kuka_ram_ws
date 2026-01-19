@@ -29,6 +29,10 @@ add_executable(center_node
   src/queue_manager.cpp
 )
 
+add_executable(system_manager_node
+  src/system_manager_node.cpp
+)
+
 ament_target_dependencies(
   center_node
   rclcpp
@@ -40,7 +44,13 @@ target_include_directories(center_node PRIVATE
 )
 target_link_libraries(center_node cnpy)
 
-install(TARGETS center_node DESTINATION lib/${PROJECT_NAME})
+ament_target_dependencies(
+  system_manager_node
+  rclcpp
+  my_project_interfaces
+)
+
+install(TARGETS center_node system_manager_node DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
