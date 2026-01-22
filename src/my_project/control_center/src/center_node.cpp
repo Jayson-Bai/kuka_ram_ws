@@ -130,7 +130,7 @@ public:
 
         //订阅打印头状态
         printhead_status_sub_ = create_subscription<PrintHeadStatus>(
-            "printhead/status",
+            "/printhead/status",
             monitor_qos,
             [this](PrintHeadStatus::SharedPtr msg){
                 std::lock_guard<std::mutex> lk(cache_mutex_);

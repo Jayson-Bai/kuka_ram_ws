@@ -76,8 +76,18 @@ public:
                 std::lock_guard<std::mutex> lk(mutex_);
                 last_triggered_event_ = *msg;
                 last_triggered_stamp_ = now();
+                auto same_event = [&msg](const PlannedEvent& ev) {
+                    return ev.trigger_seq == msg->trigger_seq
+                        && ev.event_type == msg->event_type
+                        && ev.payload == msg->payload;
+                };
+                // 先丢弃比当前触发序号小的事件
                 while (!event_queue_.empty() &&
                        event_queue_.front().trigger_seq < msg->trigger_seq) {
+                    event_queue_.pop_front();
+                }
+                // 再移除队头与当前触发事件完全一致的一条，避免 current/next 重复
+                if (!event_queue_.empty() && same_event(event_queue_.front())) {
                     event_queue_.pop_front();
                 }
             });
