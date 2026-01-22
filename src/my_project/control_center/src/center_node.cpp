@@ -122,8 +122,10 @@ public:
             "/rsi/heartbeat",
             monitor_qos,
             [this](RsiHeartBeat::SharedPtr msg){
-                std::lock_guard<std::mutex> lk(cache_mutex_);
-                last_seq_used_ = msg->seq_used;
+                {
+                    std::lock_guard<std::mutex> lk(cache_mutex_);
+                    last_seq_used_ = msg->seq_used;
+                }
                 publish_from_queue();
             }
         );
