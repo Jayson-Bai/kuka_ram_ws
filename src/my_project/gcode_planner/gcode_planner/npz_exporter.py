@@ -346,7 +346,11 @@ def _mcommand_to_event(cmd: MCommand, current_tool: int) -> Optional[_PendingEve
 
     if code == "M106":  # 风扇
         ev_type = "fan_cf" if tool_id == 1 else "fan_resin"
-        return _PendingEvent(ev_type, "", src_line, tool_id)
+        return _PendingEvent(ev_type, "1", src_line, tool_id)
+
+    if code == "M107":  # 关风扇
+        ev_type = "fan_cf" if tool_id == 1 else "fan_resin"
+        return _PendingEvent(ev_type, "0", src_line, tool_id)
 
     # 其他 M 指令：忽略（热床等）
     return None

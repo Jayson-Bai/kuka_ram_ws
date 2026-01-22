@@ -64,6 +64,6 @@ ros2 launch my_project_startup startup.launch.py --show-args
 示例（修改启动使用的npz文件路径、收发小数位数4、KUKA xml中sen_type字段）：
 ros2 launch my_project_startup startup.launch.py \
   npz_path:=/home/jayson/kuka_ram_ws/data/output_npz/test2.npz \ 
-  sen_type:=PosCorr \
+  sen_type:=PythonDemo \
   decimal_precision:=4
 

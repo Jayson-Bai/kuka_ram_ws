@@ -95,7 +95,8 @@ ros2 run gcode_planner gcode_planner_npz \
 - 按工具号映射为 `heat_cf` 或 `heat_resin`
 
 风扇事件：
-- `M106`
+- `M106`：开风扇（payload=1）
+- `M107`：关风扇（payload=0）
 - 按工具号映射为 `fan_cf` 或 `fan_resin`
 
 重置挤出事件：
