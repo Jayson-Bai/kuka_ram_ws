@@ -244,6 +244,10 @@ private:
         {
           while (auto tp = pop_next_traj())
           {
+            if (next_seq_ == 0 && tp->seq > 0) {
+              // 首包对齐：允许从第一条轨迹的序号起步
+              next_seq_ = tp->seq;
+            }
             if(tp->seq < next_seq_) //队头比期望慢
             {
               continue; // 旧数据直接丢弃，保持last_sent_
