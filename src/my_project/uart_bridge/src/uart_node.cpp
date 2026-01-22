@@ -329,6 +329,10 @@ private:
         {
             done = snapshot.fan_ok_resin;
         }
+        else if (ev.event_type == "extrude_reset")
+        {
+            done = true;
+        }
 
         if(done)
         {

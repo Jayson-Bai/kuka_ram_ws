@@ -77,7 +77,7 @@ public:
                 last_triggered_event_ = *msg;
                 last_triggered_stamp_ = now();
                 while (!event_queue_.empty() &&
-                       event_queue_.front().trigger_seq <= msg->trigger_seq) {
+                       event_queue_.front().trigger_seq < msg->trigger_seq) {
                     event_queue_.pop_front();
                 }
             });
