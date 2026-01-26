@@ -174,10 +174,7 @@ private:
         {
             std::lock_guard<std::mutex> lk(queue_mutex_);
             queue_manager_->fill(*npz_loader_);
-            PlannedEvent ev;
-            while (queue_manager_->pop_next_event(ev)) {
-                events.push_back(ev);
-            }
+            collect_events(events);
             TrajectoryPoint tp;
             while (trajs.size() < static_cast<size_t>(traj_prefill_) &&
                    queue_manager_->pop_next_traj(tp)) {
@@ -185,19 +182,7 @@ private:
             }
         }
 
-        if (events.size() > static_cast<size_t>(plan_qos_depth_)) {
-            RCLCPP_WARN(get_logger(),
-                        "计划事件数量超过QoS深度 (%zu > %d)，消息可能丢失",
-                        events.size(), plan_qos_depth_);
-        }
-        for (auto &ev : events) {
-            ev.stamp = now();
-            event_pub_->publish(ev);
-            RCLCPP_DEBUG(get_logger(), "发布事件 序号=%u 类型=%s 内容=%s",
-                        ev.trigger_seq,
-                        ev.event_type.c_str(),
-                        ev.payload.c_str());
-        }
+        publish_events(events);
         for (auto &tp : trajs) {
             apply_precision(tp);
             tp.stamp = now();
@@ -223,10 +208,12 @@ private:
 
         std::optional<TrajectoryPoint> tp_to_pub;
         std::optional<uint32_t> backlog_to_report;
+        std::vector<PlannedEvent> events;
 
         {
             std::lock_guard<std::mutex> lk(queue_mutex_);
             queue_manager_->fill(*npz_loader_);
+            collect_events(events);
             uint32_t next_traj_seq = 0;
             bool has_traj = queue_manager_->peek_next_traj_seq(next_traj_seq);
             if (has_traj && ready_for_motion) {
@@ -240,6 +227,8 @@ private:
                 }
             }
         }
+
+        publish_events(events);
 
         if (backlog_to_report) {
             if (*backlog_to_report < static_cast<uint32_t>(traj_low_)) {
@@ -284,6 +273,34 @@ private:
         tp.b = round_n(tp.b, xyz_scale);
         tp.c = round_n(tp.c, xyz_scale);
         tp.e = round_n(tp.e, e_scale);
+    }
+
+    void collect_events(std::vector<PlannedEvent>& events)
+    {
+        PlannedEvent ev;
+        while (queue_manager_->pop_next_event(ev)) {
+            events.push_back(ev);
+        }
+    }
+
+    void publish_events(std::vector<PlannedEvent>& events)
+    {
+        if (events.empty()) {
+            return;
+        }
+        if (events.size() > static_cast<size_t>(plan_qos_depth_)) {
+            RCLCPP_WARN(get_logger(),
+                        "计划事件数量超过QoS深度 (%zu > %d)，消息可能丢失",
+                        events.size(), plan_qos_depth_);
+        }
+        for (auto &ev : events) {
+            ev.stamp = now();
+            event_pub_->publish(ev);
+            RCLCPP_DEBUG(get_logger(), "发布事件 序号=%u 类型=%s 内容=%s",
+                        ev.trigger_seq,
+                        ev.event_type.c_str(),
+                        ev.payload.c_str());
+        }
     }
 
 };
