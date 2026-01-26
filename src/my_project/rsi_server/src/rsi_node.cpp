@@ -92,6 +92,7 @@ private:
   int sockfd_{-1}; //socket文件描述符
   std::atomic<bool> run_udp_{false}; //控制循环的原子开关
   std::thread udp_thread_;
+  std::optional<uint32_t> last_event_seq_triggered_;
   
 
 
@@ -236,6 +237,7 @@ private:
           if (current_wait_)
           {
             triggered_event_pub_->publish(*current_wait_);
+            last_event_seq_triggered_ = current_wait_->trigger_seq;
             state_ = State::WAIT;
           }
           //此时保持last_sent_
@@ -261,7 +263,8 @@ private:
             }
             else //队头比期望快
             {
-              if (has_event_between(next_seq_, tp->seq)) {
+              if ((last_event_seq_triggered_ && *last_event_seq_triggered_ == next_seq_) ||
+                  has_event_between(next_seq_, tp->seq)) {
                 // 序号缺口被事件占用，允许跳过
                 next_seq_ = tp->seq;
                 to_send = *tp;
