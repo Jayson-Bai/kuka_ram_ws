@@ -98,6 +98,7 @@ public:
         kuka_status_raw_ = declare_parameter<bool>("kuka_status_raw", false);
         auto monitor_qos = rclcpp::QoS(10);
         auto plan_qos = rclcpp::QoS(plan_qos_depth_).reliable();
+        auto event_qos = rclcpp::QoS(plan_qos_depth_).reliable().transient_local();
 
         //订阅RSI原始KUKA XML
         kuka_raw_sub_ = create_subscription<String>(
@@ -157,7 +158,7 @@ public:
 
         //发布
         traj_pub_ = create_publisher<TrajectoryPoint>("/planned_trajectory", plan_qos);
-        event_pub_ = create_publisher<PlannedEvent>("/planned_events", plan_qos);
+        event_pub_ = create_publisher<PlannedEvent>("/planned_events", event_qos);
 
         initial_prefill();
 

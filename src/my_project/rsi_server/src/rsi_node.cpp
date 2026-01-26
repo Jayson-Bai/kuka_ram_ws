@@ -109,7 +109,7 @@ public:
     last_sent_ = TrajectoryPoint();//全0，不进入队列，不影响对齐
 
     auto traj_qos = rclcpp::QoS(2000).reliable();//轨迹队列长度2000 = 收到消息的最多缓存条数 reliable协议保证丢包时顺序
-    auto event_qos = rclcpp::QoS(200).reliable();//事件队列长度200 = 收到消息的最多缓存条数 reliable协议保证丢包时顺序
+    auto event_qos = rclcpp::QoS(200).reliable().transient_local();//事件队列长度200，允许迟到订阅接收历史事件
 
     //订阅中心节点轨迹消息
     traj_sub_ = create_subscription<TrajectoryPoint>(
