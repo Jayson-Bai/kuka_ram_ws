@@ -261,27 +261,36 @@ private:
             }
             else //队头比期望快
             {
-              RCLCPP_WARN_THROTTLE(
-                  get_logger(),
-                  *get_clock(),
-                  2000,
-                  "RSI节点收发顺序错误：期望 %u，实际 %u，正在重发上一帧",
-                  next_seq_,
-                  tp->seq);
-              // 清理队列缓存准备重新同步
-              {
-                std::lock_guard<std::mutex> lk(traj_mutex_);
-                traj_queue_.clear();
-              }
-              //触发 resync 请求
-              auto nowt = now();
-              if(!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) //限流
-              {
-                std_msgs::msg::UInt32 req;
-                req.data = next_seq_; //从next_seq_开始重播
-                resync_pub_ -> publish(req);
-                resync_sent_ = true;
-                last_resync_time_ = nowt;
+              if (has_event_between(next_seq_, tp->seq)) {
+                // 序号缺口被事件占用，允许跳过
+                next_seq_ = tp->seq;
+                to_send = *tp;
+                last_sent_ = to_send;
+                ++next_seq_;
+                resync_sent_ = false;
+              } else {
+                RCLCPP_WARN_THROTTLE(
+                    get_logger(),
+                    *get_clock(),
+                    2000,
+                    "RSI节点收发顺序错误：期望 %u，实际 %u，正在重发上一帧",
+                    next_seq_,
+                    tp->seq);
+                // 清理队列缓存准备重新同步
+                {
+                  std::lock_guard<std::mutex> lk(traj_mutex_);
+                  traj_queue_.clear();
+                }
+                //触发 resync 请求
+                auto nowt = now();
+                if(!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) //限流
+                {
+                  std_msgs::msg::UInt32 req;
+                  req.data = next_seq_; //从next_seq_开始重播
+                  resync_pub_ -> publish(req);
+                  resync_sent_ = true;
+                  last_resync_time_ = nowt;
+                }
               }
             }
             break; //每个心跳只处理一条
@@ -348,6 +357,18 @@ private:
     if (event_queue_.empty()) return false;
     //如果事件队头的trigger_seq已经到达或者超过当前轨迹序号，就进入等待
     return event_queue_.front().trigger_seq <= next_seq;
+  }
+
+  bool has_event_between(uint32_t from_seq, uint32_t to_seq)
+  {
+    if (from_seq >= to_seq) return false;
+    std::lock_guard<std::mutex> lk(event_mutex_);
+    for (const auto& ev : event_queue_) {
+      if (ev.trigger_seq >= from_seq && ev.trigger_seq < to_seq) {
+        return true;
+      }
+    }
+    return false;
   }
 
   std::string extract_ipoc(const std::string &xml)//提取时间戳
