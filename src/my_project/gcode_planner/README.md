@@ -31,6 +31,10 @@ ros2 run gcode_planner gcode_planner_npz \
 - --out: 输出 npz 文件路径（优先级最高）
 - --dt: 采样周期秒，默认 0.004（4ms）
 - --chunk-size: npz 分片行数，默认 100000
+- --corner-angle-deg: 角点判定夹角阈值（度），默认 10
+- --corner-retreat-ratio: 角点回退比例（0-0.49），默认 0.2
+- --density: 数据点加密密度，默认 0
+- --degree: B 样条阶次，默认 3
 
 注意：通过 `ros2 run` 运行安装后的包时，默认 `data_root` 会随安装路径变化，可能落到 `install/.../data`。建议显式传 `--data-root` 或 `--output-dir`。
 

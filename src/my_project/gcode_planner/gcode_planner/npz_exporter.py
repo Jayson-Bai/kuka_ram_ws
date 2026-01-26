@@ -55,6 +55,10 @@ def export_npz(
     output_path: str,
     dt: float = 0.004,
     chunk_size: int = 100000,
+    corner_angle_deg: float = 10.0,
+    corner_retreat_ratio: float = 0.2,
+    density: int = 0,
+    degree: int = 3,
 ) -> None:
     """
     导出 npz（分片）。
@@ -129,7 +133,13 @@ def export_npz(
         elif len(buffer) == 2:
             gc_list = [_make_gc(buffer[0]), _make_gc(buffer[1])]
         else:
-            gc = planner.fit_global_curve(buffer)
+            gc = planner.fit_global_curve(
+                buffer,
+                corner_angle_deg=corner_angle_deg,
+                corner_retreat_ratio=corner_retreat_ratio,
+                density=density,
+                degree=degree,
+            )
             if gc is None:
                 raise ValueError("B 样条拟合失败，无法导出 npz（段类型: %s, 段长度: %d)" % (current_type, len(buffer)))
             gc_list = [gc]
