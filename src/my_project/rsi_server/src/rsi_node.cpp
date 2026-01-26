@@ -31,6 +31,7 @@
 #include <thread>
 #include <optional>
 #include <deque>
+#include <unordered_set>
 
 
 //自定义消息接口
@@ -64,6 +65,7 @@ private:
   //队列
   std::deque<TrajectoryPoint> traj_queue_;
   std::deque<PlannedEvent> event_queue_;
+  std::unordered_set<uint32_t> event_seq_seen_;
   //用于等待时发送的上一帧轨迹点
   std::optional<TrajectoryPoint> last_sent_;
   //UART状态(用于WAIT解除绑定)
@@ -128,6 +130,7 @@ public:
       {
         std::lock_guard<std::mutex> lk(event_mutex_);
         event_queue_.push_back(*msg);
+        event_seq_seen_.insert(msg->trigger_seq);
       }
     );
 
@@ -264,7 +267,8 @@ private:
             else //队头比期望快
             {
               if ((last_event_seq_triggered_ && *last_event_seq_triggered_ == next_seq_) ||
-                  has_event_between(next_seq_, tp->seq)) {
+                  has_event_between(next_seq_, tp->seq) ||
+                  is_event_seq(next_seq_)) {
                 // 序号缺口被事件占用，允许跳过
                 next_seq_ = tp->seq;
                 to_send = *tp;
@@ -372,6 +376,12 @@ private:
       }
     }
     return false;
+  }
+
+  bool is_event_seq(uint32_t seq)
+  {
+    std::lock_guard<std::mutex> lk(event_mutex_);
+    return event_seq_seen_.find(seq) != event_seq_seen_.end();
   }
 
   std::string extract_ipoc(const std::string &xml)//提取时间戳
