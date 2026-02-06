@@ -6,6 +6,7 @@
 // =============================================================
 
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 #include <std_msgs/msg/string.hpp>
 
@@ -21,6 +22,7 @@
 #include <mutex>
 #include <sstream>
 #include <cmath>
+#include <limits>
 
 using boost::asio::io_context;
 using boost::asio::serial_port;
@@ -66,6 +68,8 @@ private:
     Status status_;
     std::string recv_buf_;
     std::mutex serial_write_mutex_;
+    std::atomic<double> extrude_scale_{1.0};
+    rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
     
 public:
     UartNode(): Node("uart_node"),io_(),serial_(io_),running_(true)
@@ -73,6 +77,26 @@ public:
         //参数声明
         port_ = declare_parameter<std::string>("port","/dev/ttyUSB0");
         baudrate_ = declare_parameter<int>("baudrate",115200);
+        extrude_scale_.store(declare_parameter<double>("extrude_scale", 1.0));
+        param_cb_ = add_on_set_parameters_callback(
+            [this](const std::vector<rclcpp::Parameter> &params) {
+                for (const auto &p : params) {
+                    if (p.get_name() == "extrude_scale") {
+                        const double v = p.as_double();
+                        if (!std::isfinite(v) || v <= 0.0) {
+                            rcl_interfaces::msg::SetParametersResult r;
+                            r.successful = false;
+                            r.reason = "extrude_scale must be finite and > 0";
+                            return r;
+                        }
+                        extrude_scale_.store(v);
+                    }
+                }
+                rcl_interfaces::msg::SetParametersResult r;
+                r.successful = true;
+                return r;
+            }
+        );
 
         //订阅心跳包
         auto hb_qos = rclcpp::QoS(2000).reliable();
@@ -212,7 +236,9 @@ private:
 
     void on_heartbeat(const RsiHeartBeat &hb)//心跳触发挤出
     {
-        send_extrude_command(hb.seq_used, hb.tool_id, static_cast<float>(hb.extrude_abs));
+        const double scale = extrude_scale_.load();
+        const double scaled = hb.extrude_abs * scale;
+        send_extrude_command(hb.seq_used, hb.tool_id, static_cast<float>(scaled));
     }
 
     void read_loop()//阻塞读取MCU状态包

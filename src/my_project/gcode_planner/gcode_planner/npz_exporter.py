@@ -59,6 +59,7 @@ def export_npz(
     corner_retreat_ratio: float = 0.2,
     density: int = 0,
     degree: int = 3,
+    default_feed_mm_s: float = 10.0,
 ) -> None:
     """
     导出 npz（分片）。
@@ -74,10 +75,18 @@ def export_npz(
     buffer: List[MoveCommand] = []
     current_type: Optional[str] = None
     last_pose: Optional[CsvRow] = None
+    last_feedrate_mm_min: Optional[float] = None
 
     def _append_sample(gc: GlobalCurveCommand):
-        nonlocal seq, last_pose, rows
-        samples = sample_global_curve(gc, dt=dt)
+        nonlocal seq, last_pose, rows, last_feedrate_mm_min
+        feed_mm_min = gc.feedrate if (gc.feedrate is not None and gc.feedrate > 0) else last_feedrate_mm_min
+        if feed_mm_min is None or feed_mm_min <= 0:
+            target_velocity = default_feed_mm_s
+        else:
+            target_velocity = feed_mm_min / 60.0
+        if gc.feedrate is not None and gc.feedrate > 0:
+            last_feedrate_mm_min = gc.feedrate
+        samples = sample_global_curve(gc, dt=dt, target_velocity=target_velocity)
         if not samples:
             return
         move_lines: List[int] = [m.line for m in gc.original_moves] if gc.original_moves else [gc.line]

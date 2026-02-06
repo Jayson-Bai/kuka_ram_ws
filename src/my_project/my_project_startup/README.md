@@ -18,6 +18,20 @@
 ros2 launch my_project_startup startup.launch.py
 ```
 
+## NPZ 离线导出（GCode -> NPZ）
+
+使用 gcode_planner 的 CLI 生成 NPZ 文件（供 `npz_path` 使用）：
+
+```bash
+python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz
+```
+
+当 GCode 缺失/无效 F 值时，可用 `--default-feed-mm-s` 设置兜底速度（单位 mm/s）：
+
+```bash
+python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz --default-feed-mm-s 8.0
+```
+
 ## 启动参数
 
 全部可配置参数如下（含默认值），按节点分组：
@@ -46,6 +60,7 @@ ros2 launch my_project_startup startup.launch.py
 ### uart_node （打印头侧）
 - `port`：UART 串口设备路径，默认 `/dev/ttyUSB0`
 - `baudrate`：UART 波特率，默认 `115200`
+- `extrude_scale`：UART 挤出倍率，默认 `1.0`（仅影响串口发送的挤出量，不影响 UI/RSI/轨迹数据）
 
 ### system_manager_node
 - `ui_publish_period_ms`：UI 状态发布周期（毫秒），默认 `200`
@@ -61,9 +76,9 @@ ros2 launch my_project_startup startup.launch.py
 ros2 launch my_project_startup startup.launch.py --show-args
 ```
 
-示例（修改启动使用的npz文件路径、收发小数位数4、KUKA xml中sen_type字段）：
+示例（修改启动使用的npz文件路径、收发小数位数4、KUKA xml中sen_type字段、串口挤出倍率）：
 ros2 launch my_project_startup startup.launch.py \
   npz_path:=/home/jayson/kuka_ram_ws/data/output_npz/test2.npz \ 
   sen_type:=PythonDemo \
-  decimal_precision:=4
-
+  decimal_precision:=4 \
+  extrude_scale:=1.2

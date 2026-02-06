@@ -31,6 +31,7 @@ def main(argv=None):
     parser.add_argument("--out", type=str, default="", help="输出 npz 文件路径（优先级最高）")
     parser.add_argument("--dt", type=float, default=0.004, help="采样周期秒，默认 4ms")
     parser.add_argument("--chunk-size", type=int, default=100000, help="npz 分片行数，默认 100000")
+    parser.add_argument("--default-feed-mm-s", type=float, default=10.0, help="无有效 F 时的默认速度 (mm/s)")
     parser.add_argument("--corner-angle-deg", type=float, default=10.0, help="角点判定夹角阈值（度）")
     parser.add_argument("--corner-retreat-ratio", type=float, default=0.2, help="角点回退比例（0-0.49）")
     parser.add_argument("--density", type=int, default=0, help="数据点加密密度（>=0）")
@@ -61,6 +62,7 @@ def main(argv=None):
         output_path,
         dt=args.dt,
         chunk_size=args.chunk_size,
+        default_feed_mm_s=args.default_feed_mm_s,
         corner_angle_deg=args.corner_angle_deg,
         corner_retreat_ratio=args.corner_retreat_ratio,
         density=args.density,

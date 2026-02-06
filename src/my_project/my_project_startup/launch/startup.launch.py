@@ -34,6 +34,7 @@ def generate_launch_description():
     # UART node params
     port = LaunchConfiguration("port")
     baudrate = LaunchConfiguration("baudrate")
+    extrude_scale = LaunchConfiguration("extrude_scale")
 
     rsi_node = Node(
         package="rsi_server",
@@ -56,6 +57,7 @@ def generate_launch_description():
         parameters=[{
             "port": port,
             "baudrate": baudrate,
+            "extrude_scale": extrude_scale,
         }],
     )
 
@@ -214,6 +216,11 @@ def generate_launch_description():
             "baudrate",
             default_value="115200",
             description="UART 波特率。",
+        ),
+        DeclareLaunchArgument(
+            "extrude_scale",
+            default_value="1.0",
+            description="UART 挤出倍率（仅影响串口发送的挤出量）。",
         ),
         rsi_node,
         uart_node,
