@@ -1,16 +1,19 @@
-from python_qt_binding import QtCore, QtWidgets
+from python_qt_binding import QtCore, QtWidgets, QtGui
 from rqt_gui_py.plugin import Plugin
 import rclpy
-from rclpy.node import Node
+from rclpy.parameter import Parameter
+from rcl_interfaces.srv import SetParameters
 
 from my_project_interfaces.msg import UiStatus
 
 
 class _UiStatusWidget(QtWidgets.QWidget):
     status_received = QtCore.pyqtSignal(object)
+    scale_submit = QtCore.pyqtSignal(float)
 
     def __init__(self):
         super().__init__()
+        self._extrude_scale_current = 1.0
         self._build_ui()
         self.status_received.connect(self._update_ui)
 
@@ -225,16 +228,44 @@ class _UiStatusWidget(QtWidgets.QWidget):
         events_row.setStretch(1, 1)
         events_layout.addLayout(events_row)
         right_column.addWidget(events_box)
-        logs_box = add_group("Logs", [
-            ("Last Warning", "Warning"),
-            ("Last Error", "Error"),
-        ], add_to_layout=False)
-        logs_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        extrude_box = QtWidgets.QGroupBox("Extrude Scale")
+        extrude_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        extrude_layout = QtWidgets.QFormLayout(extrude_box)
+        extrude_layout.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        extrude_layout.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        extrude_layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        extrude_layout.setHorizontalSpacing(12)
+        extrude_layout.setVerticalSpacing(6)
+        label_title = QtWidgets.QLabel("Current")
+        label_title.setObjectName("fieldLabel")
+        self._extrude_scale_value = QtWidgets.QLabel("1.000")
+        self._extrude_scale_value.setObjectName("valueLabel")
+        self._extrude_scale_value.setMinimumWidth(value_min_width)
+        extrude_layout.addRow(label_title, self._extrude_scale_value)
+
+        input_row = QtWidgets.QWidget()
+        input_row_layout = QtWidgets.QHBoxLayout(input_row)
+        input_row_layout.setContentsMargins(0, 0, 0, 0)
+        input_row_layout.setSpacing(6)
+        self._extrude_scale_input = QtWidgets.QLineEdit()
+        self._extrude_scale_input.setPlaceholderText("1.0")
+        validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, self._extrude_scale_input)
+        validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+        self._extrude_scale_input.setValidator(validator)
+        self._extrude_scale_apply = QtWidgets.QPushButton("Apply")
+        input_row_layout.addWidget(self._extrude_scale_input)
+        input_row_layout.addWidget(self._extrude_scale_apply)
+        extrude_layout.addRow(QtWidgets.QLabel("Set"), input_row)
+
+        self._extrude_scale_status = QtWidgets.QLabel("-")
+        self._extrude_scale_status.setObjectName("valueLabel")
+        extrude_layout.addRow(QtWidgets.QLabel("Status"), self._extrude_scale_status)
+        # extrude_box 采用与原 Logs 相同的整行布局
 
         layout.addWidget(system_box, 1, 0, 1, 2, QtCore.Qt.AlignTop)
         layout.addLayout(left_column, 2, 0, 1, 1)
         layout.addLayout(right_column, 2, 1, 1, 1)
-        layout.addWidget(logs_box, 3, 0, 1, 2, QtCore.Qt.AlignTop)
+        layout.addWidget(extrude_box, 3, 0, 1, 2, QtCore.Qt.AlignTop)
         layout.setRowStretch(0, 0)
         layout.setRowStretch(1, 0)
         layout.setRowStretch(2, 0)
@@ -284,6 +315,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "}"
         )
 
+        self._extrude_scale_apply.clicked.connect(self._on_extrude_scale_apply)
+        self._extrude_scale_input.returnPressed.connect(self._on_extrude_scale_apply)
+
     def _set_value(self, key, text, color=None):
         label = self._labels.get(key)
         if not label:
@@ -300,6 +334,41 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if tool_id == 2:
             return "RESIN"
         return str(tool_id)
+
+    def _on_extrude_scale_apply(self):
+        text = self._extrude_scale_input.text().strip()
+        if not text:
+            self._set_extrude_status("Enter a scale value.", "#b42318")
+            return
+        try:
+            val = float(text)
+        except ValueError:
+            self._set_extrude_status("Invalid scale value.", "#b42318")
+            return
+        if not (val > 0.0):
+            self._set_extrude_status("Scale must be > 0.", "#b42318")
+            return
+        self._set_extrude_status("Submitting...", "#b15e00")
+        self.scale_submit.emit(val)
+
+    def _set_extrude_status(self, text, color=None):
+        self._extrude_scale_status.setText(text)
+        if color:
+            self._extrude_scale_status.setStyleSheet(f"color: {color};")
+        else:
+            self._extrude_scale_status.setStyleSheet("")
+
+    def set_extrude_scale(self, value, status_text=None, status_color=None):
+        self._extrude_scale_current = value
+        self._extrude_scale_value.setText(f"{value:.3f}")
+        if status_text is not None:
+            self._set_extrude_status(status_text, status_color)
+
+    def set_extrude_status(self, text, color=None):
+        self._set_extrude_status(text, color)
+
+    def current_extrude_scale(self):
+        return self._extrude_scale_current
 
     def _update_ui(self, msg: UiStatus):
         self._set_value("System State", msg.state or "-", "#2b2b2b")
@@ -458,10 +527,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "Event Trigger Seq (Next)",
             ):
                 self._set_value(key, "-", "#b42318")
-        warn_color = "#b15e00" if msg.last_warn else "#2b2b2b"
-        err_color = "#b42318" if msg.last_error else "#2b2b2b"
-        self._set_value("Last Warning", msg.last_warn or "-", warn_color)
-        self._set_value("Last Error", msg.last_error or "-", err_color)
 
 
 class MyProjectUiPlugin(Plugin):
@@ -473,7 +538,11 @@ class MyProjectUiPlugin(Plugin):
             rclpy.init(args=None)
 
         self._node = rclpy.create_node("my_project_ui_panel")
+        self._param_client = self._node.create_client(
+            SetParameters, "/uart_node/set_parameters"
+        )
         self._widget = _UiStatusWidget()
+        self._widget.scale_submit.connect(self._on_scale_submit)
         context.add_widget(self._widget)
 
         self._node.create_subscription(
@@ -486,6 +555,32 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_status(self, msg: UiStatus):
         self._widget.status_received.emit(msg)
+
+    def _on_scale_submit(self, value: float):
+        if not self._param_client.service_is_ready():
+            self._widget.set_extrude_status("UART parameter service not ready.", "#b42318")
+            return
+
+        req = SetParameters.Request()
+        req.parameters = [
+            Parameter("extrude_scale", Parameter.Type.DOUBLE, value).to_parameter_msg()
+        ]
+        future = self._param_client.call_async(req)
+
+        def _done(fut):
+            try:
+                resp = fut.result()
+            except Exception:
+                self._widget.set_extrude_scale(value, "Submit failed.", "#b42318")
+                return
+            results = resp.results if resp is not None else []
+            if results and all(r.successful for r in results):
+                self._widget.set_extrude_scale(value, "Applied.", "#1b6e3c")
+            else:
+                reason = results[0].reason if results else "提交失败"
+                self._widget.set_extrude_scale(value, reason or "Submit failed.", "#b42318")
+
+        future.add_done_callback(_done)
 
     def _spin_once(self):
         rclpy.spin_once(self._node, timeout_sec=0.0)
