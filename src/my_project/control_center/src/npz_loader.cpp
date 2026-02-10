@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <stdexcept>
 
 #include "cnpy.h"
@@ -142,6 +143,17 @@ std::vector<std::string> NpzLoader::resolve_files(const std::string& path) const
   fs::path p(path);
   std::vector<std::string> out;
 
+  if (p.extension() == ".json" || p.filename().string().find("_manifest.json") != std::string::npos) {
+    return resolve_from_manifest(path);
+  }
+
+  return resolve_from_base(path);
+}
+
+std::vector<std::string> NpzLoader::resolve_from_base(const std::string& path) const {
+  fs::path p(path);
+  std::vector<std::string> out;
+
   if (p.extension() != ".npz") {
     p.replace_extension(".npz");
   }
@@ -174,6 +186,55 @@ std::vector<std::string> NpzLoader::resolve_files(const std::string& path) const
   }
 
   std::sort(out.begin(), out.end());
+  return out;
+}
+
+std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& path) const {
+  fs::path manifest_path(path);
+  if (manifest_path.extension() != ".json") {
+    manifest_path.replace_extension(".json");
+  }
+  if (!fs::exists(manifest_path)) {
+    return {};
+  }
+
+  std::ifstream in(manifest_path);
+  if (!in) {
+    return {};
+  }
+  std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  std::vector<std::string> out;
+
+  const std::string key = "\"base_path\"";
+  std::size_t pos = 0;
+  while (true) {
+    pos = content.find(key, pos);
+    if (pos == std::string::npos) {
+      break;
+    }
+    pos = content.find(":", pos);
+    if (pos == std::string::npos) {
+      break;
+    }
+    pos = content.find("\"", pos);
+    if (pos == std::string::npos) {
+      break;
+    }
+    auto start = pos + 1;
+    auto end = content.find("\"", start);
+    if (end == std::string::npos) {
+      break;
+    }
+    std::string base_path = content.substr(start, end - start);
+    fs::path bp(base_path);
+    if (bp.is_relative()) {
+      bp = manifest_path.parent_path() / bp;
+    }
+    auto files = resolve_from_base(bp.string());
+    out.insert(out.end(), files.begin(), files.end());
+    pos = end + 1;
+  }
+
   return out;
 }
 

@@ -30,12 +30,16 @@ def main(argv=None):
     parser.add_argument("--output-dir", type=str, default="", help="npz 输出目录")
     parser.add_argument("--out", type=str, default="", help="输出 npz 文件路径（优先级最高）")
     parser.add_argument("--dt", type=float, default=0.004, help="采样周期秒，默认 4ms")
-    parser.add_argument("--chunk-size", type=int, default=100000, help="npz 分片行数，默认 100000")
     parser.add_argument("--default-feed-mm-s", type=float, default=10.0, help="无有效 F 时的默认速度 (mm/s)")
     parser.add_argument("--corner-angle-deg", type=float, default=10.0, help="角点判定夹角阈值（度）")
     parser.add_argument("--corner-retreat-ratio", type=float, default=0.2, help="角点回退比例（0-0.49）")
     parser.add_argument("--density", type=int, default=0, help="数据点加密密度（>=0）")
     parser.add_argument("--degree", type=int, default=3, help="B样条阶次（默认3）")
+    parser.add_argument("--export-sleep-ms", type=int, default=0, help="导出节流：休眠毫秒数，默认 0")
+    parser.add_argument("--export-yield-every", type=int, default=0, help="导出节流：每处理 N 条触发休眠，默认 0")
+    parser.add_argument("--split-by-layer-type", action="store_true", help="按层+打印子类型分别导出 npz")
+    parser.add_argument("--plot-layer-xy", action="store_true", help="导出后按层生成 XY 路径图（仅对 split-by-layer-type 生效）")
+    parser.add_argument("--plot-stride", type=int, default=5, help="绘图抽样步长，默认 5")
     args = parser.parse_args(argv)
 
     input_dir = args.input_gcode_dir or os.path.join(args.data_root, "input_gcode")
@@ -61,14 +65,19 @@ def main(argv=None):
         parsed,
         output_path,
         dt=args.dt,
-        chunk_size=args.chunk_size,
+        chunk_size=5000000,
         default_feed_mm_s=args.default_feed_mm_s,
         corner_angle_deg=args.corner_angle_deg,
         corner_retreat_ratio=args.corner_retreat_ratio,
         density=args.density,
         degree=args.degree,
+        export_sleep_ms=args.export_sleep_ms,
+        export_yield_every=args.export_yield_every,
+        split_by_layer_type=args.split_by_layer_type,
+        plot_layer_xy=args.plot_layer_xy,
+        plot_stride=args.plot_stride,
     )
-    print(f"[信息] 导出完成: {output_path} (npz, chunk={args.chunk_size})")
+    print("[信息] 导出完成: %s (npz, chunk<=5000000)" % output_path)
     return 0
 
 

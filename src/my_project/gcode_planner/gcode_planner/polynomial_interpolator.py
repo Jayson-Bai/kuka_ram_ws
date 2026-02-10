@@ -255,21 +255,21 @@ def _compute_time_profile(length: float, target_v: float, t_acc: float, t_dec: f
 
 # -------------------------- 采样主逻辑 --------------------------
 
-def sample_global_curve(
+def sample_global_curve_iter(
     curve: GlobalCurveCommand,
     dt: float = 0.004,
     target_velocity: float = 10.0,  # mm/s
     t_acc: float = 2.0,
     t_dec: float = 2.0,
-) -> List[InterpolatedPoint]:
+):
     """
-    对一条全局 B 样条进行时间参数化并采样。
+    对一条全局 B 样条进行时间参数化并采样（生成器）。
     - 入口/出口 v/a/jerk 均为 0，对称加/减速时间固定。
     - 匀速段无法满足时自动退化为对称 S 曲线（速度整体下降，不超速）。
     - 挤出按弧长比例分配，保持绝对挤出量不变。
     """
     if curve is None:
-        return []
+        return
 
     ctrl = [curve.start_pos] + curve.control_points
     degree = 3
@@ -278,32 +278,27 @@ def sample_global_curve(
     u_list, len_list, total_length, knots = _build_arc_length_map(ctrl, degree=degree, samples=max(400, len(ctrl) * 10))
     if total_length <= 1e-9:
         # 退化：零长度，直接返回终点
-        return [
-            InterpolatedPoint(
-                t=0.0,
-                pos=curve.start_pos,
-                e=curve.e_val,
-                extrude_speed=0.0,
-                feedrate_mm_min=curve.feedrate,
-                cmd_type=curve.type,
-                line=curve.line,
-                raw=curve.raw,
-            )
-        ]
+        yield InterpolatedPoint(
+            t=0.0,
+            pos=curve.start_pos,
+            e=curve.e_val,
+            extrude_speed=0.0,
+            feedrate_mm_min=curve.feedrate,
+            cmd_type=curve.type,
+            line=curve.line,
+            raw=curve.raw,
+        )
+        return
 
     # 时间规划
     total_time, t_flat = _compute_time_profile(total_length, target_velocity, t_acc, t_dec)
     if total_time <= 0.0:
-        return []
+        return
 
     num_steps = int(math.ceil(total_time / dt))
     corrected_total_time = num_steps * dt
-    time_samples = [i * dt for i in range(num_steps + 1)]
-    s_profile = [_three_stage_sept_poly(t, corrected_total_time, t_acc, t_dec) for t in time_samples]
-
     start_e = curve.e_val - curve.delta_e
     current_e = start_e
-    samples: List[InterpolatedPoint] = []
 
     # 姿态：仅用起点/终点做 slerp
     end_pos = ctrl[-1]
@@ -319,9 +314,11 @@ def sample_global_curve(
     )
 
     prev_s = 0.0
-    for t, s_norm in zip(time_samples, s_profile):
+    for i in range(num_steps + 1):
+        t = i * dt
+        s_norm = _three_stage_sept_poly(t, corrected_total_time, t_acc, t_dec)
         s_norm_clamped = max(0.0, min(1.0, s_norm))
-        if t == time_samples[-1]:
+        if i == num_steps:
             s_norm_clamped = 1.0  # 确保最后一点落在终点
 
         u = _lookup_u_from_s(s_norm_clamped, u_list, len_list, total_length)
@@ -346,23 +343,33 @@ def sample_global_curve(
         feed_mm_min = feed_mm_s * 60.0
         extrude_speed = delta_e / dt if dt > 0 else 0.0
 
-        samples.append(
-            InterpolatedPoint(
-                t=t,
-                pos=p,
-                e=current_e,
-                extrude_speed=extrude_speed,
-                feedrate_mm_min=feed_mm_min,
-                cmd_type=curve.type,
-                line=curve.line,
-                raw=curve.raw,
-            )
+        yield InterpolatedPoint(
+            t=t,
+            pos=p,
+            e=current_e,
+            extrude_speed=extrude_speed,
+            feedrate_mm_min=feed_mm_min,
+            cmd_type=curve.type,
+            line=curve.line,
+            raw=curve.raw,
         )
 
-    return samples
+
+def sample_global_curve(
+    curve: GlobalCurveCommand,
+    dt: float = 0.004,
+    target_velocity: float = 10.0,  # mm/s
+    t_acc: float = 2.0,
+    t_dec: float = 2.0,
+) -> List[InterpolatedPoint]:
+    """
+    对一条全局 B 样条进行时间参数化并采样（列表版，兼容旧调用）。
+    """
+    return list(sample_global_curve_iter(curve, dt=dt, target_velocity=target_velocity, t_acc=t_acc, t_dec=t_dec))
 
 
 __all__ = [
     "InterpolatedPoint",
     "sample_global_curve",
+    "sample_global_curve_iter",
 ]

@@ -22,6 +22,8 @@ class MoveCommand:
     delta_e: float
     feedrate: float  # mm/min
     line: int
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
     target_v_in: Optional[float] = None  # planned entry speed (mm/s) 七阶多项式插值边界条件
     target_v_out: Optional[float] = None  # planned exit speed (mm/s)
@@ -43,6 +45,8 @@ class ResetECommand:
     type: str  # "RESET_E"
     val: float
     line: int
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
 
 
@@ -51,6 +55,8 @@ class ToolChangeCommand:
     type: str  # "TOOL_CHANGE"
     tool: int
     line: int
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
 
 
@@ -60,6 +66,8 @@ class MCommand:
     code: str
     params: Dict[str, float] = field(default_factory=dict)
     line: Optional[int] = None
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
     tool: Optional[int] = None
 

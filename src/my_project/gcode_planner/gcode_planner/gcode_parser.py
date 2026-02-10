@@ -36,6 +36,8 @@ class MachineState:
         self.is_absolute_coord = True  # G90
         self.is_absolute_e = True  # M82
         self.current_tool = 0  # T0
+        self.current_layer = 0
+        self.current_subtype = "UNKNOWN"
 
 
 # ------------------- 纯函数：文件读取与解析 -------------------
@@ -51,7 +53,14 @@ def parse_gcode_lines(lines: List[str]) -> ParsedCommandList:
     handlers = _get_command_handlers(parsed)
 
     for line_idx, line in enumerate(lines):
-        clean_line = line.split(";")[0].strip() if ";" in line else line.strip()
+        raw_line = line
+        stripped = raw_line.strip()
+        if stripped.startswith(";"):
+            _handle_comment(state, stripped)
+            continue
+        if ";" in raw_line:
+            raw_line = raw_line.split(";", 1)[0]
+        clean_line = raw_line.strip()
         if not clean_line:
             continue
 
@@ -160,6 +169,8 @@ def _handle_g92(parsed: ParsedCommandList, state: MachineState, params, line_idx
                 type="RESET_E",
                 val=new_e,
                 line=line_idx + 1,
+                layer=state.current_layer,
+                subtype=state.current_subtype or "UNKNOWN",
                 raw=raw_line,
             )
         )
@@ -243,6 +254,11 @@ def _handle_move(parsed: ParsedCommandList, state: MachineState, params, line_id
     else:
         move_type = "PRINT" if abs(delta_e) > 1e-9 else "TRAVEL"
 
+    if move_type == "TRAVEL":
+        subtype = "TRAVEL"
+    else:
+        subtype = state.current_subtype or "UNKNOWN"
+
     move_cmd = MoveCommand(
         type=move_type,
         cmd=cmd_type,
@@ -252,6 +268,8 @@ def _handle_move(parsed: ParsedCommandList, state: MachineState, params, line_id
         delta_e=delta_e,
         feedrate=state.f,
         line=line_idx + 1,
+        layer=state.current_layer,
+        subtype=subtype,
         raw=raw_line,
         is_pure_state_change=position_unchanged,
     )
@@ -270,6 +288,8 @@ def _handle_tool_change(parsed: ParsedCommandList, state: MachineState, cmd_type
             type="TOOL_CHANGE",
             tool=tool_idx,
             line=line_idx + 1,
+            layer=state.current_layer,
+            subtype=state.current_subtype or "UNKNOWN",
             raw=raw_line,
         )
     )
@@ -281,6 +301,8 @@ def _handle_m_command(parsed: ParsedCommandList, state: MachineState, cmd_type, 
         code=cmd_type,
         params=params,
         line=line_idx + 1 if line_idx is not None else None,
+        layer=state.current_layer,
+        subtype=state.current_subtype or "UNKNOWN",
         raw=raw_line,
     )
     if "T" in params:
@@ -289,6 +311,21 @@ def _handle_m_command(parsed: ParsedCommandList, state: MachineState, cmd_type, 
         except (ValueError, TypeError):
             cmd.tool = None
     parsed.append(cmd)
+
+
+def _handle_comment(state: MachineState, line: str):
+    # Marlin-style comments
+    if line.startswith(";LAYER_CHANGE"):
+        state.current_layer += 1
+        return
+    if line.startswith(";LAYER:"):
+        try:
+            state.current_layer = int(line.split(":", 1)[1].strip())
+        except Exception:
+            pass
+        return
+    if line.startswith(";TYPE:"):
+        state.current_subtype = line.split(":", 1)[1].strip()
 
 
 def _select_default_gcode_file(input_dir):

@@ -82,3 +82,8 @@ ros2 launch my_project_startup startup.launch.py \
   sen_type:=PythonDemo \
   decimal_precision:=4 \
   extrude_scale:=1.2
+
+补充：
+- 当 npz 以“按层+类型”导出时，可将 `npz_path` 指向 manifest：
+  - `/home/jayson/kuka_ram_ws/data/output_npz/<base_name>/<base_name>_manifest.json`
+  - 控制中心会按 manifest 顺序加载并发送。

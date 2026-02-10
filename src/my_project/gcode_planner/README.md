@@ -30,11 +30,15 @@ ros2 run gcode_planner gcode_planner_npz \
 - --output-dir: npz 输出目录；默认 `data_root/output_npz`
 - --out: 输出 npz 文件路径（优先级最高）
 - --dt: 采样周期秒，默认 0.004（4ms）
-- --chunk-size: npz 分片行数，默认 100000
 - --corner-angle-deg: 角点判定夹角阈值（度），默认 10
 - --corner-retreat-ratio: 角点回退比例（0-0.49），默认 0.2
 - --density: 数据点加密密度，默认 0
 - --degree: B 样条阶次，默认 3
+- --export-sleep-ms: 导出节流休眠毫秒数，默认 0（不节流）
+- --export-yield-every: 导出节流触发步长，默认 0（不节流）
+- --split-by-layer-type: 按层+打印子类型分别导出 npz（会生成 manifest）
+- --plot-layer-xy: 导出后按层生成 XY 路径图（仅 split-by-layer-type 生效）
+- --plot-stride: 绘图抽样步长，默认 5
 
 注意：通过 `ros2 run` 运行安装后的包时，默认 `data_root` 会随安装路径变化，可能落到 `install/.../data`。建议显式传 `--data-root` 或 `--output-dir`。
 
@@ -116,7 +120,27 @@ ros2 run gcode_planner gcode_planner_npz \
 - move_type_vocab_keys/move_type_vocab_vals
 - event_type_vocab_keys/event_type_vocab_vals
 
-当总行数超过 chunk_size 时，文件名为 `<base>_part0000.npz` 形式；否则为单文件 `<base>.npz`。
+当总行数超过 5000000 时，文件名为 `<base>_part0000.npz` 形式；否则为单文件 `<base>.npz`。
+
+### 按层+子类型导出
+
+启用 `--split-by-layer-type` 后，输出结构如下：
+
+```
+output_npz/<base_name>/
+  <base_name>_manifest.json
+  layer_0001/
+    <base_name>_layer_0001_type_<TYPE>_occ_0001.npz
+    ...
+  layer_0002/
+    ...
+```
+
+说明：
+- `TYPE` 来自 `;TYPE:` 注释；`UNKNOWN` 会归并为 `TRAVEL`。
+- `occ` 为同层同类型的出现序号，保证顺序可复现。
+- manifest 用于按原 GCode 顺序播放（基于解析顺序）。
+- 启用 `--plot-layer-xy` 后，会在每个 `layer_XXXX/` 下生成 `layer_XXXX.png`（只绘制真实沉积路径）。
 
 ## 挤出量 E 的生成与发送路径（npz -> UART）
 

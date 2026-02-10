@@ -69,6 +69,8 @@ private:
   bool load_next_chunk();
 
   std::vector<std::string> resolve_files(const std::string& path) const;
+  std::vector<std::string> resolve_from_manifest(const std::string& path) const;
+  std::vector<std::string> resolve_from_base(const std::string& path) const;
   NpzChunk load_chunk(const std::string& file);
 
   std::unordered_map<uint8_t, std::string> move_type_vocab_;
