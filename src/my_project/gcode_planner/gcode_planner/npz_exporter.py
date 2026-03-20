@@ -68,13 +68,43 @@ def export_npz(
     split_by_layer_type: bool = False,
     plot_layer_xy: bool = False,
     plot_stride: int = 5,
-) -> None:
+) -> dict:
     """
     导出 npz（分片）。
     - 按 4ms 采样（要求上游或本函数已将运动转换为 GlobalCurveCommand）。
     - 事件对齐：事件指令出现后，标记落在随后的第一个采样点行。
     - 速度规划由 sample_global_curve 内部的七阶多项式完成，此处不做额外处理。
+    返回耗时统计字典（秒），用于 CLI 打印。
     """
+    t_total_start = time.perf_counter()
+    timings = {
+        "total_s": 0.0,
+        "fit_s": 0.0,
+        "fit_gen_points_s": 0.0,
+        "fit_density_s": 0.0,
+        "fit_prepare_data_s": 0.0,
+        "fit_param_s": 0.0,
+        "fit_knot_s": 0.0,
+        "fit_lsq_s": 0.0,
+        "fit_post_ctrl_s": 0.0,
+        "fit_lsq_basis_build_s": 0.0,
+        "fit_lsq_qk_build_s": 0.0,
+        "fit_lsq_normal_mat_s": 0.0,
+        "fit_lsq_solve_s": 0.0,
+        "fit_lsq_total_s": 0.0,
+        "sample_s": 0.0,
+        "sample_arc_map_s": 0.0,
+        "sample_lookup_s": 0.0,
+        "sample_deboor_s": 0.0,
+        "sample_pose_s": 0.0,
+        "sample_extrude_s": 0.0,
+        "write_s": 0.0,
+        "manifest_s": 0.0,
+        "plot_s": 0.0,
+        "rows": 0,
+        "parts": 0,
+    }
+
     last_pose_map = {}
     current_tool = 2  # 默认工具号（树脂，T1）
     seq = 0
@@ -149,6 +179,7 @@ def export_npz(
         def flush(self):
             if not self.rows:
                 return
+            t0 = time.perf_counter()
             out_dir = os.path.dirname(self.base_path)
             if out_dir:
                 os.makedirs(out_dir, exist_ok=True)
@@ -195,6 +226,8 @@ def export_npz(
             )
             self.part += 1
             self.wrote_any = True
+            timings["parts"] += 1
+            timings["write_s"] += time.perf_counter() - t0
 
         def finalize(self):
             self.flush()
@@ -243,6 +276,23 @@ def export_npz(
 
     processed_rows = 0
 
+    def _accumulate_fit_profile(profile: dict):
+        for key in (
+            "fit_gen_points_s",
+            "fit_density_s",
+            "fit_prepare_data_s",
+            "fit_param_s",
+            "fit_knot_s",
+            "fit_lsq_s",
+            "fit_post_ctrl_s",
+            "fit_lsq_basis_build_s",
+            "fit_lsq_qk_build_s",
+            "fit_lsq_normal_mat_s",
+            "fit_lsq_solve_s",
+            "fit_lsq_total_s",
+        ):
+            timings[key] += float(profile.get(key, 0.0))
+
     def _maybe_yield():
         nonlocal processed_rows
         if export_yield_every <= 0 or export_sleep_ms <= 0:
@@ -252,6 +302,14 @@ def export_npz(
 
     def _append_sample(gc: GlobalCurveCommand, layer: int, subtype: str, occ: int):
         nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map
+        t0 = time.perf_counter()
+        sample_profile = {
+            "sample_arc_map_s": 0.0,
+            "sample_lookup_s": 0.0,
+            "sample_deboor_s": 0.0,
+            "sample_pose_s": 0.0,
+            "sample_extrude_s": 0.0,
+        }
         feed_mm_min = gc.feedrate if (gc.feedrate is not None and gc.feedrate > 0) else last_feedrate_mm_min
         if feed_mm_min is None or feed_mm_min <= 0:
             target_velocity = default_feed_mm_s
@@ -266,7 +324,7 @@ def export_npz(
         else:
             src_lines = str(move_lines[0])
 
-        for pt in sample_global_curve_iter(gc, dt=dt, target_velocity=target_velocity):
+        for pt in sample_global_curve_iter(gc, dt=dt, target_velocity=target_velocity, profile=sample_profile):
             has_any = True
             row = CsvRow(
                 seq=seq,
@@ -290,6 +348,12 @@ def export_npz(
             _maybe_yield()
             seq += 1
             last_pose_map[(layer, subtype)] = row
+        timings["sample_s"] += time.perf_counter() - t0
+        timings["sample_arc_map_s"] += sample_profile["sample_arc_map_s"]
+        timings["sample_lookup_s"] += sample_profile["sample_lookup_s"]
+        timings["sample_deboor_s"] += sample_profile["sample_deboor_s"]
+        timings["sample_pose_s"] += sample_profile["sample_pose_s"]
+        timings["sample_extrude_s"] += sample_profile["sample_extrude_s"]
         if not has_any:
             return
 
@@ -320,6 +384,7 @@ def export_npz(
         elif len(buffer) == 2:
             gc_list = [_make_gc(buffer[0]), _make_gc(buffer[1])]
         else:
+            t0 = time.perf_counter()
             gc = planner.fit_global_curve(
                 buffer,
                 corner_angle_deg=corner_angle_deg,
@@ -327,6 +392,8 @@ def export_npz(
                 density=density,
                 degree=degree,
             )
+            timings["fit_s"] += time.perf_counter() - t0
+            _accumulate_fit_profile(planner.last_fit_profile)
             if gc is None:
                 raise ValueError("B 样条拟合失败，无法导出 npz（段类型: %s, 段长度: %d)" % (current_type, len(buffer)))
             gc_list = [gc]
@@ -456,6 +523,7 @@ def export_npz(
         w.finalize()
 
     if split_by_layer_type and manifest:
+        t0 = time.perf_counter()
         for key, entry in manifest_by_key.items():
             writer = writers.get(key)
             if writer and writer.last_seq is not None:
@@ -463,13 +531,20 @@ def export_npz(
         manifest_path = os.path.join(base_root, f"{base_name}_manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
+        timings["manifest_s"] += time.perf_counter() - t0
 
         if plot_layer_xy:
+            t1 = time.perf_counter()
             _plot_layers_from_manifest(
                 manifest,
                 base_root,
                 stride=max(1, int(plot_stride)),
             )
+            timings["plot_s"] += time.perf_counter() - t1
+
+    timings["rows"] = processed_rows
+    timings["total_s"] = time.perf_counter() - t_total_start
+    return timings
 
 
 def _plot_layers_from_manifest(manifest, base_root: str, stride: int = 5) -> None:

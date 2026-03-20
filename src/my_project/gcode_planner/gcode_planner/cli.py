@@ -7,6 +7,7 @@
 import argparse
 import os
 import sys
+import time
 
 from .gcode_parser import (
     load_gcode_lines,
@@ -59,9 +60,12 @@ def main(argv=None):
 
     os.makedirs(out_dir, exist_ok=True)
 
+    t0 = time.perf_counter()
     lines = load_gcode_lines(gcode_path)
+    t1 = time.perf_counter()
     parsed = parse_gcode_lines(lines)
-    export_npz(
+    t2 = time.perf_counter()
+    stats = export_npz(
         parsed,
         output_path,
         dt=args.dt,
@@ -77,7 +81,55 @@ def main(argv=None):
         plot_layer_xy=args.plot_layer_xy,
         plot_stride=args.plot_stride,
     )
+    t3 = time.perf_counter()
     print("[信息] 导出完成: %s (npz, chunk<=5000000)" % output_path)
+    print(
+        "[信息] 耗时统计: 读取GCode=%.3fs, 解析=%.3fs, 导出总计=%.3fs (拟合=%.3fs, 采样=%.3fs, 写入=%.3fs, 清单=%.3fs, 绘图=%.3fs, 行数=%d, 分片=%d)"
+        % (
+            t1 - t0,
+            t2 - t1,
+            t3 - t2,
+            stats.get("fit_s", 0.0),
+            stats.get("sample_s", 0.0),
+            stats.get("write_s", 0.0),
+            stats.get("manifest_s", 0.0),
+            stats.get("plot_s", 0.0),
+            stats.get("rows", 0),
+            stats.get("parts", 0),
+        )
+    )
+    print(
+        "[信息] 拟合细分: 生成点=%.3fs, 密度加密=%.3fs, 准备数据=%.3fs, 参数化=%.3fs, 节点生成=%.3fs, 最小二乘=%.3fs, 后处理=%.3fs"
+        % (
+            stats.get("fit_gen_points_s", 0.0),
+            stats.get("fit_density_s", 0.0),
+            stats.get("fit_prepare_data_s", 0.0),
+            stats.get("fit_param_s", 0.0),
+            stats.get("fit_knot_s", 0.0),
+            stats.get("fit_lsq_s", 0.0),
+            stats.get("fit_post_ctrl_s", 0.0),
+        )
+    )
+    print(
+        "[信息] 最小二乘细分: 基函数矩阵=%.3fs, Qk构造=%.3fs, 法方程构造=%.3fs, 求解=%.3fs, 合计=%.3fs"
+        % (
+            stats.get("fit_lsq_basis_build_s", 0.0),
+            stats.get("fit_lsq_qk_build_s", 0.0),
+            stats.get("fit_lsq_normal_mat_s", 0.0),
+            stats.get("fit_lsq_solve_s", 0.0),
+            stats.get("fit_lsq_total_s", 0.0),
+        )
+    )
+    print(
+        "[信息] 采样细分: 弧长映射=%.3fs, u查找=%.3fs, deBoor=%.3fs, 姿态=%.3fs, 挤出=%.3fs"
+        % (
+            stats.get("sample_arc_map_s", 0.0),
+            stats.get("sample_lookup_s", 0.0),
+            stats.get("sample_deboor_s", 0.0),
+            stats.get("sample_pose_s", 0.0),
+            stats.get("sample_extrude_s", 0.0),
+        )
+    )
     return 0
 
 

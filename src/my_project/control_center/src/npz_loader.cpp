@@ -230,6 +230,19 @@ std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& pat
     if (bp.is_relative()) {
       bp = manifest_path.parent_path() / bp;
     }
+    if (bp.is_absolute() && !fs::exists(bp)) {
+      // Fallback: manifest moved to another machine, rebuild relative path.
+      std::vector<fs::path> tail;
+      for (auto it = bp.relative_path().begin(); it != bp.relative_path().end(); ++it) {
+        tail.push_back(*it);
+      }
+      if (tail.size() >= 2) {
+        fs::path alt = manifest_path.parent_path() / tail[tail.size() - 2] / tail[tail.size() - 1];
+        if (fs::exists(alt) || fs::exists(alt.parent_path())) {
+          bp = alt;
+        }
+      }
+    }
     auto files = resolve_from_base(bp.string());
     out.insert(out.end(), files.begin(), files.end());
     pos = end + 1;

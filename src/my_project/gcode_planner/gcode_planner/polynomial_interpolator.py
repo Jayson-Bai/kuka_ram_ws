@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 import math
 import bisect
+import time
 
 from .types import Position, GlobalCurveCommand
 
@@ -122,7 +123,10 @@ def _find_span(u: float, knots: List[float], degree: int, n_ctrl: int) -> int:
 def _de_boor(u: float, degree: int, knots: List[float], ctrl: List[Position]) -> Position:
     n_ctrl = len(ctrl)
     span = _find_span(u, knots, degree, n_ctrl)
-    d = [Position(**vars(ctrl[span - degree + i])) for i in range(degree + 1)]
+    d = []
+    for offset in range(degree + 1):
+        pt = ctrl[span - degree + offset]
+        d.append([pt.x, pt.y, pt.z, pt.a, pt.b, pt.c])
     for r in range(1, degree + 1):
         for j in range(degree, r - 1, -1):
             i = span - degree + j
@@ -130,15 +134,17 @@ def _de_boor(u: float, degree: int, knots: List[float], ctrl: List[Position]) ->
             alpha = 0.0 if abs(denom) < 1e-12 else (u - knots[i]) / denom
             prev = d[j - 1]
             curr = d[j]
-            d[j] = Position(
-                x=(1 - alpha) * prev.x + alpha * curr.x,
-                y=(1 - alpha) * prev.y + alpha * curr.y,
-                z=(1 - alpha) * prev.z + alpha * curr.z,
-                a=(1 - alpha) * prev.a + alpha * curr.a,
-                b=(1 - alpha) * prev.b + alpha * curr.b,
-                c=(1 - alpha) * prev.c + alpha * curr.c,
-            )
-    return d[degree]
+            one_minus_alpha = 1.0 - alpha
+            d[j] = [
+                one_minus_alpha * prev[0] + alpha * curr[0],
+                one_minus_alpha * prev[1] + alpha * curr[1],
+                one_minus_alpha * prev[2] + alpha * curr[2],
+                one_minus_alpha * prev[3] + alpha * curr[3],
+                one_minus_alpha * prev[4] + alpha * curr[4],
+                one_minus_alpha * prev[5] + alpha * curr[5],
+            ]
+    res = d[degree]
+    return Position(x=res[0], y=res[1], z=res[2], a=res[3], b=res[4], c=res[5])
 
 
 def _build_arc_length_map(ctrl: List[Position], degree: int = 3, samples: int = 400):
@@ -261,6 +267,7 @@ def sample_global_curve_iter(
     target_velocity: float = 10.0,  # mm/s
     t_acc: float = 2.0,
     t_dec: float = 2.0,
+    profile: Optional[dict] = None,
 ):
     """
     对一条全局 B 样条进行时间参数化并采样（生成器）。
@@ -274,8 +281,18 @@ def sample_global_curve_iter(
     ctrl = [curve.start_pos] + curve.control_points
     degree = 3
 
+    if profile is not None:
+        profile.setdefault("sample_arc_map_s", 0.0)
+        profile.setdefault("sample_lookup_s", 0.0)
+        profile.setdefault("sample_deboor_s", 0.0)
+        profile.setdefault("sample_pose_s", 0.0)
+        profile.setdefault("sample_extrude_s", 0.0)
+
     # 构建弧长映射
+    t0 = time.perf_counter()
     u_list, len_list, total_length, knots = _build_arc_length_map(ctrl, degree=degree, samples=max(400, len(ctrl) * 10))
+    if profile is not None:
+        profile["sample_arc_map_s"] += time.perf_counter() - t0
     if total_length <= 1e-9:
         # 退化：零长度，直接返回终点
         yield InterpolatedPoint(
@@ -321,17 +338,28 @@ def sample_global_curve_iter(
         if i == num_steps:
             s_norm_clamped = 1.0  # 确保最后一点落在终点
 
+        t_lookup0 = time.perf_counter()
         u = _lookup_u_from_s(s_norm_clamped, u_list, len_list, total_length)
+        if profile is not None:
+            profile["sample_lookup_s"] += time.perf_counter() - t_lookup0
+
+        t_deboor0 = time.perf_counter()
         p = _de_boor(u, degree, knots, ctrl)
+        if profile is not None:
+            profile["sample_deboor_s"] += time.perf_counter() - t_deboor0
 
         # 姿态插值
+        t_pose0 = time.perf_counter()
         qs = _quat_slerp(start_q, end_q, s_norm_clamped)
         a_rad, b_rad, c_rad = _quat_to_euler_xyz(qs)
         p.a = math.degrees(a_rad)
         p.b = math.degrees(b_rad)
         p.c = math.degrees(c_rad)
+        if profile is not None:
+            profile["sample_pose_s"] += time.perf_counter() - t_pose0
 
         # 挤出分配（按弧长比例）
+        t_extrude0 = time.perf_counter()
         curr_s = s_norm_clamped * total_length
         delta_s = curr_s - prev_s
         delta_e = curve.delta_e * (delta_s / total_length)
@@ -342,6 +370,8 @@ def sample_global_curve_iter(
         feed_mm_s = delta_s / dt if dt > 0 else 0.0
         feed_mm_min = feed_mm_s * 60.0
         extrude_speed = delta_e / dt if dt > 0 else 0.0
+        if profile is not None:
+            profile["sample_extrude_s"] += time.perf_counter() - t_extrude0
 
         yield InterpolatedPoint(
             t=t,
@@ -361,11 +391,12 @@ def sample_global_curve(
     target_velocity: float = 10.0,  # mm/s
     t_acc: float = 2.0,
     t_dec: float = 2.0,
+    profile: Optional[dict] = None,
 ) -> List[InterpolatedPoint]:
     """
     对一条全局 B 样条进行时间参数化并采样（列表版，兼容旧调用）。
     """
-    return list(sample_global_curve_iter(curve, dt=dt, target_velocity=target_velocity, t_acc=t_acc, t_dec=t_dec))
+    return list(sample_global_curve_iter(curve, dt=dt, target_velocity=target_velocity, t_acc=t_acc, t_dec=t_dec, profile=profile))
 
 
 __all__ = [

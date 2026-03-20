@@ -6,6 +6,7 @@
 """
 
 import math
+import time
 from typing import List, Optional, Tuple
 
 from .bspline import parameter_selection as ps 
@@ -150,7 +151,24 @@ def _subdivide_points(points: List[Position]) -> List[Position]:
 
 class GlobalSplinePlanner:
     def __init__(self):
-        pass
+        self.last_fit_profile = self._new_fit_profile()
+
+    @staticmethod
+    def _new_fit_profile():
+        return {
+            "fit_gen_points_s": 0.0,
+            "fit_density_s": 0.0,
+            "fit_prepare_data_s": 0.0,
+            "fit_param_s": 0.0,
+            "fit_knot_s": 0.0,
+            "fit_lsq_s": 0.0,
+            "fit_post_ctrl_s": 0.0,
+            "fit_lsq_basis_build_s": 0.0,
+            "fit_lsq_qk_build_s": 0.0,
+            "fit_lsq_normal_mat_s": 0.0,
+            "fit_lsq_solve_s": 0.0,
+            "fit_lsq_total_s": 0.0,
+        }
 
     def fit_global_curve(
         self,
@@ -166,19 +184,26 @@ class GlobalSplinePlanner:
         - 使用 BSpline 库进行 Centripetal 参数化和 Averaging Knots 生成。
         - 执行最小二乘逼近。
         """
+        self.last_fit_profile = self._new_fit_profile()
+        profile = self.last_fit_profile
+
         if not moves:
             return None
             
         # 1. 生成拟合点（包含回退点逻辑）
+        t0 = time.perf_counter()
         fit_points = _generate_fitting_points(
             moves=moves,
             angle_threshold_deg=corner_angle_deg,
             corner_retreat_ratio=corner_retreat_ratio,
         )
+        profile["fit_gen_points_s"] += time.perf_counter() - t0
             
         # 2. 根据密度参数递归加密数据点
+        t0 = time.perf_counter()
         for _ in range(density):
             fit_points = _subdivide_points(fit_points)
+        profile["fit_density_s"] += time.perf_counter() - t0
             
         n_points = len(fit_points)
         # 至少需要 degree + 1 个点才能进行 B 样条拟合 (或者至少2个点)
@@ -196,6 +221,7 @@ class GlobalSplinePlanner:
             return None
 
         # 4. 准备 BSpline 库所需的数据格式 [[x...], [y...], ...]
+        t0 = time.perf_counter()
         D_X = [p.x for p in fit_points]
         D_Y = [p.y for p in fit_points]
         D_Z = [p.z for p in fit_points]
@@ -204,14 +230,18 @@ class GlobalSplinePlanner:
         D_C = [p.c for p in fit_points]
         D = [D_X, D_Y, D_Z, D_A, D_B, D_C]
         D_N = n_points
+        profile["fit_prepare_data_s"] += time.perf_counter() - t0
 
         # 5. 调用 BSpline 库算法
         try:
             # 计算参数 (Centripetal)
+            t0 = time.perf_counter()
             param = ps.centripetal(D_N, D)
+            profile["fit_param_s"] += time.perf_counter() - t0
             
             # 逼近模式（不再退化到插值）
             # 生成适合控制点数量的均匀节点向量：节点数量 = H + k + 1
+            t0 = time.perf_counter()
             knot = [0.0] * (degree + 1)
             if calc_n_ctrl > degree + 1:
                 num_internal = calc_n_ctrl - (degree + 1)
@@ -219,13 +249,29 @@ class GlobalSplinePlanner:
                 for i in range(num_internal):
                     knot.append(step * (i + 1))
             knot.extend([1.0] * (degree + 1))
+            profile["fit_knot_s"] += time.perf_counter() - t0
             
-            ctrl_raw = bc.curve_approximation(D, D_N, calc_n_ctrl, degree, param, knot)
+            lsq_profile = {
+                "lsq_basis_build_s": 0.0,
+                "lsq_qk_build_s": 0.0,
+                "lsq_normal_mat_s": 0.0,
+                "lsq_solve_s": 0.0,
+                "lsq_total_s": 0.0,
+            }
+            t0 = time.perf_counter()
+            ctrl_raw = bc.curve_approximation(D, D_N, calc_n_ctrl, degree, param, knot, profile=lsq_profile)
+            profile["fit_lsq_s"] += time.perf_counter() - t0
+            profile["fit_lsq_basis_build_s"] += lsq_profile["lsq_basis_build_s"]
+            profile["fit_lsq_qk_build_s"] += lsq_profile["lsq_qk_build_s"]
+            profile["fit_lsq_normal_mat_s"] += lsq_profile["lsq_normal_mat_s"]
+            profile["fit_lsq_solve_s"] += lsq_profile["lsq_solve_s"]
+            profile["fit_lsq_total_s"] += lsq_profile["lsq_total_s"]
                 
             if not ctrl_raw or len(ctrl_raw[0]) == 0:
                 return None
                 
             # 6. 转换回 Position 列表
+            t0 = time.perf_counter()
             res_ctrl_points = []
             n_res = len(ctrl_raw[0])
             for i in range(n_res):
@@ -237,6 +283,7 @@ class GlobalSplinePlanner:
                     b=ctrl_raw[4][i],
                     c=ctrl_raw[5][i]
                 ))
+            profile["fit_post_ctrl_s"] += time.perf_counter() - t0
                 
         except Exception as e:
             # 容错处理

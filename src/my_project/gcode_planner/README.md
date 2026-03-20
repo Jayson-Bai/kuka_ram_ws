@@ -110,6 +110,41 @@ ros2 run gcode_planner gcode_planner_npz \
 重置挤出事件：
 - `G92 E...` -> `extrude_reset`
 
+## B 样条拟合逻辑（详细）
+
+位置与实现：`gcode_planner/bspline_approximation.py` 的 `GlobalSplinePlanner.fit_global_curve()`。
+
+整体流程：
+1. 分段：在 `npz_exporter.py` 中，连续同类型/同层/同子类型的 `MoveCommand` 会被收集成一个段；段结束时进入拟合。
+2. 生成拟合点（角点回退）：  
+   - 原始点序列 = 段内所有 Move 的起点/终点。  
+   - 去除相邻重复点（距离 < 1e-9）。  
+   - 对每个夹角 `>= corner_angle_deg` 的顶点，沿前后两段各插入一个回退点：  
+     - 回退距离 = 线段长度 * `corner_retreat_ratio`（限制在 0~0.49）。  
+   - 目的：避免角点尖锐拐折带来的拟合震荡。
+3. 点密度加密（`density`）：  
+   - 每次加密在相邻点之间插入一个中点；点数约变为 `2N-1`。  
+   - `density=3` 时，点数约膨胀到原来的 ~8 倍。
+4. 控制点数估计：  
+   - `n_ctrl = ceil(n_points / 5)`，并保证 `n_ctrl >= degree+1` 且 `n_ctrl < n_points`。  
+   - 控制点过多会退化为插值，当前逻辑保证“逼近”模式。
+5. 参数化与节点向量：  
+   - 使用向心参数化（Centripetal）计算参数 `param`。  
+   - 采用均匀内部节点向量：`[0...0, t1, t2, ..., 1...1]`，长度为 `n_ctrl + degree + 1`。
+6. 最小二乘逼近：  
+   - 使用 `bspline_curve.curve_approximation()` 进行全局最小二乘拟合。  
+   - 输入维度为 6（XYZABC），输出控制点序列。
+7. 生成 `GlobalCurveCommand`：  
+   - `type` 标记为 `TRAVEL_FIT` / `PRINT_FIT`。  
+   - `start_pos` 为第一个控制点，`control_points` 为后续控制点。  
+   - `delta_e` 为原段内 `MoveCommand.delta_e` 的总和（用于后续采样时的挤出分配）。
+
+关键参数的影响：
+- `corner_angle_deg` 越小，角点回退点越多，拟合点数上升。
+- `corner_retreat_ratio` 越大，回退点偏离越远，拟合平滑性增强但点数不变。
+- `density` 每 +1 会显著放大点数，拟合耗时近似指数增加。
+- `degree` 越高，拟合自由度更高但计算更慢。
+
 
 ## 输出数据格式（npz）
 
