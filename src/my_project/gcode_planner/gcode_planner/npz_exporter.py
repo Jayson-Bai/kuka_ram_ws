@@ -13,6 +13,7 @@ import os
 import time
 import json
 import re
+import math
 
 from .types import (
     ParsedCommandList,
@@ -62,6 +63,7 @@ def export_npz(
     corner_retreat_ratio: float = 0.2,
     density: int = 0,
     degree: int = 3,
+    max_fit_points_per_segment: int = 20000,
     default_feed_mm_s: float = 10.0,
     export_sleep_ms: int = 0,
     export_yield_every: int = 0,
@@ -241,6 +243,8 @@ def export_npz(
     manifest = []
     manifest_by_key = {}
     occ_counters = {}
+    finalized_keys = set()
+    plotted_layers = set()
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
         if not split_by_layer_type:
@@ -275,6 +279,44 @@ def export_npz(
         return occ
 
     processed_rows = 0
+
+    def _finalize_writer(key):
+        writer = writers.get(key)
+        if writer is None or key in finalized_keys:
+            return
+        writer.finalize()
+        finalized_keys.add(key)
+        entry = manifest_by_key.get(key)
+        if entry is not None and writer.last_seq is not None:
+            entry["end_seq"] = writer.last_seq
+
+    def _cleanup_state_before(layer_limit: int):
+        for dct in (last_pose_map, occ_counters):
+            stale = [k for k in dct.keys() if isinstance(k, tuple) and k and k[0] < layer_limit]
+            for key in stale:
+                dct.pop(key, None)
+
+    def _finalize_layers_before(layer_limit: int):
+        if not split_by_layer_type:
+            return
+        target_keys = sorted(
+            [key for key in writers.keys() if isinstance(key, tuple) and len(key) == 3 and key[0] < layer_limit],
+            key=lambda item: (item[0], item[1], item[2]),
+        )
+        for key in target_keys:
+            _finalize_writer(key)
+
+        if plot_layer_xy:
+            completed_layers = sorted({key[0] for key in target_keys})
+            for layer in completed_layers:
+                if layer in plotted_layers:
+                    continue
+                entries = [entry for entry in manifest if int(entry.get("layer", 0)) == layer]
+                if entries:
+                    _plot_single_layer(entries, base_root, stride=max(1, int(plot_stride)))
+                    plotted_layers.add(layer)
+
+        _cleanup_state_before(layer_limit)
 
     def _accumulate_fit_profile(profile: dict):
         for key in (
@@ -359,6 +401,308 @@ def export_npz(
 
     current_occ: Optional[int] = None
 
+    def _move_length(move: MoveCommand) -> float:
+        dx = move.pos.x - move.start_pos.x
+        dy = move.pos.y - move.start_pos.y
+        dz = move.pos.z - move.start_pos.z
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    def _collapse_moves_to_single(moves: List[MoveCommand]) -> MoveCommand:
+        first = moves[0]
+        last = moves[-1]
+        return MoveCommand(
+            type=first.type,
+            cmd=first.cmd,
+            start_pos=first.start_pos,
+            pos=last.pos,
+            e_val=last.e_val,
+            delta_e=sum(m.delta_e for m in moves),
+            feedrate=first.feedrate if (first.feedrate is not None and first.feedrate > 0) else last.feedrate,
+            line=first.line,
+            layer=first.layer,
+            subtype=first.subtype,
+            raw=(first.raw or "") + " | compact_endpoint_comp",
+            target_v_in=first.target_v_in,
+            target_v_out=last.target_v_out,
+            is_pure_state_change=False,
+        )
+
+    def _make_linear_move_like(start_pos, end_pos, template: MoveCommand, delta_e: float, e_val: float, raw_suffix: str) -> MoveCommand:
+        return MoveCommand(
+            type=template.type,
+            cmd=template.cmd,
+            start_pos=start_pos,
+            pos=end_pos,
+            e_val=e_val,
+            delta_e=delta_e,
+            feedrate=template.feedrate,
+            line=template.line,
+            layer=template.layer,
+            subtype=template.subtype,
+            raw=(template.raw or "") + raw_suffix,
+            target_v_in=template.target_v_in,
+            target_v_out=template.target_v_out,
+            is_pure_state_change=False,
+        )
+
+    def _moves_bbox_diag(moves: List[MoveCommand]) -> float:
+        pts = [moves[0].start_pos] + [m.pos for m in moves]
+        xs = [p.x for p in pts]
+        ys = [p.y for p in pts]
+        zs = [p.z for p in pts]
+        dx = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        dz = max(zs) - min(zs)
+        return math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    def _short_move_threshold(lengths: List[float]) -> float:
+        positive = sorted(v for v in lengths if v > 1e-9)
+        if not positive:
+            return 0.8
+        mid = len(positive) // 2
+        median = positive[mid] if len(positive) % 2 == 1 else 0.5 * (positive[mid - 1] + positive[mid])
+        return min(2.5, max(0.8, median * 0.05))
+
+    def _should_force_linear_segment(moves: List[MoveCommand], short_threshold: float) -> bool:
+        if len(moves) > 8:
+            return False
+        lengths = [_move_length(m) for m in moves]
+        positive = [v for v in lengths if v > 1e-9]
+        if len(positive) < 2:
+            return True
+        min_len = min(positive)
+        max_len = max(positive)
+        return min_len <= short_threshold and max_len >= min_len * 8.0
+
+    def _partition_moves_for_export(moves: List[MoveCommand]):
+        if len(moves) <= 2:
+            return [(moves, True)]
+
+        lengths = [_move_length(m) for m in moves]
+        short_threshold = _short_move_threshold(lengths)
+        start_idx = 0
+        end_idx = len(moves)
+        parts = []
+
+        start_short = 0
+        while start_short < len(lengths) and lengths[start_short] <= short_threshold:
+            start_short += 1
+        if start_short >= 3:
+            cluster = moves[:start_short]
+            if _moves_bbox_diag(cluster) <= short_threshold * 4.0:
+                parts.append((cluster, True))
+                start_idx = start_short
+
+        end_short = 0
+        while end_short < (end_idx - start_idx) and lengths[end_idx - end_short - 1] <= short_threshold:
+            end_short += 1
+        tail_part = None
+        if end_short >= 3:
+            cluster = moves[end_idx - end_short:end_idx]
+            if _moves_bbox_diag(cluster) <= short_threshold * 4.0:
+                tail_part = (cluster, True)
+                end_idx -= end_short
+
+        if start_idx < end_idx:
+            if start_idx < len(lengths) - 1:
+                first_len = lengths[start_idx]
+                next_len = lengths[start_idx + 1]
+                if first_len <= short_threshold and next_len >= max(first_len * 8.0, short_threshold * 3.0):
+                    parts.append((moves[start_idx:start_idx + 1], True))
+                    start_idx += 1
+
+        if start_idx < end_idx:
+            if end_idx - 1 > start_idx:
+                last_len = lengths[end_idx - 1]
+                prev_len = lengths[end_idx - 2]
+                if last_len <= short_threshold and prev_len >= max(last_len * 8.0, short_threshold * 3.0):
+                    tail_part = (moves[end_idx - 1:end_idx], True) if tail_part is None else tail_part
+                    end_idx -= 1
+
+        middle = moves[start_idx:end_idx]
+        if middle:
+            parts.append((middle, _should_force_linear_segment(middle, short_threshold)))
+        if tail_part is not None:
+            parts.append(tail_part)
+        return [part for part in parts if part[0]]
+
+    def _sanitize_solid_infill_endpoints(moves: List[MoveCommand]) -> List[MoveCommand]:
+        if not moves:
+            return moves
+        subtype = (moves[0].subtype or "").strip().lower()
+        if subtype != "solid infill" or len(moves) < 6:
+            return moves
+
+        lengths = [_move_length(m) for m in moves]
+        short_limit = 0.6
+        long_limit = 2.5
+        max_cluster = 6
+        min_cluster = 3
+
+        def _prefix_cluster_end(seq_lengths):
+            idx = 0
+            while idx < min(len(seq_lengths), max_cluster) and seq_lengths[idx] <= short_limit:
+                idx += 1
+            if idx < min_cluster or idx >= len(seq_lengths):
+                return 0
+            if seq_lengths[idx] < long_limit:
+                return 0
+            return idx
+
+        def _suffix_cluster_start(seq_lengths):
+            idx = len(seq_lengths) - 1
+            count = 0
+            while idx >= 0 and count < max_cluster and seq_lengths[idx] <= short_limit:
+                idx -= 1
+                count += 1
+            if count < min_cluster or idx < 0:
+                return len(seq_lengths)
+            if seq_lengths[idx] < long_limit:
+                return len(seq_lengths)
+            return idx + 1
+
+        prefix_end = _prefix_cluster_end(lengths)
+        suffix_start = _suffix_cluster_start(lengths)
+        if prefix_end == 0 and suffix_start == len(moves):
+            return moves
+
+        out: List[MoveCommand] = []
+        left = 0
+        right = len(moves)
+        if prefix_end > 0:
+            out.append(_collapse_moves_to_single(moves[:prefix_end]))
+            left = prefix_end
+        if suffix_start < len(moves) and suffix_start > left:
+            right = suffix_start
+        out.extend(moves[left:right])
+        if suffix_start < len(moves) and suffix_start >= left:
+            out.append(_collapse_moves_to_single(moves[suffix_start:]))
+        return out
+
+    def _should_disable_spline_for_subtype(subtype: str) -> bool:
+        return (subtype or "").strip().lower() == "solid infill"
+
+    def _rebuild_solid_infill_core(moves: List[MoveCommand]) -> List[MoveCommand]:
+        if not moves:
+            return moves
+        subtype = (moves[0].subtype or "").strip().lower()
+        if subtype != "solid infill":
+            return moves
+
+        def _is_main_diag(move: MoveCommand) -> bool:
+            dx = move.pos.x - move.start_pos.x
+            dy = move.pos.y - move.start_pos.y
+            length = math.hypot(dx, dy)
+            if length < 5.0:
+                return False
+            return abs(abs(dx) - abs(dy)) <= max(0.8, length * 0.18)
+
+        diag_idx = [i for i, m in enumerate(moves) if _is_main_diag(m)]
+        if len(diag_idx) < 4:
+            return moves
+
+        rebuilt: List[MoveCommand] = []
+        carry_delta = sum(m.delta_e for m in moves[:diag_idx[0]])
+        prev_diag = None
+
+        for idx_pos, idx in enumerate(diag_idx):
+            diag = moves[idx]
+            if prev_diag is None:
+                first_delta = diag.delta_e + carry_delta
+                rebuilt.append(
+                    _make_linear_move_like(
+                        diag.start_pos,
+                        diag.pos,
+                        diag,
+                        first_delta,
+                        diag.e_val + carry_delta,
+                        " | rebuilt_infill_diag",
+                    )
+                )
+                prev_diag = diag
+                carry_delta = 0.0
+                continue
+
+            between = moves[diag_idx[idx_pos - 1] + 1:idx]
+            bridge_delta = sum(m.delta_e for m in between)
+            if between:
+                bridge_template = between[0]
+                bridge_start = rebuilt[-1].pos
+                bridge_end = diag.start_pos
+                if math.hypot(bridge_end.x - bridge_start.x, bridge_end.y - bridge_start.y) > 1e-9:
+                    rebuilt.append(
+                        _make_linear_move_like(
+                            bridge_start,
+                            bridge_end,
+                            bridge_template,
+                            bridge_delta,
+                            rebuilt[-1].e_val + bridge_delta,
+                            " | rebuilt_infill_bridge",
+                        )
+                    )
+                else:
+                    rebuilt[-1].delta_e += bridge_delta
+                    rebuilt[-1].e_val += bridge_delta
+
+            rebuilt.append(
+                _make_linear_move_like(
+                    diag.start_pos,
+                    diag.pos,
+                    diag,
+                    diag.delta_e,
+                    (rebuilt[-1].e_val if rebuilt else 0.0) + diag.delta_e,
+                    " | rebuilt_infill_diag",
+                )
+            )
+            prev_diag = diag
+
+        tail_moves = moves[diag_idx[-1] + 1:]
+        tail_delta = sum(m.delta_e for m in tail_moves)
+        if rebuilt and tail_delta:
+            rebuilt[-1].delta_e += tail_delta
+            rebuilt[-1].e_val += tail_delta
+        return rebuilt if len(rebuilt) >= 2 else moves
+
+    def _curve_is_pathological(gc: GlobalCurveCommand, moves: List[MoveCommand]) -> bool:
+        ctrl = [gc.start_pos] + gc.control_points
+        if len(ctrl) < 2 or not moves:
+            return False
+
+        orig_pts = [moves[0].start_pos] + [m.pos for m in moves]
+        orig_x = [p.x for p in orig_pts]
+        orig_y = [p.y for p in orig_pts]
+        orig_z = [p.z for p in orig_pts]
+        ctrl_x = [p.x for p in ctrl]
+        ctrl_y = [p.y for p in ctrl]
+        ctrl_z = [p.z for p in ctrl]
+
+        span_x = max(orig_x) - min(orig_x)
+        span_y = max(orig_y) - min(orig_y)
+        span_z = max(orig_z) - min(orig_z)
+        margin = max(5.0, 0.5 * max(span_x, span_y, span_z, 1.0))
+
+        bbox_bad = (
+            min(ctrl_x) < min(orig_x) - margin or
+            max(ctrl_x) > max(orig_x) + margin or
+            min(ctrl_y) < min(orig_y) - margin or
+            max(ctrl_y) > max(orig_y) + margin or
+            min(ctrl_z) < min(orig_z) - margin or
+            max(ctrl_z) > max(orig_z) + margin
+        )
+        if bbox_bad:
+            return True
+
+        orig_len = 0.0
+        for a, b in zip(orig_pts, orig_pts[1:]):
+            orig_len += math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2 + (b.z - a.z) ** 2)
+        if orig_len <= 1e-9:
+            return False
+
+        ctrl_len = 0.0
+        for a, b in zip(ctrl, ctrl[1:]):
+            ctrl_len += math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2 + (b.z - a.z) ** 2)
+        return ctrl_len > orig_len * 4.0
+
     def flush_moves():
         nonlocal buffer, current_type, current_layer, current_subtype, current_occ
         if not buffer:
@@ -379,24 +723,42 @@ def export_npz(
                 original_moves=[move],
             )
 
-        if len(buffer) == 1:
-            gc_list = [_make_gc(buffer[0])]
-        elif len(buffer) == 2:
-            gc_list = [_make_gc(buffer[0]), _make_gc(buffer[1])]
-        else:
+        work_buffer = _rebuild_solid_infill_core(_sanitize_solid_infill_endpoints(buffer))
+        if work_buffer and _should_disable_spline_for_subtype(work_buffer[0].subtype):
             t0 = time.perf_counter()
             gc = planner.fit_global_curve(
-                buffer,
+                work_buffer,
                 corner_angle_deg=corner_angle_deg,
                 corner_retreat_ratio=corner_retreat_ratio,
                 density=density,
                 degree=degree,
+                max_fit_points=max_fit_points_per_segment,
             )
             timings["fit_s"] += time.perf_counter() - t0
             _accumulate_fit_profile(planner.last_fit_profile)
-            if gc is None:
-                raise ValueError("B 样条拟合失败，无法导出 npz（段类型: %s, 段长度: %d)" % (current_type, len(buffer)))
-            gc_list = [gc]
+            gc_list = [_make_gc(move) for move in work_buffer] if (gc is None or _curve_is_pathological(gc, work_buffer)) else [gc]
+        else:
+            gc_list = []
+            for segment_moves, force_linear in _partition_moves_for_export(work_buffer):
+                if force_linear or len(segment_moves) <= 2:
+                    gc_list.extend(_make_gc(move) for move in segment_moves)
+                    continue
+
+                t0 = time.perf_counter()
+                gc = planner.fit_global_curve(
+                    segment_moves,
+                    corner_angle_deg=corner_angle_deg,
+                    corner_retreat_ratio=corner_retreat_ratio,
+                    density=density,
+                    degree=degree,
+                    max_fit_points=max_fit_points_per_segment,
+                )
+                timings["fit_s"] += time.perf_counter() - t0
+                _accumulate_fit_profile(planner.last_fit_profile)
+                if gc is None or _curve_is_pathological(gc, segment_moves):
+                    gc_list.extend(_make_gc(move) for move in segment_moves)
+                else:
+                    gc_list.append(gc)
 
         layer = buffer[0].layer if buffer else 0
         subtype = buffer[0].subtype if buffer else "UNKNOWN"
@@ -453,6 +815,12 @@ def export_npz(
         last_pose_map[(layer, subtype)] = hold_row
 
     for cmd in parsed_commands:
+        cmd_layer = getattr(cmd, "layer", None)
+        if split_by_layer_type and isinstance(cmd_layer, int):
+            if current_layer is not None and cmd_layer > current_layer:
+                flush_moves()
+            _finalize_layers_before(cmd_layer)
+
         # 事件收集：遇到事件前先冲掉当前轨迹段，保证事件贴在后续采样点
         if isinstance(cmd, (ToolChangeCommand, MCommand, ResetECommand)):
             flush_moves()
@@ -519,35 +887,29 @@ def export_npz(
     # 文件末尾冲掉残余 Move 段
     flush_moves()
 
-    for w in writers.values():
-        w.finalize()
+    if split_by_layer_type:
+        remaining_layers = sorted(
+            {key[0] for key in writers.keys() if isinstance(key, tuple) and len(key) == 3},
+        )
+        if remaining_layers:
+            _finalize_layers_before(max(remaining_layers) + 1)
+    else:
+        for key in list(writers.keys()):
+            _finalize_writer(key)
 
     if split_by_layer_type and manifest:
         t0 = time.perf_counter()
-        for key, entry in manifest_by_key.items():
-            writer = writers.get(key)
-            if writer and writer.last_seq is not None:
-                entry["end_seq"] = writer.last_seq
         manifest_path = os.path.join(base_root, f"{base_name}_manifest.json")
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
         timings["manifest_s"] += time.perf_counter() - t0
-
-        if plot_layer_xy:
-            t1 = time.perf_counter()
-            _plot_layers_from_manifest(
-                manifest,
-                base_root,
-                stride=max(1, int(plot_stride)),
-            )
-            timings["plot_s"] += time.perf_counter() - t1
 
     timings["rows"] = processed_rows
     timings["total_s"] = time.perf_counter() - t_total_start
     return timings
 
 
-def _plot_layers_from_manifest(manifest, base_root: str, stride: int = 5) -> None:
+def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:
     try:
         import matplotlib.pyplot as plt
     except Exception:
@@ -555,6 +917,9 @@ def _plot_layers_from_manifest(manifest, base_root: str, stride: int = 5) -> Non
 
     import numpy as np
     from pathlib import Path
+
+    if not entries:
+        return
 
     def _resolve_npz_files(base_path: Path):
         if base_path.suffix != ".npz":
@@ -564,58 +929,55 @@ def _plot_layers_from_manifest(manifest, base_root: str, stride: int = 5) -> Non
         prefix = base_path.stem + "_part"
         return sorted([p for p in base_path.parent.glob("*.npz") if p.stem.startswith(prefix)])
 
-    by_layer = {}
-    for it in manifest:
-        layer = int(it.get("layer", 0))
-        by_layer.setdefault(layer, []).append(it)
-
-        for layer, segs in sorted(by_layer.items()):
-            xs_all = []
-            ys_all = []
-            first_seg = True
-            for seg in segs:
-                base = Path(seg["base_path"]).expanduser().resolve()
-                files = _resolve_npz_files(base)
-                if not files:
-                    continue
-                for f in files:
-                    z = np.load(str(f))
-                    if "x" not in z or "y" not in z or "e" not in z or "move_type" not in z:
-                        continue
-                    x = z["x"]
-                    y = z["y"]
-                    e = z["e"]
-                    mt = z["move_type"]
-                    is_print = (mt == 1) | (mt == 3)
-                    de = np.diff(e, prepend=e[0])
-                    is_deposit = is_print & (de > 1e-6)
-                    x = np.where(is_deposit, x, np.nan)
-                    y = np.where(is_deposit, y, np.nan)
-                    if stride > 1:
-                        x = x[::stride]
-                        y = y[::stride]
-                    if not first_seg:
-                        xs_all.append(np.array([np.nan], dtype=np.float32))
-                        ys_all.append(np.array([np.nan], dtype=np.float32))
-                    first_seg = False
-                    xs_all.append(x)
-                    ys_all.append(y)
-        if not xs_all:
+    layer = int(entries[0].get("layer", 0))
+    xs_all = []
+    ys_all = []
+    first_seg = True
+    for seg in entries:
+        base = Path(seg["base_path"]).expanduser().resolve()
+        files = _resolve_npz_files(base)
+        if not files:
             continue
-        x = np.concatenate(xs_all)
-        y = np.concatenate(ys_all)
-        fig, ax = plt.subplots(figsize=(8, 8), dpi=150)
-        ax.plot(x, y, linewidth=0.6, color="#2b2b2b")
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_xlabel("X (mm)")
-        ax.set_ylabel("Y (mm)")
-        ax.set_title(f"Layer {layer:04d} XY Path")
-        ax.grid(True, linewidth=0.3, alpha=0.5)
-        out_dir = Path(base_root) / f"layer_{layer:04d}"
-        out_dir.mkdir(parents=True, exist_ok=True)
-        out_path = out_dir / f"layer_{layer:04d}.png"
-        fig.savefig(str(out_path), bbox_inches="tight")
-        plt.close(fig)
+        for f in files:
+            z = np.load(str(f))
+            if "x" not in z or "y" not in z or "e" not in z or "move_type" not in z:
+                continue
+            x = z["x"]
+            y = z["y"]
+            e = z["e"]
+            mt = z["move_type"]
+            is_print = (mt == 1) | (mt == 3)
+            de = np.diff(e, prepend=e[0])
+            is_deposit = is_print & (de > 1e-6)
+            x = np.where(is_deposit, x, np.nan)
+            y = np.where(is_deposit, y, np.nan)
+            if stride > 1:
+                x = x[::stride]
+                y = y[::stride]
+            if not first_seg:
+                xs_all.append(np.array([np.nan], dtype=np.float32))
+                ys_all.append(np.array([np.nan], dtype=np.float32))
+            first_seg = False
+            xs_all.append(x)
+            ys_all.append(y)
+
+    if not xs_all:
+        return
+
+    x = np.concatenate(xs_all)
+    y = np.concatenate(ys_all)
+    fig, ax = plt.subplots(figsize=(8, 8), dpi=150)
+    ax.plot(x, y, linewidth=0.6, color="#2b2b2b")
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_xlabel("X (mm)")
+    ax.set_ylabel("Y (mm)")
+    ax.set_title(f"Layer {layer:04d} XY Path")
+    ax.grid(True, linewidth=0.3, alpha=0.5)
+    out_dir = Path(base_root) / f"layer_{layer:04d}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"layer_{layer:04d}.png"
+    fig.savefig(str(out_path), bbox_inches="tight")
+    plt.close(fig)
 
 
 def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None:

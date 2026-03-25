@@ -177,6 +177,7 @@ class GlobalSplinePlanner:
         corner_retreat_ratio: float = 0.2,  # 角点处添加的控制点位置回退比例
         density: int = 0,  # 数据点加密密度
         degree: int = 3,  # B 样条阶次
+        max_fit_points: int = 20000,  # 单段拟合点数上限，防止密度放大拖垮内存/CPU
     ) -> Optional[GlobalCurveCommand]:
         """
         - 对给定的同类型 MoveCommand 序列进行处理。
@@ -201,7 +202,11 @@ class GlobalSplinePlanner:
             
         # 2. 根据密度参数递归加密数据点
         t0 = time.perf_counter()
-        for _ in range(density):
+        max_fit_points = max(2, int(max_fit_points))
+        for _ in range(max(0, int(density))):
+            projected_points = len(fit_points) * 2 - 1
+            if projected_points > max_fit_points:
+                break
             fit_points = _subdivide_points(fit_points)
         profile["fit_density_s"] += time.perf_counter() - t0
             

@@ -9,7 +9,6 @@
 from dataclasses import dataclass
 from typing import List, Optional
 import math
-import bisect
 import time
 
 from .types import Position, GlobalCurveCommand
@@ -120,49 +119,91 @@ def _find_span(u: float, knots: List[float], degree: int, n_ctrl: int) -> int:
     return mid
 
 
-def _de_boor(u: float, degree: int, knots: List[float], ctrl: List[Position]) -> Position:
-    n_ctrl = len(ctrl)
-    span = _find_span(u, knots, degree, n_ctrl)
-    d = []
-    for offset in range(degree + 1):
-        pt = ctrl[span - degree + offset]
-        d.append([pt.x, pt.y, pt.z, pt.a, pt.b, pt.c])
-    for r in range(1, degree + 1):
-        for j in range(degree, r - 1, -1):
-            i = span - degree + j
-            denom = knots[i + degree - r + 1] - knots[i]
-            alpha = 0.0 if abs(denom) < 1e-12 else (u - knots[i]) / denom
-            prev = d[j - 1]
-            curr = d[j]
-            one_minus_alpha = 1.0 - alpha
-            d[j] = [
-                one_minus_alpha * prev[0] + alpha * curr[0],
-                one_minus_alpha * prev[1] + alpha * curr[1],
-                one_minus_alpha * prev[2] + alpha * curr[2],
-                one_minus_alpha * prev[3] + alpha * curr[3],
-                one_minus_alpha * prev[4] + alpha * curr[4],
-                one_minus_alpha * prev[5] + alpha * curr[5],
-            ]
-    res = d[degree]
-    return Position(x=res[0], y=res[1], z=res[2], a=res[3], b=res[4], c=res[5])
+def _find_span_monotonic(u: float, knots: List[float], degree: int, n_ctrl: int, start_span: int) -> int:
+    if abs(u - knots[n_ctrl]) < 1e-9:
+        return n_ctrl - 1
+    span = max(degree, min(start_span, n_ctrl - 1))
+    while span + 1 < n_ctrl and u >= knots[span + 1]:
+        span += 1
+    while span > degree and u < knots[span]:
+        span -= 1
+    return span
+
+
+def _basis_funs(span: int, u: float, degree: int, knots: List[float]) -> List[float]:
+    values = [0.0] * (degree + 1)
+    values[0] = 1.0
+    left = [0.0] * (degree + 1)
+    right = [0.0] * (degree + 1)
+
+    for j in range(1, degree + 1):
+        left[j] = u - knots[span + 1 - j]
+        right[j] = knots[span + j] - u
+        saved = 0.0
+        for r in range(j):
+            denom = right[r + 1] + left[j - r]
+            temp = 0.0 if abs(denom) < 1e-12 else values[r] / denom
+            values[r] = saved + right[r + 1] * temp
+            saved = left[j - r] * temp
+        values[j] = saved
+    return values
+
+
+def _split_ctrl_components(ctrl: List[Position]):
+    return (
+        [p.x for p in ctrl],
+        [p.y for p in ctrl],
+        [p.z for p in ctrl],
+        [p.a for p in ctrl],
+        [p.b for p in ctrl],
+        [p.c for p in ctrl],
+    )
+
+
+def _eval_bspline_point(
+    u: float,
+    degree: int,
+    knots: List[float],
+    ctrl_xyzabc,
+    n_ctrl: int,
+    start_span: int,
+):
+    span = _find_span_monotonic(u, knots, degree, n_ctrl, start_span)
+    coeffs = _basis_funs(span, u, degree, knots)
+    start = span - degree
+    xs, ys, zs, aa, bb, cc = ctrl_xyzabc
+
+    x = y = z = a = b = c = 0.0
+    for offset, coeff in enumerate(coeffs):
+        idx = start + offset
+        x += coeff * xs[idx]
+        y += coeff * ys[idx]
+        z += coeff * zs[idx]
+        a += coeff * aa[idx]
+        b += coeff * bb[idx]
+        c += coeff * cc[idx]
+
+    return Position(x=x, y=y, z=z, a=a, b=b, c=c), span
 
 
 def _build_arc_length_map(ctrl: List[Position], degree: int = 3, samples: int = 400):
     knots = _make_open_uniform_knots(len(ctrl), degree)
     u_min = knots[degree]
     u_max = knots[len(ctrl)]
+    ctrl_xyzabc = _split_ctrl_components(ctrl)
+    n_ctrl = len(ctrl)
 
     u_list: List[float] = []
     len_list: List[float] = []
 
-    prev_pos = _de_boor(u_min, degree, knots, ctrl)
+    prev_pos, span = _eval_bspline_point(u_min, degree, knots, ctrl_xyzabc, n_ctrl, degree)
     u_list.append(u_min)
     len_list.append(0.0)
 
     current_len = 0.0
     for i in range(1, samples + 1):
         u = u_min + (u_max - u_min) * i / samples
-        curr_pos = _de_boor(u, degree, knots, ctrl)
+        curr_pos, span = _eval_bspline_point(u, degree, knots, ctrl_xyzabc, n_ctrl, span)
         dist = math.sqrt(
             (curr_pos.x - prev_pos.x) ** 2
             + (curr_pos.y - prev_pos.y) ** 2
@@ -175,6 +216,23 @@ def _build_arc_length_map(ctrl: List[Position], degree: int = 3, samples: int = 
 
     total_length = len_list[-1]
     return u_list, len_list, total_length, knots
+
+
+def _is_linear_fallback_curve(curve: GlobalCurveCommand) -> bool:
+    if curve.raw != "fallback_linear":
+        return False
+    if len(curve.control_points) != 3:
+        return False
+    p0 = curve.control_points[0]
+    return all(
+        abs(cp.x - p0.x) < 1e-12
+        and abs(cp.y - p0.y) < 1e-12
+        and abs(cp.z - p0.z) < 1e-12
+        and abs(cp.a - p0.a) < 1e-12
+        and abs(cp.b - p0.b) < 1e-12
+        and abs(cp.c - p0.c) < 1e-12
+        for cp in curve.control_points[1:]
+    )
 
 
 def _lookup_u_from_s(s_norm: float, u_list: List[float], len_list: List[float], total_length: float) -> float:
@@ -199,6 +257,35 @@ def _lookup_u_from_s(s_norm: float, u_list: List[float], len_list: List[float], 
         return u0
     ratio = (target_len - l0) / (l1 - l0)
     return u0 + ratio * (u1 - u0)
+
+
+def _lookup_u_from_target_len_monotonic(
+    target_len: float,
+    u_list: List[float],
+    len_list: List[float],
+    total_length: float,
+    start_idx: int,
+):
+    """单调递增弧长的快速查找，返回 (u, idx)。"""
+    if target_len <= 1e-9:
+        return u_list[0], 0
+    if target_len >= total_length - 1e-9:
+        return u_list[-1], max(0, len(len_list) - 2)
+
+    idx = max(0, min(start_idx, len(len_list) - 2))
+    while idx + 1 < len(len_list) and len_list[idx + 1] < target_len:
+        idx += 1
+    while idx > 0 and len_list[idx] > target_len:
+        idx -= 1
+
+    l0 = len_list[idx]
+    l1 = len_list[idx + 1]
+    u0 = u_list[idx]
+    u1 = u_list[idx + 1]
+    if abs(l1 - l0) < 1e-12:
+        return u0, idx
+    ratio = (target_len - l0) / (l1 - l0)
+    return u0 + ratio * (u1 - u0), idx
 
 
 # -------------------------- 七阶 S 曲线剖面 --------------------------
@@ -280,6 +367,8 @@ def sample_global_curve_iter(
 
     ctrl = [curve.start_pos] + curve.control_points
     degree = 3
+    n_ctrl = len(ctrl)
+    ctrl_xyzabc = _split_ctrl_components(ctrl)
 
     if profile is not None:
         profile.setdefault("sample_arc_map_s", 0.0)
@@ -287,6 +376,101 @@ def sample_global_curve_iter(
         profile.setdefault("sample_deboor_s", 0.0)
         profile.setdefault("sample_pose_s", 0.0)
         profile.setdefault("sample_extrude_s", 0.0)
+
+    if _is_linear_fallback_curve(curve):
+        end_pos = curve.control_points[-1]
+        dx = end_pos.x - curve.start_pos.x
+        dy = end_pos.y - curve.start_pos.y
+        dz = end_pos.z - curve.start_pos.z
+        total_length = math.sqrt(dx * dx + dy * dy + dz * dz)
+        if total_length <= 1e-9:
+            yield InterpolatedPoint(
+                t=0.0,
+                pos=curve.start_pos,
+                e=curve.e_val,
+                extrude_speed=0.0,
+                feedrate_mm_min=curve.feedrate,
+                cmd_type=curve.type,
+                line=curve.line,
+                raw=curve.raw,
+            )
+            return
+
+        total_time, _ = _compute_time_profile(total_length, target_velocity, t_acc, t_dec)
+        if total_time <= 0.0:
+            return
+        num_steps = int(math.ceil(total_time / dt))
+        corrected_total_time = num_steps * dt
+        start_e = curve.e_val - curve.delta_e
+        current_e = start_e
+        prev_s = 0.0
+
+        same_orientation = (
+            abs(curve.start_pos.a - end_pos.a) < 1e-9
+            and abs(curve.start_pos.b - end_pos.b) < 1e-9
+            and abs(curve.start_pos.c - end_pos.c) < 1e-9
+        )
+
+        start_q = end_q = None
+        if not same_orientation:
+            start_q = _euler_xyz_to_quat(
+                math.radians(curve.start_pos.a),
+                math.radians(curve.start_pos.b),
+                math.radians(curve.start_pos.c),
+            )
+            end_q = _euler_xyz_to_quat(
+                math.radians(end_pos.a),
+                math.radians(end_pos.b),
+                math.radians(end_pos.c),
+            )
+
+        for i in range(num_steps + 1):
+            t = i * dt
+            s_norm = _three_stage_sept_poly(t, corrected_total_time, t_acc, t_dec)
+            s_norm_clamped = max(0.0, min(1.0, s_norm))
+            if i == num_steps:
+                s_norm_clamped = 1.0
+
+            pos = Position(
+                x=curve.start_pos.x + dx * s_norm_clamped,
+                y=curve.start_pos.y + dy * s_norm_clamped,
+                z=curve.start_pos.z + dz * s_norm_clamped,
+                a=curve.start_pos.a,
+                b=curve.start_pos.b,
+                c=curve.start_pos.c,
+            )
+
+            if same_orientation:
+                pos.a = curve.start_pos.a
+                pos.b = curve.start_pos.b
+                pos.c = curve.start_pos.c
+            else:
+                qs = _quat_slerp(start_q, end_q, s_norm_clamped)
+                a_rad, b_rad, c_rad = _quat_to_euler_xyz(qs)
+                pos.a = math.degrees(a_rad)
+                pos.b = math.degrees(b_rad)
+                pos.c = math.degrees(c_rad)
+
+            curr_s = s_norm_clamped * total_length
+            delta_s = curr_s - prev_s
+            delta_e = curve.delta_e * (delta_s / total_length)
+            current_e += delta_e
+            prev_s = curr_s
+            feed_mm_s = delta_s / dt if dt > 0 else 0.0
+            feed_mm_min = feed_mm_s * 60.0
+            extrude_speed = delta_e / dt if dt > 0 else 0.0
+
+            yield InterpolatedPoint(
+                t=t,
+                pos=pos,
+                e=current_e,
+                extrude_speed=extrude_speed,
+                feedrate_mm_min=feed_mm_min,
+                cmd_type=curve.type,
+                line=curve.line,
+                raw=curve.raw,
+            )
+        return
 
     # 构建弧长映射
     t0 = time.perf_counter()
@@ -329,8 +513,18 @@ def sample_global_curve_iter(
         math.radians(end_pos.b),
         math.radians(end_pos.c),
     )
+    constant_orientation = (
+        abs(curve.start_pos.a - end_pos.a) < 1e-9
+        and abs(curve.start_pos.b - end_pos.b) < 1e-9
+        and abs(curve.start_pos.c - end_pos.c) < 1e-9
+    )
+    fixed_a = curve.start_pos.a
+    fixed_b = curve.start_pos.b
+    fixed_c = curve.start_pos.c
 
     prev_s = 0.0
+    lookup_idx = 0
+    span = degree
     for i in range(num_steps + 1):
         t = i * dt
         s_norm = _three_stage_sept_poly(t, corrected_total_time, t_acc, t_dec)
@@ -338,29 +532,36 @@ def sample_global_curve_iter(
         if i == num_steps:
             s_norm_clamped = 1.0  # 确保最后一点落在终点
 
+        curr_s = s_norm_clamped * total_length
         t_lookup0 = time.perf_counter()
-        u = _lookup_u_from_s(s_norm_clamped, u_list, len_list, total_length)
+        u, lookup_idx = _lookup_u_from_target_len_monotonic(
+            curr_s, u_list, len_list, total_length, lookup_idx
+        )
         if profile is not None:
             profile["sample_lookup_s"] += time.perf_counter() - t_lookup0
 
         t_deboor0 = time.perf_counter()
-        p = _de_boor(u, degree, knots, ctrl)
+        p, span = _eval_bspline_point(u, degree, knots, ctrl_xyzabc, n_ctrl, span)
         if profile is not None:
             profile["sample_deboor_s"] += time.perf_counter() - t_deboor0
 
         # 姿态插值
         t_pose0 = time.perf_counter()
-        qs = _quat_slerp(start_q, end_q, s_norm_clamped)
-        a_rad, b_rad, c_rad = _quat_to_euler_xyz(qs)
-        p.a = math.degrees(a_rad)
-        p.b = math.degrees(b_rad)
-        p.c = math.degrees(c_rad)
+        if constant_orientation:
+            p.a = fixed_a
+            p.b = fixed_b
+            p.c = fixed_c
+        else:
+            qs = _quat_slerp(start_q, end_q, s_norm_clamped)
+            a_rad, b_rad, c_rad = _quat_to_euler_xyz(qs)
+            p.a = math.degrees(a_rad)
+            p.b = math.degrees(b_rad)
+            p.c = math.degrees(c_rad)
         if profile is not None:
             profile["sample_pose_s"] += time.perf_counter() - t_pose0
 
         # 挤出分配（按弧长比例）
         t_extrude0 = time.perf_counter()
-        curr_s = s_norm_clamped * total_length
         delta_s = curr_s - prev_s
         delta_e = curve.delta_e * (delta_s / total_length)
         current_e += delta_e

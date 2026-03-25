@@ -8,6 +8,11 @@ except Exception:  # pragma: no cover - scipy is optional at runtime
     cholesky_banded = None
     cho_solve_banded = None
 
+try:
+    from scipy.linalg import lstsq as scipy_lstsq
+except Exception:  # pragma: no cover - scipy is optional at runtime
+    scipy_lstsq = None
+
 
 def _find_span(n, p, u, knot):
     """Find the knot span for parameter u with degree p and n + 1 control points."""
@@ -120,18 +125,25 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
 
     D_arr = np.asarray(D, dtype=float)
     n_dim = D_arr.shape[0]
+
+    # Normalize per dimension before solving. This greatly improves conditioning
+    # for mixed-scale geometry without changing the fitted shape after rescaling.
+    offsets = D_arr[:, :1]
+    spans = np.ptp(D_arr, axis=1, keepdims=True)
+    scales = np.where(spans > 1e-9, spans, 1.0)
+    D_norm = (D_arr - offsets) / scales
+
     P_all = np.zeros((n_dim, H))
-    P_all[:, 0] = D_arr[:, 0]
-    P_all[:, H - 1] = D_arr[:, N - 1]
+    P_all[:, 0] = D_norm[:, 0]
+    P_all[:, H - 1] = D_norm[:, N - 1]
 
     n_unknown = H - 2
-    band_width = min(k, max(0, n_unknown - 1))
-    M_band = np.zeros((band_width + 1, n_unknown), dtype=float)
-    Q_all = np.zeros((n_unknown, n_dim), dtype=float)
+    A = np.zeros((max(0, N - 2), n_unknown), dtype=float)
+    B = np.zeros((max(0, N - 2), n_dim), dtype=float)
 
     t_basis0 = time.perf_counter()
     t_qk_acc = 0.0
-    t_normal_acc = 0.0
+    t_row_fill_acc = 0.0
     for row_idx in range(1, N - 1):
         span = _find_span(H - 1, k, param[row_idx], knot)
         basis_vals = _basis_funs(span, param[row_idx], k, knot)
@@ -141,7 +153,7 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
         active_vals = []
 
         t_qk0 = time.perf_counter()
-        q_row = D_arr[:, row_idx].copy()
+        q_row = D_norm[:, row_idx].copy()
         for local_idx, coeff in enumerate(basis_vals):
             ctrl_idx = start + local_idx
             if ctrl_idx == 0:
@@ -159,29 +171,76 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
         cols = np.asarray(active_cols, dtype=int)
         vals = np.asarray(active_vals, dtype=float)
 
-        t_normal0 = time.perf_counter()
-        for upper_idx, col_upper in enumerate(cols):
-            for lower_idx in range(upper_idx + 1):
-                col_lower = cols[lower_idx]
-                M_band[col_upper - col_lower, col_lower] += vals[upper_idx] * vals[lower_idx]
-        Q_all[cols, :] += vals[:, None] * q_row[None, :]
-        t_normal_acc += time.perf_counter() - t_normal0
+        t_fill0 = time.perf_counter()
+        system_row = row_idx - 1
+        A[system_row, cols] = vals
+        B[system_row, :] = q_row
+        t_row_fill_acc += time.perf_counter() - t_fill0
 
     if profile is not None:
-        profile["lsq_basis_build_s"] += time.perf_counter() - t_basis0 - t_qk_acc - t_normal_acc
+        profile["lsq_basis_build_s"] += time.perf_counter() - t_basis0 - t_qk_acc - t_row_fill_acc
         profile["lsq_qk_build_s"] += t_qk_acc
-        profile["lsq_normal_mat_s"] += t_normal_acc
+        profile["lsq_normal_mat_s"] += t_row_fill_acc
 
     t_solve0 = time.perf_counter()
-    if cholesky_banded is not None and cho_solve_banded is not None:
-        chol_band = cholesky_banded(M_band, lower=True, check_finite=False)
-        P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True), Q_all, check_finite=False).transpose()
-    else:
-        M_dense = _banded_to_dense(M_band)
-        P_all[:, 1:H - 1] = np.linalg.solve(M_dense, Q_all).transpose()
+    band_width = min(k, max(0, n_unknown - 1))
+    M_band = np.zeros((band_width + 1, n_unknown), dtype=float)
+    Q_all = A.transpose() @ B
+    for row_idx in range(A.shape[0]):
+        nz_cols = np.flatnonzero(A[row_idx])
+        if nz_cols.size == 0:
+            continue
+        vals = A[row_idx, nz_cols]
+        for upper_idx, col_upper in enumerate(nz_cols):
+            for lower_idx in range(upper_idx + 1):
+                col_lower = nz_cols[lower_idx]
+                M_band[col_upper - col_lower, col_lower] += vals[upper_idx] * vals[lower_idx]
+
+    solved = False
+    try:
+        if cholesky_banded is not None and cho_solve_banded is not None:
+            chol_band = cholesky_banded(M_band, lower=True, check_finite=False)
+            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True), Q_all, check_finite=False).transpose()
+        else:
+            M_dense = _banded_to_dense(M_band)
+            P_all[:, 1:H - 1] = np.linalg.solve(M_dense, Q_all).transpose()
+        solved = True
+    except Exception:
+        solved = False
+
+    if not solved:
+        try:
+            # Stable fallback for ill-conditioned segments only.
+            reg_lambda = 1e-6
+            if reg_lambda > 0.0 and n_unknown > 0:
+                A_solve = np.vstack((A, np.sqrt(reg_lambda) * np.eye(n_unknown)))
+                B_solve = np.vstack((B, np.zeros((n_unknown, n_dim), dtype=float)))
+            else:
+                A_solve = A
+                B_solve = B
+
+            if scipy_lstsq is not None:
+                inner_ctrl = scipy_lstsq(A_solve, B_solve, cond=None, lapack_driver="gelsy")[0]
+            else:
+                inner_ctrl = np.linalg.lstsq(A_solve, B_solve, rcond=None)[0]
+            P_all[:, 1:H - 1] = inner_ctrl.transpose()
+            solved = True
+        except Exception:
+            solved = False
+
+    if not solved:
+        if n_unknown > 0:
+            M_band[0, :] += 1e-10
+        if cholesky_banded is not None and cho_solve_banded is not None:
+            chol_band = cholesky_banded(M_band, lower=True, check_finite=False)
+            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True), Q_all, check_finite=False).transpose()
+        else:
+            M_dense = _banded_to_dense(M_band)
+            P_all[:, 1:H - 1] = np.linalg.solve(M_dense, Q_all).transpose()
     if profile is not None:
         profile["lsq_solve_s"] += time.perf_counter() - t_solve0
 
+    P_all = P_all * scales + offsets
     P = P_all.tolist()
 
     if profile is not None:

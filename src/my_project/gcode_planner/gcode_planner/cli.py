@@ -36,6 +36,7 @@ def main(argv=None):
     parser.add_argument("--corner-retreat-ratio", type=float, default=0.2, help="角点回退比例（0-0.49）")
     parser.add_argument("--density", type=int, default=0, help="数据点加密密度（>=0）")
     parser.add_argument("--degree", type=int, default=3, help="B样条阶次（默认3）")
+    parser.add_argument("--max-fit-points-per-segment", type=int, default=20000, help="单段拟合点数上限，防止 density 过高导致内存/CPU 爆炸")
     parser.add_argument("--export-sleep-ms", type=int, default=0, help="导出节流：休眠毫秒数，默认 0")
     parser.add_argument("--export-yield-every", type=int, default=0, help="导出节流：每处理 N 条触发休眠，默认 0")
     parser.add_argument("--split-by-layer-type", action="store_true", help="按层+打印子类型分别导出 npz")
@@ -75,6 +76,7 @@ def main(argv=None):
         corner_retreat_ratio=args.corner_retreat_ratio,
         density=args.density,
         degree=args.degree,
+        max_fit_points_per_segment=args.max_fit_points_per_segment,
         export_sleep_ms=args.export_sleep_ms,
         export_yield_every=args.export_yield_every,
         split_by_layer_type=args.split_by_layer_type,

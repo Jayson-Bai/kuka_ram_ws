@@ -34,6 +34,7 @@ ros2 run gcode_planner gcode_planner_npz \
 - --corner-retreat-ratio: 角点回退比例（0-0.49），默认 0.2
 - --density: 数据点加密密度，默认 0
 - --degree: B 样条阶次，默认 3
+- --max-fit-points-per-segment: 单段拟合点数上限，默认 20000，用于限制 density 过高时的点数膨胀
 - --export-sleep-ms: 导出节流休眠毫秒数，默认 0（不节流）
 - --export-yield-every: 导出节流触发步长，默认 0（不节流）
 - --split-by-layer-type: 按层+打印子类型分别导出 npz（会生成 manifest）
@@ -143,6 +144,7 @@ ros2 run gcode_planner gcode_planner_npz \
 - `corner_angle_deg` 越小，角点回退点越多，拟合点数上升。
 - `corner_retreat_ratio` 越大，回退点偏离越远，拟合平滑性增强但点数不变。
 - `density` 每 +1 会显著放大点数，拟合耗时近似指数增加。
+- `max-fit-points-per-segment` 会在单段内限制加密后的拟合点数上限，避免高 density 把容器拖死。
 - `degree` 越高，拟合自由度更高但计算更慢。
 
 
