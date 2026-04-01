@@ -8,6 +8,7 @@
 
 from dataclasses import dataclass
 from typing import List, Optional
+import bisect
 import math
 import time
 

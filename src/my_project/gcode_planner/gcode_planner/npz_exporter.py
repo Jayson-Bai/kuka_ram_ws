@@ -900,6 +900,15 @@ def export_npz(
     if split_by_layer_type and manifest:
         t0 = time.perf_counter()
         manifest_path = os.path.join(base_root, f"{base_name}_manifest.json")
+        manifest.sort(
+            key=lambda item: (
+                int(item.get("start_seq", -1) if item.get("start_seq") is not None else -1),
+                int(item.get("end_seq", -1) if item.get("end_seq") is not None else -1),
+                int(item.get("layer", 0)),
+                str(item.get("type", "")),
+                int(item.get("occ", 0)),
+            )
+        )
         with open(manifest_path, "w", encoding="utf-8") as f:
             json.dump(manifest, f, ensure_ascii=False, indent=2)
         timings["manifest_s"] += time.perf_counter() - t0
