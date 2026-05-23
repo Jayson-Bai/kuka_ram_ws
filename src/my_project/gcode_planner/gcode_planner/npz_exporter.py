@@ -313,7 +313,9 @@ def export_npz(
                     continue
                 entries = [entry for entry in manifest if int(entry.get("layer", 0)) == layer]
                 if entries:
+                    t0_plot = time.perf_counter()
                     _plot_single_layer(entries, base_root, stride=max(1, int(plot_stride)))
+                    timings["plot_s"] += time.perf_counter() - t0_plot
                     plotted_layers.add(layer)
 
         _cleanup_state_before(layer_limit)
