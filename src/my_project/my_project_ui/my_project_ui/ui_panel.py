@@ -402,6 +402,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self._extrude_scale_current = 1.0
+        self._last_npz_dir = None
         self._build_ui()
         self.status_received.connect(self._update_ui)
         self.export_progress_val.connect(self._on_export_progress_val)
@@ -970,6 +971,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_btn_row.addWidget(self._btn_export_npz)
         export_layout.addLayout(export_btn_row)
 
+        # View Layer Images button
+        view_row = QtWidgets.QHBoxLayout()
+        view_row.setSpacing(8)
+        self._btn_view_layers = QtWidgets.QPushButton("View Layer Images")
+        self._btn_view_layers.setObjectName("btnViewLayers")
+        self._btn_view_layers.setMinimumHeight(28)
+        self._btn_view_layers.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_view_layers.setEnabled(False)
+        view_row.addWidget(self._btn_view_layers)
+        export_layout.addLayout(view_row)
+
         self._export_progress = QtWidgets.QProgressBar()
         self._export_progress.setMinimumHeight(18)
         self._export_progress.setRange(0, 0)  # indeterminate
@@ -987,6 +999,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_export_npz.clicked.connect(self._on_export_npz)
         self.export_finished.connect(self._on_export_finished)
         self.export_progress.connect(self._on_export_progress)
+        self._btn_view_layers.clicked.connect(self._on_view_layers)
 
 
         # ======== Launch Control 区域 ========
@@ -1768,9 +1781,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if success:
             self._export_status.setText(message)
             self._export_status.setStyleSheet("color: #1b6e3c;")
+            npz_path = self._npz_out_input.text().strip()
+            if npz_path:
+                self._last_npz_dir = os.path.dirname(npz_path)
+                self._btn_view_layers.setEnabled(True)
         else:
             self._export_status.setText(f"Export failed: {message}")
             self._export_status.setStyleSheet("color: #b42318;")
+
+    def _on_view_layers(self):
+        if not self._last_npz_dir or not os.path.isdir(self._last_npz_dir):
+            self._export_status.setText("No NPZ export directory found.")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+        dlg = _LayerViewerDialog(self._last_npz_dir, self)
+        dlg.exec_()
 
     _STATE_COLORS = {
         "RUNNING": "#1b6e3c",
