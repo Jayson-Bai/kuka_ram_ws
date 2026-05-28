@@ -14,33 +14,33 @@ from std_msgs.msg import String as StringMsg
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
-    ("center_start_delay_s", "1.0", "延迟启动 center_node（秒）", "Center Node"),
+    ("center_start_delay_s", "1.0", "Delay before starting center_node (seconds)", "Center Node"),
     ("npz_path", "/home/jayson/kuka_ram_ws/data/output_npz/test.npz",
-     "轨迹/事件 NPZ 文件路径", "Center Node"),
-    ("npz_preload_chunks", "2", "NPZ 预加载块数", "Center Node"),
-    ("queue_low", "1000", "轨迹队列低水位阈值", "Center Node"),
-    ("queue_high", "2000", "轨迹队列高水位阈值", "Center Node"),
-    ("plan_qos_depth", "2000", "规划话题 QoS 深度", "Center Node"),
-    ("traj_prefill", "1000", "启动预填充轨迹点数量", "Center Node"),
-    ("traj_low", "500", "轨迹 backlog 低阈值告警线", "Center Node"),
-    ("traj_high", "1500", "轨迹 backlog 高阈值告警线", "Center Node"),
-    ("xyzabc_decimals", "6", "位姿小数保留位数", "Center Node"),
-    ("e_decimals", "2", "挤出量小数保留位数", "Center Node"),
-    ("kuka_status_raw", "false", "是否打印 KUKA 原始 XML 长度", "Center Node"),
-    ("summary_period_ms", "200", "控制中心汇总发布周期（ms）", "Center Node"),
-    ("sen_type", "PosCorr", "RSI XML 发送类型", "RSI Node"),
-    ("decimal_precision", "6", "RSI 收发数据小数位精度", "RSI Node"),
-    ("local_ip", "192.168.1.1", "RSI 本地监听 IP", "RSI Node"),
-    ("local_port", "49152", "RSI 本地监听端口", "RSI Node"),
-    ("abort_lift_mm", "100.0", "ABORT 时 Z 轴抬升距离（mm）", "RSI Node"),
-    ("abort_lift_speed_mm_s", "10.0", "ABORT 时 Z 轴抬升速度（mm/s）", "RSI Node"),
-    ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART Node"),
-    ("baudrate", "115200", "UART 波特率", "UART Node"),
-    ("extrude_scale", "1.0", "UART 挤出倍率", "UART Node"),
-    ("ui_publish_period_ms", "200", "UI 状态发布周期（ms）", "System Manager"),
-    ("heartbeat_timeout_s", "1.0", "心跳超时时间（秒）", "System Manager"),
-    ("traj_queue_limit", "5000", "UI 侧轨迹队列上限", "System Manager"),
-    ("event_queue_limit", "2000", "UI 侧事件队列上限", "System Manager"),
+     "Trajectory/event NPZ file path", "Center Node"),
+    ("npz_preload_chunks", "2", "NPZ preload chunk count", "Center Node"),
+    ("queue_low", "1000", "Trajectory queue low watermark", "Center Node"),
+    ("queue_high", "2000", "Trajectory queue high watermark", "Center Node"),
+    ("plan_qos_depth", "2000", "Plan topic QoS depth", "Center Node"),
+    ("traj_prefill", "1000", "Trajectory prefill count on startup", "Center Node"),
+    ("traj_low", "500", "Trajectory backlog low threshold", "Center Node"),
+    ("traj_high", "1500", "Trajectory backlog high threshold", "Center Node"),
+    ("xyzabc_decimals", "6", "Pose decimal precision", "Center Node"),
+    ("e_decimals", "2", "Extrusion decimal precision", "Center Node"),
+    ("kuka_status_raw", "false", "Print KUKA raw XML length", "Center Node"),
+    ("summary_period_ms", "200", "Control center publish period (ms)", "Center Node"),
+    ("sen_type", "PosCorr", "RSI XML SEN type", "RSI Node"),
+    ("decimal_precision", "6", "RSI data decimal precision", "RSI Node"),
+    ("local_ip", "192.168.1.1", "RSI local listen IP", "RSI Node"),
+    ("local_port", "49152", "RSI local listen port", "RSI Node"),
+    ("abort_lift_mm", "100.0", "Z lift distance on ABORT (mm)", "RSI Node"),
+    ("abort_lift_speed_mm_s", "10.0", "Z lift speed on ABORT (mm/s)", "RSI Node"),
+    ("port", "/dev/ttyUSB0", "UART serial device path", "UART Node"),
+    ("baudrate", "115200", "UART baud rate", "UART Node"),
+    ("extrude_scale", "1.0", "UART extrusion scale factor", "UART Node"),
+    ("ui_publish_period_ms", "200", "UI status publish period (ms)", "System Manager"),
+    ("heartbeat_timeout_s", "1.0", "Heartbeat timeout (seconds)", "System Manager"),
+    ("traj_queue_limit", "5000", "UI trajectory queue limit", "System Manager"),
+    ("event_queue_limit", "2000", "UI event queue limit", "System Manager"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
@@ -48,11 +48,11 @@ _LAUNCH_GROUPS_ORDER = ["Center Node", "RSI Node", "UART Node", "System Manager"
 
 
 class _LaunchSettingsDialog(QtWidgets.QDialog):
-    """弹出对话框：按节点分组编辑所有启动参数。"""
+    """Dialog for editing all launch parameters grouped by node."""
 
     def __init__(self, current_params, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("启动设置")
+        self.setWindowTitle("Launch Settings")
         self.setMinimumSize(620, 520)
         self._inputs = {}
         self._build_ui(current_params)
@@ -62,7 +62,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        title = QtWidgets.QLabel("启动参数配置")
+        title = QtWidgets.QLabel("Launch Parameter Configuration")
         title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
         main_layout.addWidget(title)
 
@@ -167,7 +167,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         # Bottom buttons
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(8)
-        btn_reset = QtWidgets.QPushButton("恢复默认")
+        btn_reset = QtWidgets.QPushButton("Reset Defaults")
         btn_reset.setMinimumHeight(32)
         btn_reset.setCursor(QtCore.Qt.PointingHandCursor)
         btn_reset.setStyleSheet(
@@ -176,7 +176,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             " color: #666666; padding: 4px 16px;"
         )
         btn_reset.clicked.connect(self._reset_defaults)
-        btn_ok = QtWidgets.QPushButton("确定")
+        btn_ok = QtWidgets.QPushButton("OK")
         btn_ok.setMinimumHeight(32)
         btn_ok.setCursor(QtCore.Qt.PointingHandCursor)
         btn_ok.setStyleSheet(
@@ -185,7 +185,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             " color: #ffffff; padding: 4px 20px;"
         )
         btn_ok.clicked.connect(self.accept)
-        btn_cancel = QtWidgets.QPushButton("取消")
+        btn_cancel = QtWidgets.QPushButton("Cancel")
         btn_cancel.setMinimumHeight(32)
         btn_cancel.setCursor(QtCore.Qt.PointingHandCursor)
         btn_cancel.setStyleSheet(
@@ -205,7 +205,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
     def _browse_file(self, line_edit):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "选择 NPZ / Manifest 文件",
+            "Select NPZ / Manifest File",
             os.path.dirname(line_edit.text()) or "",
             "NPZ Files (*.npz);;JSON Manifest (*.json);;All Files (*)",
         )
@@ -643,17 +643,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_btn_row = QtWidgets.QHBoxLayout()
         launch_btn_row.setSpacing(12)
 
-        self._btn_launch_settings = QtWidgets.QPushButton("⚙  启动设置")
+        self._btn_launch_settings = QtWidgets.QPushButton("Settings")
         self._btn_launch_settings.setObjectName("btnLaunchSettings")
         self._btn_launch_settings.setMinimumHeight(36)
         self._btn_launch_settings.setCursor(QtCore.Qt.PointingHandCursor)
 
-        self._btn_launch = QtWidgets.QPushButton("▶  启动")
+        self._btn_launch = QtWidgets.QPushButton("Start")
         self._btn_launch.setObjectName("btnLaunch")
         self._btn_launch.setMinimumHeight(36)
         self._btn_launch.setCursor(QtCore.Qt.PointingHandCursor)
 
-        self._btn_stop_launch = QtWidgets.QPushButton("■  停止节点")
+        self._btn_stop_launch = QtWidgets.QPushButton("Stop Nodes")
         self._btn_stop_launch.setObjectName("btnStopLaunch")
         self._btn_stop_launch.setMinimumHeight(36)
         self._btn_stop_launch.setCursor(QtCore.Qt.PointingHandCursor)
@@ -668,7 +668,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.setSpacing(8)
         launch_label = QtWidgets.QLabel("Launch Status")
         launch_label.setObjectName("fieldLabel")
-        self._launch_status = QtWidgets.QLabel("未启动")
+        self._launch_status = QtWidgets.QLabel("Not Started")
         self._launch_status.setObjectName("launchStatus")
         launch_status_row.addWidget(launch_label)
         launch_status_row.addWidget(self._launch_status, 1)
@@ -1290,7 +1290,7 @@ class MyProjectUiPlugin(Plugin):
             if results and all(r.successful for r in results):
                 self._widget.set_extrude_scale(value, "Applied.", "#1b6e3c")
             else:
-                reason = results[0].reason if results else "提交失败"
+                reason = results[0].reason if results else "Submit failed"
                 self._widget.set_extrude_scale(value, reason or "Submit failed.", "#b42318")
 
         future.add_done_callback(_done)
@@ -1324,12 +1324,12 @@ class MyProjectUiPlugin(Plugin):
             self._widget._btn_launch.setEnabled(False)
             self._widget._btn_stop_launch.setEnabled(True)
             self._widget._btn_launch_settings.setEnabled(False)
-            self._widget._launch_status.setText("已启动 (等待 KUKA 首包…)")
+            self._widget._launch_status.setText("Running (waiting for KUKA first packet...)")
             self._widget._launch_status.setStyleSheet(
                 "color: #1b6e3c; font-weight: 700; font-size: 13px;"
             )
         except Exception as exc:
-            self._widget._launch_status.setText(f"启动失败: {exc}")
+            self._widget._launch_status.setText(f"Launch failed: {exc}")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
@@ -1349,7 +1349,7 @@ class MyProjectUiPlugin(Plugin):
         self._widget._btn_launch.setEnabled(True)
         self._widget._btn_stop_launch.setEnabled(False)
         self._widget._btn_launch_settings.setEnabled(True)
-        self._widget._launch_status.setText("已停止")
+        self._widget._launch_status.setText("Stopped")
         self._widget._launch_status.setStyleSheet(
             "color: #b42318; font-weight: 700; font-size: 13px;"
         )
@@ -1364,13 +1364,13 @@ class MyProjectUiPlugin(Plugin):
             self._widget._btn_stop_launch.setEnabled(False)
             self._widget._btn_launch_settings.setEnabled(True)
             if rc == 0:
-                self._widget._launch_status.setText("已退出")
+                self._widget._launch_status.setText("Exited")
                 self._widget._launch_status.setStyleSheet(
                     "color: #666666; font-weight: 700; font-size: 13px;"
                 )
             else:
                 self._widget._launch_status.setText(
-                    f"异常退出 (code {rc})"
+                    f"Exited abnormally (code {rc})"
                 )
                 self._widget._launch_status.setStyleSheet(
                     "color: #b42318; font-weight: 700; font-size: 13px;"
