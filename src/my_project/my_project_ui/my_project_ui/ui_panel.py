@@ -374,8 +374,8 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
     def _on_reset(self):
         self._view.fitInView(self._scene.sceneRect(), QtCore.Qt.KeepAspectRatio)
-        self._zoom = 1.0
-        self._label_zoom.setText("Zoom: 100%")
+        self._zoom = self._view.transform().m11()
+        self._label_zoom.setText(f"Zoom: {self._zoom * 100:.0f}%")
 
     def _on_zoom_changed(self, scale):
         self._zoom = scale

@@ -42,6 +42,9 @@ def main(argv=None):
     parser.add_argument("--split-by-layer-type", action="store_true", help="按层+打印子类型分别导出 npz")
     parser.add_argument("--plot-layer-xy", action="store_true", help="导出后按层生成 XY 路径图（仅对 split-by-layer-type 生效）")
     parser.add_argument("--plot-stride", type=int, default=5, help="绘图抽样步长，默认 5")
+    parser.add_argument("--tool-offset-x", type=float, default=0.0, help="Tool 1 X offset from Tool 2 (mm)")
+    parser.add_argument("--tool-offset-y", type=float, default=0.0, help="Tool 1 Y offset from Tool 2 (mm)")
+    parser.add_argument("--tool-offset-z", type=float, default=0.0, help="Tool 1 Z offset from Tool 2 (mm)")
     args = parser.parse_args(argv)
 
     input_dir = args.input_gcode_dir or os.path.join(args.data_root, "input_gcode")
@@ -82,6 +85,7 @@ def main(argv=None):
         split_by_layer_type=args.split_by_layer_type,
         plot_layer_xy=args.plot_layer_xy,
         plot_stride=args.plot_stride,
+        tool_offset=(args.tool_offset_x, args.tool_offset_y, args.tool_offset_z),
     )
     t3 = time.perf_counter()
     print("[信息] 导出完成: %s (npz, chunk<=5000000)" % output_path)
