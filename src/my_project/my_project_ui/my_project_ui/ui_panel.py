@@ -365,7 +365,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             return
         self._scene.clear()
         self._scene.addPixmap(pixmap)
-        self._scene.setSceneRect(pixmap.rect())
+        self._scene.setSceneRect(QtCore.QRectF(pixmap.rect()))
         self._on_reset()
 
     def _on_prev(self):
