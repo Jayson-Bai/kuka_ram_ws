@@ -70,6 +70,8 @@ def export_npz(
     split_by_layer_type: bool = False,
     plot_layer_xy: bool = False,
     plot_stride: int = 5,
+    tool_offset: tuple = (0.0, 0.0, 0.0),
+    progress_callback = None,
 ) -> dict:
     """
     导出 npz（分片）。
@@ -345,7 +347,7 @@ def export_npz(
             time.sleep(export_sleep_ms / 1000.0)
 
     def _append_sample(gc: GlobalCurveCommand, layer: int, subtype: str, occ: int):
-        nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map
+        nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map, last_pose
         t0 = time.perf_counter()
         sample_profile = {
             "sample_arc_map_s": 0.0,
@@ -367,7 +369,6 @@ def export_npz(
             src_lines = f"{move_lines[0]}-{move_lines[-1]}"
         else:
             src_lines = str(move_lines[0])
-
         for pt in sample_global_curve_iter(gc, dt=dt, target_velocity=target_velocity, profile=sample_profile):
             has_any = True
             row = CsvRow(
@@ -392,6 +393,7 @@ def export_npz(
             _maybe_yield()
             seq += 1
             last_pose_map[(layer, subtype)] = row
+            last_pose = row
         timings["sample_s"] += time.perf_counter() - t0
         timings["sample_arc_map_s"] += sample_profile["sample_arc_map_s"]
         timings["sample_lookup_s"] += sample_profile["sample_lookup_s"]
@@ -774,8 +776,8 @@ def export_npz(
         current_occ = None
 
     def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
-        nonlocal seq, processed_rows, last_pose_map
-        hold_row = last_pose_map.get((layer, subtype)) or CsvRow(
+        nonlocal seq, processed_rows, last_pose_map, last_pose
+        hold_row = last_pose or CsvRow(
             seq=seq,
             x=0.0,
             y=0.0,
@@ -815,8 +817,30 @@ def export_npz(
         _maybe_yield()
         seq += 1
         last_pose_map[(layer, subtype)] = hold_row
+        last_pose = hold_row
 
-    for cmd in parsed_commands:
+    total_cmds = len(parsed_commands)
+    for idx, cmd in enumerate(parsed_commands):
+        if progress_callback and total_cmds > 0 and idx % 200 == 0:
+            progress_callback(idx / total_cmds)
+        # ---- 偏置补偿：对 Tool 1 的所有轨迹应用坐标偏置 ----
+        if current_tool == 1 and (abs(tool_offset[0]) > 1e-9 or abs(tool_offset[1]) > 1e-9 or abs(tool_offset[2]) > 1e-9):
+            ox, oy, oz = tool_offset
+            from .types import Position as _Pos
+            if isinstance(cmd, MoveCommand):
+                cmd.start_pos = _Pos(cmd.start_pos.x + ox, cmd.start_pos.y + oy, cmd.start_pos.z + oz,
+                                     cmd.start_pos.a, cmd.start_pos.b, cmd.start_pos.c)
+                cmd.pos = _Pos(cmd.pos.x + ox, cmd.pos.y + oy, cmd.pos.z + oz,
+                               cmd.pos.a, cmd.pos.b, cmd.pos.c)
+            elif isinstance(cmd, GlobalCurveCommand):
+                cmd.start_pos = _Pos(cmd.start_pos.x + ox, cmd.start_pos.y + oy, cmd.start_pos.z + oz,
+                                     cmd.start_pos.a, cmd.start_pos.b, cmd.start_pos.c)
+                cmd.control_points = [
+                    _Pos(cp.x + ox, cp.y + oy, cp.z + oz, cp.a, cp.b, cp.c)
+                    for cp in cmd.control_points
+                ]
+        # ---- 偏置补偿结束 ----
+
         cmd_layer = getattr(cmd, "layer", None)
         if split_by_layer_type and isinstance(cmd_layer, int):
             if current_layer is not None and cmd_layer > current_layer:
@@ -828,10 +852,47 @@ def export_npz(
             flush_moves()
             if isinstance(cmd, ToolChangeCommand):
                 mapped_tool = _map_gcode_tool(cmd.tool)
-                current_tool = mapped_tool
                 occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
                 if occ == 0:
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
+
+                # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
+                ox, oy, oz = tool_offset
+                has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
+                if has_offset:
+                    last_row = last_pose
+                    if last_row is not None:
+                        from .types import Position as _Pos
+                        if mapped_tool == 1:
+                            # 切到 CF (Tool 1): 正向补偿
+                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                           last_row.a, last_row.b, last_row.c)
+                            end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
+                                         last_row.a, last_row.b, last_row.c)
+                        else:
+                            # 切到 Resin (Tool 2): 反向补偿
+                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                           last_row.a, last_row.b, last_row.c)
+                            end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
+                                         last_row.a, last_row.b, last_row.c)
+                        # 构造 fallback_linear GlobalCurveCommand（走标准七阶 S 曲线插值）
+                        offset_gc = GlobalCurveCommand(
+                            type="TRAVEL",
+                            cmd="SPLINE",
+                            start_pos=start_p,
+                            control_points=[end_p, end_p, end_p],
+                            e_val=last_row.e,
+                            delta_e=0.0,
+                            feedrate=default_feed_mm_s * 60.0,
+                            line=cmd.line,
+                            raw="fallback_linear",
+                            constraints=[],
+                            original_moves=[],
+                        )
+                        _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
+                # ---- 偏置补偿结束 ----
+
+                current_tool = mapped_tool
                 _emit_event(_PendingEvent(
                     event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
                     payload=str(mapped_tool),
@@ -915,6 +976,14 @@ def export_npz(
             json.dump(manifest, f, ensure_ascii=False, indent=2)
         timings["manifest_s"] += time.perf_counter() - t0
 
+    # Write tool_offset sidecar JSON file
+    try:
+        offset_file = base_no_ext + ".offset.json"
+        with open(offset_file, "w", encoding="utf-8") as f:
+            json.dump({"tool_offset": list(tool_offset)}, f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        print(f"[Warning] Failed to write offset sidecar json: {exc}")
+
     timings["rows"] = processed_rows
     timings["total_s"] = time.perf_counter() - t_total_start
     return timings
@@ -922,6 +991,8 @@ def export_npz(
 
 def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:
     try:
+        import matplotlib
+        matplotlib.use('Agg')
         import matplotlib.pyplot as plt
     except Exception:
         return
@@ -984,7 +1055,7 @@ def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:
     ax.set_ylabel("Y (mm)")
     ax.set_title(f"Layer {layer:04d} XY Path")
     ax.grid(True, linewidth=0.3, alpha=0.5)
-    out_dir = Path(base_root) / f"layer_{layer:04d}"
+    out_dir = Path(base_root) / "layer_previews"
     out_dir.mkdir(parents=True, exist_ok=True)
     out_path = out_dir / f"layer_{layer:04d}.png"
     fig.savefig(str(out_path), bbox_inches="tight")
