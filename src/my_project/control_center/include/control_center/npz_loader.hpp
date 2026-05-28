@@ -55,6 +55,7 @@ public:
 
   bool has_next() const;
   bool next_row(NpzRow& out);
+  void seek(uint32_t target_seq);
 
   const std::unordered_map<uint8_t, std::string>& move_type_vocab() const {
     return move_type_vocab_;

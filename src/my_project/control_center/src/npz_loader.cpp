@@ -114,6 +114,36 @@ bool NpzLoader::next_row(NpzRow& out) {
   return true;
 }
 
+void NpzLoader::seek(uint32_t target_seq) {
+  cache_.clear();
+  chunk_row_idx_ = 0;
+  next_file_idx_ = 0;
+  ok_ = true;
+  error_.clear();
+  
+  while (next_file_idx_ < files_.size()) {
+    if (!load_next_chunk()) {
+      break;
+    }
+    if (cache_.back().seq.empty()) {
+      cache_.pop_back();
+      continue;
+    }
+    if (cache_.back().seq.back() >= target_seq) {
+      const auto& c = cache_.back();
+      for (size_t i = 0; i < c.size; ++i) {
+        if (c.seq[i] >= target_seq) {
+          chunk_row_idx_ = i;
+          break;
+        }
+      }
+      ensure_preload();
+      return;
+    }
+    cache_.pop_back();
+  }
+}
+
 void NpzLoader::load_initial() {
   for (size_t i = 0; i < preload_chunks_; ++i) {
     if (!load_next_chunk()) {
@@ -233,8 +263,8 @@ std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& pat
     if (bp.is_absolute() && !fs::exists(bp)) {
       // Fallback: manifest moved to another machine, rebuild relative path.
       std::vector<fs::path> tail;
-      for (auto it = bp.relative_path().begin(); it != bp.relative_path().end(); ++it) {
-        tail.push_back(*it);
+      for (const auto& p : bp.relative_path()) {
+        tail.push_back(p);
       }
       if (tail.size() >= 2) {
         fs::path alt = manifest_path.parent_path() / tail[tail.size() - 2] / tail[tail.size() - 1];

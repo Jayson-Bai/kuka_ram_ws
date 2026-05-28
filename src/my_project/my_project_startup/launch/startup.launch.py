@@ -30,6 +30,8 @@ def generate_launch_description():
     decimal_precision = LaunchConfiguration("decimal_precision")
     local_ip = LaunchConfiguration("local_ip")
     local_port = LaunchConfiguration("local_port")
+    abort_lift_mm = LaunchConfiguration("abort_lift_mm")
+    abort_lift_speed_mm_s = LaunchConfiguration("abort_lift_speed_mm_s")
 
     # UART node params
     port = LaunchConfiguration("port")
@@ -46,6 +48,8 @@ def generate_launch_description():
             "decimal_precision": decimal_precision,
             "local_ip": local_ip,
             "local_port": local_port,
+            "abort_lift_mm": abort_lift_mm,
+            "abort_lift_speed_mm_s": abort_lift_speed_mm_s,
         }],
     )
 
@@ -221,6 +225,16 @@ def generate_launch_description():
             "extrude_scale",
             default_value="1.0",
             description="UART 挤出倍率（仅影响串口发送的挤出量）。",
+        ),
+        DeclareLaunchArgument(
+            "abort_lift_mm",
+            default_value="100.0",
+            description="ABORT 时 Z 轴抬升距离（mm）。",
+        ),
+        DeclareLaunchArgument(
+            "abort_lift_speed_mm_s",
+            default_value="10.0",
+            description="ABORT 时 Z 轴抬升速度（mm/s）。",
         ),
         rsi_node,
         uart_node,

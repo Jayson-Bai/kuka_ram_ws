@@ -44,6 +44,7 @@ private:
     rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
     rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_status_sub_;
     rclcpp::Subscription<std_msgs::msg::UInt32>::SharedPtr resync_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
 
     rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
     rclcpp::Publisher<PlannedEvent>::SharedPtr event_pub_;
@@ -57,6 +58,9 @@ private:
     int traj_high_{1500};
     std::optional<uint32_t> last_published_traj_seq_;
     std::optional<uint32_t> last_seq_used_;
+
+    std::atomic<bool> paused_{false};
+    std::atomic<bool> aborted_{false};
 
     std::unique_ptr<control_center::NpzLoader> npz_loader_;
     std::unique_ptr<control_center::QueueManager> queue_manager_;
@@ -145,20 +149,36 @@ public:
         resync_sub_ = create_subscription<std_msgs::msg::UInt32>(
             "/rsi/resync_request",
             monitor_qos,
-            [this](std_msgs::msg::UInt32::SharedPtr){
+            [this](std_msgs::msg::UInt32::SharedPtr msg){
                 {
                     std::lock_guard<std::mutex> qlk(queue_mutex_);
                     if (queue_manager_) {
                         queue_manager_->clear();
                     }
+                    if (npz_loader_) {
+                        npz_loader_->seek(msg->data);
+                        if (queue_manager_) {
+                            queue_manager_->fill(*npz_loader_);
+                        }
+                    }
                     last_published_traj_seq_.reset();
                 }
+                RCLCPP_WARN(get_logger(), "收到RSI重同步请求，从序号 %u 恢复", msg->data);
             }
         );
 
         //发布
         traj_pub_ = create_publisher<TrajectoryPoint>("/planned_trajectory", plan_qos);
         event_pub_ = create_publisher<PlannedEvent>("/planned_events", event_qos);
+
+        //订阅系统命令
+        cmd_sub_ = create_subscription<std_msgs::msg::String>(
+            "/system/command",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg){
+                on_system_command(msg->data);
+            }
+        );
 
         initial_prefill();
 
@@ -195,6 +215,10 @@ private:
     void publish_from_queue()
     {
         if (!npz_loader_ || !npz_loader_->ok() || !queue_manager_) {
+            return;
+        }
+        // PAUSE 或 ABORT 时不再发布新轨迹
+        if (paused_.load() || aborted_.load()) {
             return;
         }
 
@@ -300,6 +324,33 @@ private:
                         ev.trigger_seq,
                         ev.event_type.c_str(),
                         ev.payload.c_str());
+        }
+    }
+
+    void on_system_command(const std::string &cmd)
+    {
+        if (cmd == "PAUSE")
+        {
+            paused_.store(true);
+            RCLCPP_INFO(get_logger(), "center_node收到PAUSE命令，暂停轨迹发布");
+        }
+        else if (cmd == "RESUME")
+        {
+            paused_.store(false);
+            RCLCPP_INFO(get_logger(), "center_node收到RESUME命令，恢复轨迹发布");
+        }
+        else if (cmd == "ABORT")
+        {
+            aborted_.store(true);
+            paused_.store(true);
+            {
+                std::lock_guard<std::mutex> lk(queue_mutex_);
+                if (queue_manager_) {
+                    queue_manager_->clear();
+                }
+                last_published_traj_seq_.reset();
+            }
+            RCLCPP_WARN(get_logger(), "center_node收到ABORT命令，清空队列并停止发布");
         }
     }
 

@@ -14,6 +14,8 @@
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/kuka_status.hpp>
 
+#include <std_msgs/msg/string.hpp>
+
 #include <deque>
 #include <mutex>
 #include <optional>
@@ -37,6 +39,20 @@ public:
         event_queue_limit_ = declare_parameter<int>("event_queue_limit", 2000);
 
         ui_pub_ = create_publisher<UiStatus>("/ui/status", 10);
+
+        cmd_sub_ = create_subscription<std_msgs::msg::String>(
+            "/system/command",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg) {
+                std::lock_guard<std::mutex> lk(mutex_);
+                if (msg->data == "PAUSE") {
+                    system_command_ = "PAUSED";
+                } else if (msg->data == "RESUME") {
+                    system_command_ = ""; // 清除，恢复正常状态判定
+                } else if (msg->data == "ABORT") {
+                    system_command_ = "ABORTING";
+                }
+            });
 
         kuka_sub_ = create_subscription<KukaStatus>(
             "/kuka/status", 10,
@@ -124,8 +140,18 @@ private:
 
         std::lock_guard<std::mutex> lk(mutex_);
 
-        // 系统状态
-        if (!last_hb_) {
+        // 系统状态：优先使用命令状态
+        if (!system_command_.empty()) {
+            out.state = system_command_;
+            // ABORTING 状态下，如果心跳丢失，切换为 ABORTED
+            if (system_command_ == "ABORTING" && last_hb_) {
+                double hb_age = (now_t - last_hb_stamp_).seconds();
+                if (hb_age > heartbeat_timeout_s_) {
+                    system_command_ = "ABORTED";
+                    out.state = "ABORTED";
+                }
+            }
+        } else if (!last_hb_) {
             out.state = "WAIT_HEARTBEAT";
         } else {
             double hb_age = (now_t - last_hb_stamp_).seconds();
@@ -226,6 +252,8 @@ private:
 private:
     rclcpp::Publisher<UiStatus>::SharedPtr ui_pub_;
 
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
+
     rclcpp::Subscription<KukaStatus>::SharedPtr kuka_sub_;
     rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
     rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_sub_;
@@ -252,6 +280,7 @@ private:
     double heartbeat_timeout_s_{1.0};
     int traj_queue_limit_{5000};
     int event_queue_limit_{2000};
+    std::string system_command_; // 当前系统命令状态: "PAUSED" / "ABORTING" / "ABORTED" / ""
 };
 
 int main(int argc, char **argv)

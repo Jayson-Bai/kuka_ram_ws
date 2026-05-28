@@ -3,13 +3,241 @@ from rqt_gui_py.plugin import Plugin
 import rclpy
 from rclpy.parameter import Parameter
 from rcl_interfaces.srv import SetParameters
+import subprocess
+import os
+import signal
 
 from my_project_interfaces.msg import UiStatus
+
+from std_msgs.msg import String as StringMsg
+
+
+LAUNCH_PARAMS = [
+    # (param_name, default_value, description, group)
+    ("center_start_delay_s", "1.0", "延迟启动 center_node（秒）", "Center Node"),
+    ("npz_path", "/home/jayson/kuka_ram_ws/data/output_npz/test.npz",
+     "轨迹/事件 NPZ 文件路径", "Center Node"),
+    ("npz_preload_chunks", "2", "NPZ 预加载块数", "Center Node"),
+    ("queue_low", "1000", "轨迹队列低水位阈值", "Center Node"),
+    ("queue_high", "2000", "轨迹队列高水位阈值", "Center Node"),
+    ("plan_qos_depth", "2000", "规划话题 QoS 深度", "Center Node"),
+    ("traj_prefill", "1000", "启动预填充轨迹点数量", "Center Node"),
+    ("traj_low", "500", "轨迹 backlog 低阈值告警线", "Center Node"),
+    ("traj_high", "1500", "轨迹 backlog 高阈值告警线", "Center Node"),
+    ("xyzabc_decimals", "6", "位姿小数保留位数", "Center Node"),
+    ("e_decimals", "2", "挤出量小数保留位数", "Center Node"),
+    ("kuka_status_raw", "false", "是否打印 KUKA 原始 XML 长度", "Center Node"),
+    ("summary_period_ms", "200", "控制中心汇总发布周期（ms）", "Center Node"),
+    ("sen_type", "PosCorr", "RSI XML 发送类型", "RSI Node"),
+    ("decimal_precision", "6", "RSI 收发数据小数位精度", "RSI Node"),
+    ("local_ip", "192.168.1.1", "RSI 本地监听 IP", "RSI Node"),
+    ("local_port", "49152", "RSI 本地监听端口", "RSI Node"),
+    ("abort_lift_mm", "100.0", "ABORT 时 Z 轴抬升距离（mm）", "RSI Node"),
+    ("abort_lift_speed_mm_s", "10.0", "ABORT 时 Z 轴抬升速度（mm/s）", "RSI Node"),
+    ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART Node"),
+    ("baudrate", "115200", "UART 波特率", "UART Node"),
+    ("extrude_scale", "1.0", "UART 挤出倍率", "UART Node"),
+    ("ui_publish_period_ms", "200", "UI 状态发布周期（ms）", "System Manager"),
+    ("heartbeat_timeout_s", "1.0", "心跳超时时间（秒）", "System Manager"),
+    ("traj_queue_limit", "5000", "UI 侧轨迹队列上限", "System Manager"),
+    ("event_queue_limit", "2000", "UI 侧事件队列上限", "System Manager"),
+]
+
+_LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
+_LAUNCH_GROUPS_ORDER = ["Center Node", "RSI Node", "UART Node", "System Manager"]
+
+
+class _LaunchSettingsDialog(QtWidgets.QDialog):
+    """弹出对话框：按节点分组编辑所有启动参数。"""
+
+    def __init__(self, current_params, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("启动设置")
+        self.setMinimumSize(620, 520)
+        self._inputs = {}
+        self._build_ui(current_params)
+
+    def _build_ui(self, current_params):
+        main_layout = QtWidgets.QVBoxLayout(self)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(10)
+
+        title = QtWidgets.QLabel("启动参数配置")
+        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
+        main_layout.addWidget(title)
+
+        scroll = QtWidgets.QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        scroll_widget = QtWidgets.QWidget()
+        scroll_layout = QtWidgets.QVBoxLayout(scroll_widget)
+        scroll_layout.setSpacing(10)
+        scroll_layout.setContentsMargins(0, 0, 6, 0)
+
+        # Group params by node
+        groups = {}
+        for name, default, desc, group in LAUNCH_PARAMS:
+            groups.setdefault(group, []).append((name, default, desc))
+
+        group_colors = {
+            "Center Node": "#1a73e8",
+            "RSI Node": "#b15e00",
+            "UART Node": "#1b6e3c",
+            "System Manager": "#7b1fa2",
+        }
+
+        for group_name in _LAUNCH_GROUPS_ORDER:
+            if group_name not in groups:
+                continue
+            group_box = QtWidgets.QGroupBox(group_name)
+            color = group_colors.get(group_name, "#333333")
+            group_box.setStyleSheet(
+                "QGroupBox { font-weight: 600; margin-top: 4px;"
+                " padding: 10px 8px 8px 8px;"
+                " border: 1px solid #d0d0d0; border-radius: 6px;"
+                " background: #ffffff; }"
+                "QGroupBox::title { subcontrol-origin: margin;"
+                " subcontrol-position: top left;"
+                f" padding: 0 6px; color: {color}; }}"
+            )
+            form = QtWidgets.QFormLayout(group_box)
+            form.setLabelAlignment(
+                QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter
+            )
+            form.setFieldGrowthPolicy(
+                QtWidgets.QFormLayout.AllNonFixedFieldsGrow
+            )
+            form.setHorizontalSpacing(12)
+            form.setVerticalSpacing(8)
+
+            for param_name, default_val, description in groups[group_name]:
+                current_val = current_params.get(param_name, default_val)
+                label = QtWidgets.QLabel(param_name)
+                label.setToolTip(description)
+                label.setStyleSheet("color: #444444; font-size: 12px;")
+
+                if param_name == "kuka_status_raw":
+                    widget = QtWidgets.QCheckBox(description)
+                    widget.setChecked(current_val.lower() == "true")
+                    form.addRow(label, widget)
+                elif param_name == "npz_path":
+                    row_widget = QtWidgets.QWidget()
+                    row_lay = QtWidgets.QHBoxLayout(row_widget)
+                    row_lay.setContentsMargins(0, 0, 0, 0)
+                    row_lay.setSpacing(4)
+                    line_edit = QtWidgets.QLineEdit(current_val)
+                    line_edit.setToolTip(description)
+                    line_edit.setStyleSheet(
+                        "border: 1px solid #d0d0d0; border-radius: 4px;"
+                        " padding: 4px 6px; background: #ffffff;"
+                    )
+                    browse_btn = QtWidgets.QPushButton("…")
+                    browse_btn.setFixedWidth(32)
+                    browse_btn.setFixedHeight(28)
+                    browse_btn.setCursor(QtCore.Qt.PointingHandCursor)
+                    browse_btn.setStyleSheet(
+                        "border: 1px solid #1a73e8; border-radius: 4px;"
+                        " background: #ffffff; color: #1a73e8;"
+                        " font-weight: 600;"
+                    )
+                    browse_btn.clicked.connect(
+                        lambda checked, le=line_edit: self._browse_file(le)
+                    )
+                    row_lay.addWidget(line_edit, 1)
+                    row_lay.addWidget(browse_btn)
+                    form.addRow(label, row_widget)
+                    widget = line_edit
+                else:
+                    widget = QtWidgets.QLineEdit(current_val)
+                    widget.setToolTip(description)
+                    widget.setStyleSheet(
+                        "border: 1px solid #d0d0d0; border-radius: 4px;"
+                        " padding: 4px 6px; background: #ffffff;"
+                    )
+                    form.addRow(label, widget)
+
+                self._inputs[param_name] = widget
+
+            scroll_layout.addWidget(group_box)
+
+        scroll_layout.addStretch(1)
+        scroll.setWidget(scroll_widget)
+        main_layout.addWidget(scroll, 1)
+
+        # Bottom buttons
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(8)
+        btn_reset = QtWidgets.QPushButton("恢复默认")
+        btn_reset.setMinimumHeight(32)
+        btn_reset.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_reset.setStyleSheet(
+            "font-weight: 600; border: 1px solid #c0c0c0;"
+            " border-radius: 5px; background: #ffffff;"
+            " color: #666666; padding: 4px 16px;"
+        )
+        btn_reset.clicked.connect(self._reset_defaults)
+        btn_ok = QtWidgets.QPushButton("确定")
+        btn_ok.setMinimumHeight(32)
+        btn_ok.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_ok.setStyleSheet(
+            "font-weight: 600; border: 1px solid #1a73e8;"
+            " border-radius: 5px; background: #1a73e8;"
+            " color: #ffffff; padding: 4px 20px;"
+        )
+        btn_ok.clicked.connect(self.accept)
+        btn_cancel = QtWidgets.QPushButton("取消")
+        btn_cancel.setMinimumHeight(32)
+        btn_cancel.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_cancel.setStyleSheet(
+            "font-weight: 600; border: 1px solid #c0c0c0;"
+            " border-radius: 5px; background: #ffffff;"
+            " color: #333333; padding: 4px 16px;"
+        )
+        btn_cancel.clicked.connect(self.reject)
+        btn_row.addWidget(btn_reset)
+        btn_row.addStretch(1)
+        btn_row.addWidget(btn_cancel)
+        btn_row.addWidget(btn_ok)
+        main_layout.addLayout(btn_row)
+
+        self.setStyleSheet("QWidget { background: #f7f7f7; }")
+
+    def _browse_file(self, line_edit):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "选择 NPZ / Manifest 文件",
+            os.path.dirname(line_edit.text()) or "",
+            "NPZ Files (*.npz);;JSON Manifest (*.json);;All Files (*)",
+        )
+        if path:
+            line_edit.setText(path)
+
+    def _reset_defaults(self):
+        for name, default_val in _LAUNCH_DEFAULTS.items():
+            widget = self._inputs.get(name)
+            if widget is None:
+                continue
+            if isinstance(widget, QtWidgets.QCheckBox):
+                widget.setChecked(default_val.lower() == "true")
+            elif isinstance(widget, QtWidgets.QLineEdit):
+                widget.setText(default_val)
+
+    def get_params(self):
+        result = {}
+        for name, widget in self._inputs.items():
+            if isinstance(widget, QtWidgets.QCheckBox):
+                result[name] = "true" if widget.isChecked() else "false"
+            elif isinstance(widget, QtWidgets.QLineEdit):
+                val = widget.text().strip()
+                result[name] = val if val else _LAUNCH_DEFAULTS.get(name, "")
+        return result
 
 
 class _UiStatusWidget(QtWidgets.QWidget):
     status_received = QtCore.pyqtSignal(object)
     scale_submit = QtCore.pyqtSignal(float)
+    command_submit = QtCore.pyqtSignal(str)
+    uart_command_submit = QtCore.pyqtSignal(str)
 
     def __init__(self):
         super().__init__()
@@ -28,16 +256,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._labels = {}
         value_min_width = QtWidgets.QLabel("0").fontMetrics().horizontalAdvance("0") * 5
         cf_labels = [
-            ("CF State", "State"),
-            ("CF Fan OK", "Fan OK"),
-            ("CF Current Temp", "Current Temp"),
-            ("CF Target Temp", "Target Temp"),
+            ("Carbon Fiber State", "State"),
+            ("Carbon Fiber Fan OK", "Fan OK"),
+            ("Carbon Fiber Current Temp", "Current Temp"),
+            ("Carbon Fiber Target Temp", "Target Temp"),
         ]
         resin_labels = [
-            ("RESIN State", "State"),
-            ("RESIN Fan OK", "Fan OK"),
-            ("RESIN Current Temp", "Current Temp"),
-            ("RESIN Target Temp", "Target Temp"),
+            ("Resin State", "State"),
+            ("Resin Fan OK", "Fan OK"),
+            ("Resin Current Temp", "Current Temp"),
+            ("Resin Target Temp", "Target Temp"),
         ]
         label_metrics = QtWidgets.QLabel("X").fontMetrics()
         cf_resin_label_titles = [title for _, title in (cf_labels + resin_labels)]
@@ -114,11 +342,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         ], parent_layout=printhead_layout)
         printhead_row = QtWidgets.QHBoxLayout()
         printhead_row.setSpacing(8)
-        cf_box = add_group("CF", cf_labels,
+        cf_box = add_group("Carbon Fiber", cf_labels,
         parent_layout=printhead_row, object_name="groupPrintheadCF",
             label_min_width=cf_resin_label_min_width,
             value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        resin_box = add_group("RESIN", resin_labels,
+        resin_box = add_group("Resin", resin_labels,
         parent_layout=printhead_row, object_name="groupPrintheadResin",
             label_min_width=cf_resin_label_min_width,
             value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -228,49 +456,233 @@ class _UiStatusWidget(QtWidgets.QWidget):
         events_row.setStretch(1, 1)
         events_layout.addLayout(events_row)
         right_column.addWidget(events_box)
-        extrude_box = QtWidgets.QGroupBox("Extrude Scale")
-        extrude_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        extrude_layout = QtWidgets.QFormLayout(extrude_box)
-        extrude_layout.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        extrude_layout.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        extrude_layout.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
-        extrude_layout.setHorizontalSpacing(12)
-        extrude_layout.setVerticalSpacing(6)
-        label_title = QtWidgets.QLabel("Current")
-        label_title.setObjectName("fieldLabel")
+
+        # ======== Printhead Control 区域 ========
+        ph_control_box = QtWidgets.QGroupBox("Printhead Control")
+        ph_control_box.setObjectName("groupPrintheadControl")
+        ph_control_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        ph_control_outer = QtWidgets.QVBoxLayout(ph_control_box)
+        ph_control_outer.setSpacing(8)
+
+        # -- Tool Switch row --
+        tool_row = QtWidgets.QHBoxLayout()
+        tool_row.setSpacing(12)
+        tool_label = QtWidgets.QLabel("Switch Tool")
+        tool_label.setObjectName("fieldLabel")
+        tool_row.addWidget(tool_label)
+        self._btn_tool_cf = QtWidgets.QPushButton("Carbon Fiber")
+        self._btn_tool_cf.setObjectName("btnToolCF")
+        self._btn_tool_cf.setMinimumHeight(32)
+        self._btn_tool_cf.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_tool_resin = QtWidgets.QPushButton("Resin")
+        self._btn_tool_resin.setObjectName("btnToolResin")
+        self._btn_tool_resin.setMinimumHeight(32)
+        self._btn_tool_resin.setCursor(QtCore.Qt.PointingHandCursor)
+        tool_row.addWidget(self._btn_tool_cf)
+        tool_row.addWidget(self._btn_tool_resin)
+        ph_control_outer.addLayout(tool_row)
+
+        # -- Carbon Fiber / RESIN side-by-side panels --
+        head_panels_row = QtWidgets.QHBoxLayout()
+        head_panels_row.setSpacing(12)
+
+        for head_id, head_name in (("cf", "Carbon Fiber"), ("resin", "Resin")):
+            panel = QtWidgets.QGroupBox(head_name)
+            panel.setObjectName(f"groupCtrl{head_id}")
+            panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+            panel_layout = QtWidgets.QVBoxLayout(panel)
+            panel_layout.setSpacing(6)
+
+            # Fan row
+            fan_row = QtWidgets.QHBoxLayout()
+            fan_row.setSpacing(8)
+            fan_label = QtWidgets.QLabel("Fan")
+            fan_label.setObjectName("fieldLabel")
+            fan_label.setMinimumWidth(30)
+            btn_fan_on = QtWidgets.QPushButton("ON")
+            btn_fan_on.setObjectName(f"btnFanOn_{head_id}")
+            btn_fan_on.setMinimumHeight(28)
+            btn_fan_on.setCursor(QtCore.Qt.PointingHandCursor)
+            btn_fan_off = QtWidgets.QPushButton("OFF")
+            btn_fan_off.setObjectName(f"btnFanOff_{head_id}")
+            btn_fan_off.setMinimumHeight(28)
+            btn_fan_off.setCursor(QtCore.Qt.PointingHandCursor)
+            fan_row.addWidget(fan_label)
+            fan_row.addWidget(btn_fan_on)
+            fan_row.addWidget(btn_fan_off)
+            panel_layout.addLayout(fan_row)
+
+            # Temperature row
+            temp_row = QtWidgets.QHBoxLayout()
+            temp_row.setSpacing(8)
+            temp_label = QtWidgets.QLabel("Temp")
+            temp_label.setObjectName("fieldLabel")
+            temp_label.setMinimumWidth(30)
+            temp_input = QtWidgets.QLineEdit()
+            temp_input.setPlaceholderText("°C")
+            temp_input.setMaximumWidth(80)
+            temp_validator = QtGui.QDoubleValidator(0.0, 500.0, 1, temp_input)
+            temp_validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            temp_input.setValidator(temp_validator)
+            btn_temp_apply = QtWidgets.QPushButton("Set")
+            btn_temp_apply.setObjectName(f"btnTempApply_{head_id}")
+            btn_temp_apply.setMinimumHeight(28)
+            btn_temp_apply.setCursor(QtCore.Qt.PointingHandCursor)
+            temp_row.addWidget(temp_label)
+            temp_row.addWidget(temp_input, 1)
+            temp_row.addWidget(btn_temp_apply)
+            panel_layout.addLayout(temp_row)
+
+            head_panels_row.addWidget(panel)
+
+            # Store references
+            setattr(self, f"_btn_fan_on_{head_id}", btn_fan_on)
+            setattr(self, f"_btn_fan_off_{head_id}", btn_fan_off)
+            setattr(self, f"_temp_input_{head_id}", temp_input)
+            setattr(self, f"_btn_temp_apply_{head_id}", btn_temp_apply)
+
+        ph_control_outer.addLayout(head_panels_row)
+
+        # -- Extrude Scale row (inside Printhead Control) --
+        extrude_group = QtWidgets.QGroupBox("Extrude Scale")
+        extrude_group.setObjectName("groupExtrudeScale")
+        extrude_group.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        extrude_inner = QtWidgets.QHBoxLayout(extrude_group)
+        extrude_inner.setSpacing(10)
+
+        extrude_cur_label = QtWidgets.QLabel("Current")
+        extrude_cur_label.setObjectName("fieldLabel")
         self._extrude_scale_value = QtWidgets.QLabel("1.000")
         self._extrude_scale_value.setObjectName("valueLabel")
         self._extrude_scale_value.setMinimumWidth(value_min_width)
-        extrude_layout.addRow(label_title, self._extrude_scale_value)
 
-        input_row = QtWidgets.QWidget()
-        input_row_layout = QtWidgets.QHBoxLayout(input_row)
-        input_row_layout.setContentsMargins(0, 0, 0, 0)
-        input_row_layout.setSpacing(6)
+        extrude_set_label = QtWidgets.QLabel("Set")
+        extrude_set_label.setObjectName("fieldLabel")
         self._extrude_scale_input = QtWidgets.QLineEdit()
         self._extrude_scale_input.setPlaceholderText("1.0")
+        self._extrude_scale_input.setMaximumWidth(80)
         validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, self._extrude_scale_input)
         validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
         self._extrude_scale_input.setValidator(validator)
         self._extrude_scale_apply = QtWidgets.QPushButton("Apply")
-        input_row_layout.addWidget(self._extrude_scale_input)
-        input_row_layout.addWidget(self._extrude_scale_apply)
-        extrude_layout.addRow(QtWidgets.QLabel("Set"), input_row)
+        self._extrude_scale_apply.setObjectName("btnTempApply_extrude")
+        self._extrude_scale_apply.setMinimumHeight(28)
+        self._extrude_scale_apply.setCursor(QtCore.Qt.PointingHandCursor)
 
         self._extrude_scale_status = QtWidgets.QLabel("-")
         self._extrude_scale_status.setObjectName("valueLabel")
-        extrude_layout.addRow(QtWidgets.QLabel("Status"), self._extrude_scale_status)
-        # extrude_box 采用与原 Logs 相同的整行布局
 
-        layout.addWidget(system_box, 1, 0, 1, 2, QtCore.Qt.AlignTop)
+        extrude_inner.addWidget(extrude_cur_label)
+        extrude_inner.addWidget(self._extrude_scale_value)
+        extrude_inner.addSpacing(8)
+        extrude_inner.addWidget(extrude_set_label)
+        extrude_inner.addWidget(self._extrude_scale_input)
+        extrude_inner.addWidget(self._extrude_scale_apply)
+        extrude_inner.addSpacing(8)
+        extrude_inner.addWidget(self._extrude_scale_status, 1)
+
+        ph_control_outer.addWidget(extrude_group)
+
+        layout.addWidget(system_box, 1, 0, 1, 2)
         layout.addLayout(left_column, 2, 0, 1, 1)
         layout.addLayout(right_column, 2, 1, 1, 1)
-        layout.addWidget(extrude_box, 3, 0, 1, 2, QtCore.Qt.AlignTop)
+        layout.addWidget(ph_control_box, 3, 0, 1, 2)
+
+        # ======== Print Control 区域 ========
+        control_box = QtWidgets.QGroupBox("Print Control")
+        control_box.setObjectName("groupControl")
+        control_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        control_layout = QtWidgets.QVBoxLayout(control_box)
+        control_layout.setSpacing(8)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(12)
+
+        self._btn_pause = QtWidgets.QPushButton("Pause")
+        self._btn_pause.setObjectName("btnPause")
+        self._btn_pause.setMinimumHeight(36)
+        self._btn_pause.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._btn_resume = QtWidgets.QPushButton("Resume")
+        self._btn_resume.setObjectName("btnResume")
+        self._btn_resume.setMinimumHeight(36)
+        self._btn_resume.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_resume.setEnabled(False)
+
+        self._btn_stop = QtWidgets.QPushButton("Stop")
+        self._btn_stop.setObjectName("btnStop")
+        self._btn_stop.setMinimumHeight(36)
+        self._btn_stop.setCursor(QtCore.Qt.PointingHandCursor)
+
+        btn_row.addWidget(self._btn_pause)
+        btn_row.addWidget(self._btn_resume)
+        btn_row.addWidget(self._btn_stop)
+        control_layout.addLayout(btn_row)
+
+        ctrl_status_row = QtWidgets.QHBoxLayout()
+        ctrl_status_row.setSpacing(8)
+        ctrl_label = QtWidgets.QLabel("Status")
+        ctrl_label.setObjectName("fieldLabel")
+        self._control_status = QtWidgets.QLabel("WAIT_HEARTBEAT")
+        self._control_status.setObjectName("controlStatus")
+        ctrl_status_row.addWidget(ctrl_label)
+        ctrl_status_row.addWidget(self._control_status, 1)
+        control_layout.addLayout(ctrl_status_row)
+
+        layout.addWidget(control_box, 4, 0, 1, 2, QtCore.Qt.AlignTop)
+
+        # ======== Launch Control 区域 ========
+        launch_box = QtWidgets.QGroupBox("Launch")
+        launch_box.setObjectName("groupLaunch")
+        launch_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+        )
+        launch_inner = QtWidgets.QVBoxLayout(launch_box)
+        launch_inner.setSpacing(8)
+
+        launch_btn_row = QtWidgets.QHBoxLayout()
+        launch_btn_row.setSpacing(12)
+
+        self._btn_launch_settings = QtWidgets.QPushButton("⚙  启动设置")
+        self._btn_launch_settings.setObjectName("btnLaunchSettings")
+        self._btn_launch_settings.setMinimumHeight(36)
+        self._btn_launch_settings.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._btn_launch = QtWidgets.QPushButton("▶  启动")
+        self._btn_launch.setObjectName("btnLaunch")
+        self._btn_launch.setMinimumHeight(36)
+        self._btn_launch.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._btn_stop_launch = QtWidgets.QPushButton("■  停止节点")
+        self._btn_stop_launch.setObjectName("btnStopLaunch")
+        self._btn_stop_launch.setMinimumHeight(36)
+        self._btn_stop_launch.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_stop_launch.setEnabled(False)
+
+        launch_btn_row.addWidget(self._btn_launch_settings)
+        launch_btn_row.addWidget(self._btn_launch)
+        launch_btn_row.addWidget(self._btn_stop_launch)
+        launch_inner.addLayout(launch_btn_row)
+
+        launch_status_row = QtWidgets.QHBoxLayout()
+        launch_status_row.setSpacing(8)
+        launch_label = QtWidgets.QLabel("Launch Status")
+        launch_label.setObjectName("fieldLabel")
+        self._launch_status = QtWidgets.QLabel("未启动")
+        self._launch_status.setObjectName("launchStatus")
+        launch_status_row.addWidget(launch_label)
+        launch_status_row.addWidget(self._launch_status, 1)
+        launch_inner.addLayout(launch_status_row)
+
+        layout.addWidget(launch_box, 5, 0, 1, 2, QtCore.Qt.AlignTop)
+
         layout.setRowStretch(0, 0)
         layout.setRowStretch(1, 0)
         layout.setRowStretch(2, 0)
         layout.setRowStretch(3, 0)
-        layout.setRowStretch(4, 1)
+        layout.setRowStretch(4, 0)
+        layout.setRowStretch(5, 0)
+        layout.setRowStretch(6, 1)
 
         self.setStyleSheet(
             "QWidget { background: #f7f7f7; }"
@@ -300,6 +712,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "QGroupBox#groupHeartbeat::title { color: #b42318; }"
             "QGroupBox#groupKuka::title { color: #b15e00; }"
             "QGroupBox#groupPrintheadCF::title { color: #000000; }"
+            "QGroupBox#groupExtrudeScale::title { color: #000000; }"
             "QGroupBox#groupPrintheadResin::title { color: #444444; }"
             "QLabel#axisLabel {"
             "  font-size: 10px;"
@@ -313,10 +726,204 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  padding: 2px 4px;"
             "  color: #666666;"
             "}"
+            "QPushButton#btnPause {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 6px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnPause:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnPause:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
+            "QPushButton#btnResume {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #34a853;"
+            "  border-radius: 6px;"
+            "  background: #ffffff;"
+            "  color: #1b6e3c;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnResume:hover {"
+            "  background: #e6f4ea;"
+            "  border-color: #1b6e3c;"
+            "}"
+            "QPushButton#btnResume:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
+            "QPushButton#btnStop {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #d93025;"
+            "  border-radius: 6px;"
+            "  background: #ffffff;"
+            "  color: #b42318;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnStop:hover {"
+            "  background: #fce8e6;"
+            "  border-color: #b42318;"
+            "}"
+            "QPushButton#btnStop:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
+            "QLabel#controlStatus {"
+            "  font-weight: 700;"
+            "  font-size: 13px;"
+            "  color: #2b2b2b;"
+            "}"
+            "QGroupBox#groupControl::title { color: #1a73e8; }"
+            "QGroupBox#groupPrintheadControl::title { color: #1a73e8; }"
+            "QGroupBox#groupCtrlcf::title { color: #000000; }"
+            "QGroupBox#groupCtrlresin::title { color: #444444; }"
+            "QPushButton[objectName^='btnFanOn'] {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #34a853;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #1b6e3c;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton[objectName^='btnFanOn']:hover {"
+            "  background: #e6f4ea;"
+            "  border-color: #1b6e3c;"
+            "}"
+            "QPushButton[objectName^='btnFanOff'] {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #666666;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton[objectName^='btnFanOff']:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton[objectName^='btnTempApply'] {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #1a73e8;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton[objectName^='btnTempApply']:hover {"
+            "  background: #e8f0fe;"
+            "  border-color: #1558b0;"
+            "}"
+            "QPushButton#btnToolCF, QPushButton#btnToolResin {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #b15e00;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #b15e00;"
+            "  padding: 4px 16px;"
+            "}"
+            "QPushButton#btnToolCF:hover, QPushButton#btnToolResin:hover {"
+            "  background: #fff3e0;"
+            "  border-color: #8a4500;"
+            "}"
+            "QGroupBox#groupPrintheadControl QLineEdit {"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 4px;"
+            "  padding: 4px 6px;"
+            "  background: #ffffff;"
+            "}"
+            "QGroupBox#groupPrintheadControl QLineEdit:focus {"
+            "  border-color: #1a73e8;"
+            "}"
+            "QGroupBox#groupLaunch::title { color: #1a73e8; }"
+            "QPushButton#btnLaunchSettings {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 6px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnLaunchSettings:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnLaunch {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 6px;"
+            "  background: #1a73e8;"
+            "  color: #ffffff;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnLaunch:hover {"
+            "  background: #1558b0;"
+            "  border-color: #1558b0;"
+            "}"
+            "QPushButton#btnLaunch:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
+            "QPushButton#btnStopLaunch {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #d93025;"
+            "  border-radius: 6px;"
+            "  background: #ffffff;"
+            "  color: #b42318;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnStopLaunch:hover {"
+            "  background: #fce8e6;"
+            "  border-color: #b42318;"
+            "}"
+            "QPushButton#btnStopLaunch:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
+            "QLabel#launchStatus {"
+            "  font-weight: 700;"
+            "  font-size: 13px;"
+            "  color: #666666;"
+            "}"
         )
 
         self._extrude_scale_apply.clicked.connect(self._on_extrude_scale_apply)
         self._extrude_scale_input.returnPressed.connect(self._on_extrude_scale_apply)
+        self._btn_pause.clicked.connect(self._on_pause)
+        self._btn_resume.clicked.connect(self._on_resume)
+        self._btn_stop.clicked.connect(self._on_stop)
+
+        # Printhead control connections
+        self._btn_fan_on_cf.clicked.connect(lambda: self._on_fan("cf", True))
+        self._btn_fan_off_cf.clicked.connect(lambda: self._on_fan("cf", False))
+        self._btn_fan_on_resin.clicked.connect(lambda: self._on_fan("resin", True))
+        self._btn_fan_off_resin.clicked.connect(lambda: self._on_fan("resin", False))
+        self._btn_temp_apply_cf.clicked.connect(lambda: self._on_temp_apply("cf"))
+        self._temp_input_cf.returnPressed.connect(lambda: self._on_temp_apply("cf"))
+        self._btn_temp_apply_resin.clicked.connect(lambda: self._on_temp_apply("resin"))
+        self._temp_input_resin.returnPressed.connect(lambda: self._on_temp_apply("resin"))
+        self._btn_tool_cf.clicked.connect(lambda: self._on_tool_switch("cf"))
+        self._btn_tool_resin.clicked.connect(lambda: self._on_tool_switch("resin"))
 
     def _set_value(self, key, text, color=None):
         label = self._labels.get(key)
@@ -330,9 +937,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _format_tool(self, tool_id):
         if tool_id == 1:
-            return "CF"
+            return "Carbon Fiber"
         if tool_id == 2:
-            return "RESIN"
+            return "Resin"
         return str(tool_id)
 
     def _on_extrude_scale_apply(self):
@@ -372,6 +979,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _update_ui(self, msg: UiStatus):
         self._set_value("System State", msg.state or "-", "#2b2b2b")
+        self._update_control_buttons(msg.state or "")
         if msg.rsi_heartbeat_valid:
             self._set_value("Heartbeat Age", f"{msg.rsi_heartbeat_age_s:.3f}", "#1b6e3c")
             self._set_value("Heartbeat Seq", str(msg.rsi_heartbeat.seq_used), "#1b6e3c")
@@ -400,18 +1008,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
             using_color = "#1b6e3c"
             cf_state = "USING" if ps.current_tool == 1 else "HOME"
             resin_state = "USING" if ps.current_tool == 2 else "HOME"
-            self._set_value("CF State", cf_state, using_color if cf_state == "USING" else "#2b2b2b")
-            self._set_value("RESIN State", resin_state, using_color if resin_state == "USING" else "#2b2b2b")
+            self._set_value("Carbon Fiber State", cf_state, using_color if cf_state == "USING" else "#2b2b2b")
+            self._set_value("Resin State", resin_state, using_color if resin_state == "USING" else "#2b2b2b")
 
             cf_fan_color = "#1b6e3c" if ps.fan_ok_cf else "#b42318"
-            self._set_value("CF Fan OK", "Yes" if ps.fan_ok_cf else "No", cf_fan_color)
-            self._set_value("CF Current Temp", f"{ps.current_temp_cf:.1f}", "#2b2b2b")
-            self._set_value("CF Target Temp", f"{ps.target_temp_cf:.1f}", "#2b2b2b")
+            self._set_value("Carbon Fiber Fan OK", "Yes" if ps.fan_ok_cf else "No", cf_fan_color)
+            self._set_value("Carbon Fiber Current Temp", f"{ps.current_temp_cf:.1f}", "#2b2b2b")
+            self._set_value("Carbon Fiber Target Temp", f"{ps.target_temp_cf:.1f}", "#2b2b2b")
 
             resin_fan_color = "#1b6e3c" if ps.fan_ok_resin else "#b42318"
-            self._set_value("RESIN Fan OK", "Yes" if ps.fan_ok_resin else "No", resin_fan_color)
-            self._set_value("RESIN Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
-            self._set_value("RESIN Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
+            self._set_value("Resin Fan OK", "Yes" if ps.fan_ok_resin else "No", resin_fan_color)
+            self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
+            self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
         else:
             missing_keys = [
                 "Printhead Ready",
@@ -420,14 +1028,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "Ready Event Seq",
                 "Ready Event Type",
                 "Current Tool",
-                "CF State",
-                "CF Fan OK",
-                "CF Current Temp",
-                "CF Target Temp",
-                "RESIN State",
-                "RESIN Fan OK",
-                "RESIN Current Temp",
-                "RESIN Target Temp",
+                "Carbon Fiber State",
+                "Carbon Fiber Fan OK",
+                "Carbon Fiber Current Temp",
+                "Carbon Fiber Target Temp",
+                "Resin State",
+                "Resin Fan OK",
+                "Resin Current Temp",
+                "Resin Target Temp",
             ]
             for key in missing_keys:
                 self._set_value(key, "-", "#b42318")
@@ -528,6 +1136,80 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ):
                 self._set_value(key, "-", "#b42318")
 
+    def _on_pause(self):
+        self.command_submit.emit("PAUSE")
+
+    def _on_resume(self):
+        self.command_submit.emit("RESUME")
+
+    def _on_stop(self):
+        reply = QtWidgets.QMessageBox.warning(
+            self,
+            "Confirm Stop",
+            "Are you sure you want to STOP the print?\n\n"
+            "This will raise the Z axis and then cut all communication.\n"
+            "KUKA will trigger a safety stop.",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No,
+        )
+        if reply == QtWidgets.QMessageBox.Yes:
+            self.command_submit.emit("ABORT")
+
+    def _on_fan(self, head_id, on):
+        val = "1" if on else "0"
+        cmd = f"EV 0 fan_{head_id} {val}\n"
+        self.uart_command_submit.emit(cmd)
+
+    def _on_temp_apply(self, head_id):
+        temp_input = getattr(self, f"_temp_input_{head_id}")
+        text = temp_input.text().strip()
+        if not text:
+            return
+        try:
+            temp = float(text)
+        except ValueError:
+            return
+        if temp < 0:
+            return
+        cmd = f"EV 0 heat_{head_id} {temp}\n"
+        self.uart_command_submit.emit(cmd)
+
+    def _on_tool_switch(self, head_id):
+        tool_id = "1" if head_id == "cf" else "2"
+        event_type = f"tool_change_{head_id}"
+        cmd = f"EV 0 {event_type} {tool_id}\n"
+        self.uart_command_submit.emit(cmd)
+
+    _STATE_COLORS = {
+        "RUNNING": "#1b6e3c",
+        "WAIT_HEARTBEAT": "#b15e00",
+        "HEARTBEAT_LOST": "#b42318",
+        "PAUSED": "#1a73e8",
+        "ABORTING": "#b42318",
+        "ABORTED": "#b42318",
+    }
+
+    def _update_control_buttons(self, state):
+        color = self._STATE_COLORS.get(state, "#2b2b2b")
+        self._control_status.setText(state or "-")
+        self._control_status.setStyleSheet(f"color: {color}; font-weight: 700; font-size: 13px;")
+        if state == "PAUSED":
+            self._btn_pause.setEnabled(False)
+            self._btn_resume.setEnabled(True)
+            self._btn_stop.setEnabled(True)
+        elif state == "WAIT_HEARTBEAT":
+            self._btn_pause.setEnabled(False)
+            self._btn_resume.setEnabled(True)
+            self._btn_stop.setEnabled(True)
+        elif state in ("ABORTING", "ABORTED"):
+            self._btn_pause.setEnabled(False)
+            self._btn_resume.setEnabled(False)
+            self._btn_stop.setEnabled(False)
+        else:
+            self._btn_pause.setEnabled(True)
+            self._btn_resume.setEnabled(False)
+            self._btn_stop.setEnabled(True)
+
 
 class MyProjectUiPlugin(Plugin):
     def __init__(self, context):
@@ -541,9 +1223,26 @@ class MyProjectUiPlugin(Plugin):
         self._param_client = self._node.create_client(
             SetParameters, "/uart_node/set_parameters"
         )
+        self._cmd_pub = self._node.create_publisher(
+            StringMsg, "/system/command", 10
+        )
+        self._uart_cmd_pub = self._node.create_publisher(
+            StringMsg, "/uart/manual_command", 10
+        )
         self._widget = _UiStatusWidget()
         self._widget.scale_submit.connect(self._on_scale_submit)
+        self._widget.command_submit.connect(self._on_command_submit)
+        self._widget.uart_command_submit.connect(self._on_uart_command_submit)
         context.add_widget(self._widget)
+
+        # Launch state
+        self._launch_params = dict(_LAUNCH_DEFAULTS)
+        self._launch_process = None
+        self._widget._btn_launch_settings.clicked.connect(
+            self._on_launch_settings
+        )
+        self._widget._btn_launch.clicked.connect(self._on_launch)
+        self._widget._btn_stop_launch.clicked.connect(self._on_stop_launch)
 
         self._node.create_subscription(
             UiStatus, "/ui/status", self._on_status, 10
@@ -553,8 +1252,22 @@ class MyProjectUiPlugin(Plugin):
         self._spin_timer.timeout.connect(self._spin_once)
         self._spin_timer.start(50)
 
+        self._launch_check_timer = QtCore.QTimer(self._widget)
+        self._launch_check_timer.timeout.connect(self._check_launch_process)
+        self._launch_check_timer.start(1000)
+
     def _on_status(self, msg: UiStatus):
         self._widget.status_received.emit(msg)
+
+    def _on_command_submit(self, cmd: str):
+        msg = StringMsg()
+        msg.data = cmd
+        self._cmd_pub.publish(msg)
+
+    def _on_uart_command_submit(self, cmd: str):
+        msg = StringMsg()
+        msg.data = cmd
+        self._uart_cmd_pub.publish(msg)
 
     def _on_scale_submit(self, value: float):
         if not self._param_client.service_is_ready():
@@ -585,7 +1298,99 @@ class MyProjectUiPlugin(Plugin):
     def _spin_once(self):
         rclpy.spin_once(self._node, timeout_sec=0.0)
 
+    # ---- Launch control ----
+
+    def _on_launch_settings(self):
+        dialog = _LaunchSettingsDialog(self._launch_params, self._widget)
+        if dialog.exec_() == QtWidgets.QDialog.Accepted:
+            self._launch_params = dialog.get_params()
+
+    def _on_launch(self):
+        if (
+            self._launch_process is not None
+            and self._launch_process.poll() is None
+        ):
+            return
+        cmd = ["ros2", "launch", "my_project_startup", "startup.launch.py"]
+        for name, value in self._launch_params.items():
+            default = _LAUNCH_DEFAULTS.get(name, "")
+            if value != default:
+                cmd.append(f"{name}:={value}")
+        try:
+            self._launch_process = subprocess.Popen(
+                cmd,
+                preexec_fn=os.setsid,
+            )
+            self._widget._btn_launch.setEnabled(False)
+            self._widget._btn_stop_launch.setEnabled(True)
+            self._widget._btn_launch_settings.setEnabled(False)
+            self._widget._launch_status.setText("已启动 (等待 KUKA 首包…)")
+            self._widget._launch_status.setStyleSheet(
+                "color: #1b6e3c; font-weight: 700; font-size: 13px;"
+            )
+        except Exception as exc:
+            self._widget._launch_status.setText(f"启动失败: {exc}")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+
+    def _on_stop_launch(self):
+        if (
+            self._launch_process is not None
+            and self._launch_process.poll() is None
+        ):
+            try:
+                os.killpg(
+                    os.getpgid(self._launch_process.pid), signal.SIGTERM
+                )
+            except OSError:
+                self._launch_process.terminate()
+        self._launch_process = None
+        self._widget._btn_launch.setEnabled(True)
+        self._widget._btn_stop_launch.setEnabled(False)
+        self._widget._btn_launch_settings.setEnabled(True)
+        self._widget._launch_status.setText("已停止")
+        self._widget._launch_status.setStyleSheet(
+            "color: #b42318; font-weight: 700; font-size: 13px;"
+        )
+
+    def _check_launch_process(self):
+        if self._launch_process is None:
+            return
+        rc = self._launch_process.poll()
+        if rc is not None:
+            self._launch_process = None
+            self._widget._btn_launch.setEnabled(True)
+            self._widget._btn_stop_launch.setEnabled(False)
+            self._widget._btn_launch_settings.setEnabled(True)
+            if rc == 0:
+                self._widget._launch_status.setText("已退出")
+                self._widget._launch_status.setStyleSheet(
+                    "color: #666666; font-weight: 700; font-size: 13px;"
+                )
+            else:
+                self._widget._launch_status.setText(
+                    f"异常退出 (code {rc})"
+                )
+                self._widget._launch_status.setStyleSheet(
+                    "color: #b42318; font-weight: 700; font-size: 13px;"
+                )
+
     def shutdown_plugin(self):
+        if self._launch_check_timer.isActive():
+            self._launch_check_timer.stop()
         if self._spin_timer.isActive():
             self._spin_timer.stop()
+        # Terminate launch process if running
+        if (
+            self._launch_process is not None
+            and self._launch_process.poll() is None
+        ):
+            try:
+                os.killpg(
+                    os.getpgid(self._launch_process.pid), signal.SIGTERM
+                )
+            except OSError:
+                self._launch_process.terminate()
+            self._launch_process = None
         self._node.destroy_node()

@@ -45,12 +45,13 @@ using my_project_interfaces::msg::KukaStatus; //KUKA状态
 class RSINode : public rclcpp::Node
 {
 private:
-  enum class State {RUN, WAIT}; //状态机两种状态
+  enum class State {RUN, WAIT, PAUSE, ABORT}; //状态机四种状态
 
   //订阅 
   rclcpp::Subscription<TrajectoryPoint>::SharedPtr traj_sub_; //轨迹点
   rclcpp::Subscription<PlannedEvent>::SharedPtr event_sub_; //事件
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr status_sub_; //打印头状态
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_; //系统命令
   //发布 
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr kuka_pub_;  //收到kuka xml
   rclcpp::Publisher<KukaStatus>::SharedPtr kuka_status_pub_;  //解析后的KUKA状态
@@ -83,8 +84,15 @@ private:
   rclcpp::Time last_resync_time_;
 
   //状态机
-  State state_{State::WAIT}; //默认状态
+  std::atomic<State> state_{State::WAIT}; //默认状态
+  std::atomic<State> pre_pause_state_{State::WAIT}; //暂停前的状态，用于RESUME恢复
   std::optional<PlannedEvent> current_wait_;//当前事件
+
+  //ABORT Z轴抬升
+  double abort_lift_mm_{100.0}; //抬升距离(mm)
+  double abort_lift_speed_mm_s_{10.0}; //抬升速度(mm/s)
+  double abort_step_mm_{0.0}; //每帧抬升步长(mm)，在构造函数中计算
+  std::atomic<int> abort_lift_remaining_{0}; //剩余抬升帧数
 
   //UDP
   std::string sen_type_;
@@ -105,6 +113,12 @@ public:
     decimal_precision_ = declare_parameter<int>("decimal_precision", 6);  //收发数据小数点位数，需在rsi上下文同步修改
     local_ip_ = declare_parameter<std::string>("local_ip", "192.168.1.1");  //ip
     local_port_ = declare_parameter<int>("local_port", 49152);  //端口
+    abort_lift_mm_ = declare_parameter<double>("abort_lift_mm", 100.0);  //ABORT抬升距离(mm)
+    abort_lift_speed_mm_s_ = declare_parameter<double>("abort_lift_speed_mm_s", 10.0);  //ABORT抬升速度(mm/s)
+
+    // 计算每帧(4ms)的Z轴抬升步长
+    constexpr double RSI_PERIOD_S = 0.004; // 4ms
+    abort_step_mm_ = abort_lift_speed_mm_s_ * RSI_PERIOD_S;
 
     last_sent_ = TrajectoryPoint();//全0，不进入队列，不影响对齐
 
@@ -144,6 +158,16 @@ public:
         ready_ack_.ready_for_motion = msg->ready_for_motion;
         ready_ack_.ready_event_seq = msg->ready_event_seq;
         ready_ack_.ready_event_type = msg->ready_event_type;
+      }
+    );
+
+    //订阅系统命令
+    cmd_sub_ = create_subscription<std_msgs::msg::String>(
+      "/system/command",
+      rclcpp::QoS(10).reliable(),
+      [this](std_msgs::msg::String::SharedPtr msg)
+      {
+        on_system_command(msg->data);
       }
     );
 
@@ -231,8 +255,11 @@ private:
       //********默认发送上一帧********
       TrajectoryPoint to_send = *last_sent_;
 
+      // 读取当前状态（atomic）
+      State current_state = state_.load();
+
       //状态机 严格对齐seq
-      if (state_ == State::RUN)
+      if (current_state == State::RUN)
       {
         if (should_enter_wait(next_seq_)) //事件触发了等待:判断trigger_seq是否到达当前traj序号
         {
@@ -241,7 +268,7 @@ private:
           {
             triggered_event_pub_->publish(*current_wait_);
             last_event_seq_triggered_ = current_wait_->trigger_seq;
-            state_ = State::WAIT;
+            state_.store(State::WAIT);
           }
           //此时保持last_sent_
         }
@@ -305,14 +332,49 @@ private:
           //队列空则继续last_sent_
         }
       }
-      else //State::WAIT
+      else if (current_state == State::WAIT)
       {
         if(is_wait_cleared()) // UART当前事件就绪后解除等待
         {
-          state_ = State::RUN;
+          state_.store(State::RUN);
           current_wait_.reset();
         }
         // WAIT期间始终重发 last_sent_
+      }
+      else if (current_state == State::PAUSE)
+      {
+        // PAUSE期间始终重发 last_sent_（冻结帧），保持KUKA存活
+      }
+      else if (current_state == State::ABORT)
+      {
+        // ABORT: 在last_sent_基础上逐帧Z轴抬升
+        if (abort_lift_remaining_.load() > 0)
+        {
+          to_send = *last_sent_;
+          to_send.z += abort_step_mm_;
+          to_send.e = last_sent_->e; // 挤出量冻结
+          last_sent_ = to_send;
+          abort_lift_remaining_.fetch_sub(1);
+        }
+        else
+        {
+          // 抬升完成，切断UDP循环
+          RCLCPP_WARN(get_logger(), "ABORT Z轴抬升完成(%.1fmm)，切断RSI通信", abort_lift_mm_);
+          // 先发送最后一帧回复，然后退出循环
+          RsiHeartBeat hb;
+          hb.stamp = now();
+          hb.ipoc = ipoc;
+          hb.seq_used = to_send.seq;
+          hb.tool_id = to_send.tool_id;
+          hb.extrude_abs = to_send.e;
+          heartbeat_pub_->publish(hb);
+
+          std::string reply = build_reply(ipoc, to_send);
+          sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+
+          run_udp_.store(false); // 退出UDP循环 → KUKA通信中断 → 安全制动
+          continue;
+        }
       }
       
       //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐 
@@ -382,6 +444,33 @@ private:
   {
     std::lock_guard<std::mutex> lk(event_mutex_);
     return event_seq_seen_.find(seq) != event_seq_seen_.end();
+  }
+
+  void on_system_command(const std::string &cmd)
+  {
+    if (cmd == "PAUSE")
+    {
+      State cur = state_.load();
+      if (cur == State::PAUSE || cur == State::ABORT) return; // 已暂停或已终止
+      pre_pause_state_.store(cur); // 记住暂停前的状态
+      state_.store(State::PAUSE);
+      RCLCPP_INFO(get_logger(), "RSI收到PAUSE命令，冻结轨迹推进");
+    }
+    else if (cmd == "RESUME")
+    {
+      if (state_.load() != State::PAUSE) return; // 仅从PAUSE状态恢复
+      state_.store(pre_pause_state_.load()); // 恢复暂停前的状态
+      RCLCPP_INFO(get_logger(), "RSI收到RESUME命令，恢复轨迹推进");
+    }
+    else if (cmd == "ABORT")
+    {
+      if (state_.load() == State::ABORT) return; // 已在终止流程
+      int frames = static_cast<int>(abort_lift_mm_ / abort_step_mm_);
+      abort_lift_remaining_.store(frames);
+      state_.store(State::ABORT);
+      RCLCPP_WARN(get_logger(), "RSI收到ABORT命令，开始Z轴抬升 %.1fmm (%d帧)",
+                  abort_lift_mm_, frames);
+    }
   }
 
   std::string extract_ipoc(const std::string &xml)//提取时间戳

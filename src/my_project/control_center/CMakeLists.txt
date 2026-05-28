@@ -48,6 +48,7 @@ ament_target_dependencies(
   system_manager_node
   rclcpp
   my_project_interfaces
+  std_msgs
 )
 
 install(TARGETS center_node system_manager_node DESTINATION lib/${PROJECT_NAME})

@@ -45,6 +45,8 @@ private:
     //ROS
     rclcpp::Subscription<PlannedEvent>::SharedPtr event_sub_;
     rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr manual_cmd_sub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr uart_raw_pub_;
     rclcpp::Publisher<PrintHeadStatus>::SharedPtr ready_pub_;
 
@@ -69,6 +71,8 @@ private:
     std::string recv_buf_;
     std::mutex serial_write_mutex_;
     std::atomic<double> extrude_scale_{1.0};
+    std::atomic<bool> paused_{false};
+    std::atomic<bool> aborted_{false};
     rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
     
 public:
@@ -115,6 +119,23 @@ public:
             event_qos,
             [this](PlannedEvent::SharedPtr msg){
                 on_triggered_event(*msg);
+            }
+        );
+        //订阅系统命令
+        cmd_sub_ = create_subscription<std_msgs::msg::String>(
+            "/system/command",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg){
+                on_system_command(msg->data);
+            }
+        );
+        //订阅UI手动控制命令
+        manual_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+            "/uart/manual_command",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg){
+                RCLCPP_INFO(get_logger(), "收到手动控制命令: %s", msg->data.c_str());
+                write_line(msg->data);
             }
         );
         //发布UART状态
@@ -236,6 +257,10 @@ private:
 
     void on_heartbeat(const RsiHeartBeat &hb)//心跳触发挤出
     {
+        // PAUSE 或 ABORT 时不转发挤出命令
+        if (paused_.load() || aborted_.load()) {
+            return;
+        }
         const double scale = extrude_scale_.load();
         const double scaled = hb.extrude_abs * scale;
         send_extrude_command(hb.seq_used, hb.tool_id, static_cast<float>(scaled));
@@ -349,11 +374,23 @@ private:
         }
         else if (ev.event_type == "fan_cf")
         {
-            done = snapshot.fan_ok_cf;
+            try {
+                bool target = std::stoi(ev.payload) != 0;
+                done = (snapshot.fan_ok_cf == target);
+            } catch(...) {
+                RCLCPP_WARN(get_logger(), "fan_cf事件payload格式错误: '%s'，跳过等待", ev.payload.c_str());
+                done = true; // Fallback
+            }
         }
         else if (ev.event_type == "fan_resin")
         {
-            done = snapshot.fan_ok_resin;
+            try {
+                bool target = std::stoi(ev.payload) != 0;
+                done = (snapshot.fan_ok_resin == target);
+            } catch(...) {
+                RCLCPP_WARN(get_logger(), "fan_resin事件payload格式错误: '%s'，跳过等待", ev.payload.c_str());
+                done = true; // Fallback
+            }
         }
         else if (ev.event_type == "extrude_reset")
         {
@@ -387,6 +424,35 @@ private:
                 2000,
                 "写入失败：%s",
                 ec.message().c_str());
+        }
+    }
+
+    void on_system_command(const std::string &cmd)
+    {
+        if (cmd == "PAUSE")
+        {
+            paused_.store(true);
+            RCLCPP_INFO(get_logger(), "uart_node收到PAUSE命令，停止挤出转发");
+        }
+        else if (cmd == "RESUME")
+        {
+            paused_.store(false);
+            RCLCPP_INFO(get_logger(), "uart_node收到RESUME命令，恢复挤出转发");
+        }
+        else if (cmd == "ABORT")
+        {
+            aborted_.store(true);
+            paused_.store(true);
+            // 通过现有EV串口指令将两个喷头加热温度设为0°C
+            write_line("EV 0 heat_cf 0\n");
+            write_line("EV 0 heat_resin 0\n");
+            // 更新本地温度缓存
+            {
+                std::lock_guard<std::mutex> lk(status_cache_mutex_);
+                status_.target_temp_cf = 0.0f;
+                status_.target_temp_resin = 0.0f;
+            }
+            RCLCPP_WARN(get_logger(), "uart_node收到ABORT命令，停止挤出并关闭加热");
         }
     }
 };
