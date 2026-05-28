@@ -6,17 +6,19 @@ from rcl_interfaces.srv import SetParameters
 import subprocess
 import os
 import signal
+import json
+import threading
 
 from my_project_interfaces.msg import UiStatus
 
 from std_msgs.msg import String as StringMsg
+import re
+from pathlib import Path
 
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
     ("center_start_delay_s", "1.0", "Delay before starting center_node (seconds)", "Center Node"),
-    ("npz_path", "/home/jayson/kuka_ram_ws/data/output_npz/test.npz",
-     "Trajectory/event NPZ file path", "Center Node"),
     ("npz_preload_chunks", "2", "NPZ preload chunk count", "Center Node"),
     ("queue_low", "1000", "Trajectory queue low watermark", "Center Node"),
     ("queue_high", "2000", "Trajectory queue high watermark", "Center Node"),
@@ -120,33 +122,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
                     widget = QtWidgets.QCheckBox(description)
                     widget.setChecked(current_val.lower() == "true")
                     form.addRow(label, widget)
-                elif param_name == "npz_path":
-                    row_widget = QtWidgets.QWidget()
-                    row_lay = QtWidgets.QHBoxLayout(row_widget)
-                    row_lay.setContentsMargins(0, 0, 0, 0)
-                    row_lay.setSpacing(4)
-                    line_edit = QtWidgets.QLineEdit(current_val)
-                    line_edit.setToolTip(description)
-                    line_edit.setStyleSheet(
-                        "border: 1px solid #d0d0d0; border-radius: 4px;"
-                        " padding: 4px 6px; background: #ffffff;"
-                    )
-                    browse_btn = QtWidgets.QPushButton("…")
-                    browse_btn.setFixedWidth(32)
-                    browse_btn.setFixedHeight(28)
-                    browse_btn.setCursor(QtCore.Qt.PointingHandCursor)
-                    browse_btn.setStyleSheet(
-                        "border: 1px solid #1a73e8; border-radius: 4px;"
-                        " background: #ffffff; color: #1a73e8;"
-                        " font-weight: 600;"
-                    )
-                    browse_btn.clicked.connect(
-                        lambda checked, le=line_edit: self._browse_file(le)
-                    )
-                    row_lay.addWidget(line_edit, 1)
-                    row_lay.addWidget(browse_btn)
-                    form.addRow(label, row_widget)
-                    widget = line_edit
+
                 else:
                     widget = QtWidgets.QLineEdit(current_val)
                     widget.setToolTip(description)
@@ -202,15 +178,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
 
         self.setStyleSheet("QWidget { background: #f7f7f7; }")
 
-    def _browse_file(self, line_edit):
-        path, _ = QtWidgets.QFileDialog.getOpenFileName(
-            self,
-            "Select NPZ / Manifest File",
-            os.path.dirname(line_edit.text()) or "",
-            "NPZ Files (*.npz);;JSON Manifest (*.json);;All Files (*)",
-        )
-        if path:
-            line_edit.setText(path)
+
 
     def _reset_defaults(self):
         for name, default_val in _LAUNCH_DEFAULTS.items():
@@ -233,17 +201,224 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         return result
 
 
+class _AutoScaleLabel(QtWidgets.QLabel):
+    def __init__(self, text=""):
+        super().__init__(text)
+        self.setAlignment(QtCore.Qt.AlignCenter)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
+        self._color = "#2b2b2b"
+
+    def set_color(self, color):
+        self._color = color
+        self.update_style()
+
+    def update_style(self):
+        self.setStyleSheet(f"color: {self._color}; font-weight: 900;")
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        rect = self.rect()
+        if rect.height() > 0:
+            font = self.font()
+            pixel_size = max(12, int(rect.height() * 0.55))
+            font.setPixelSize(pixel_size)
+            self.setFont(font)
+
+
+
+_OFFSET_CONFIG_DIR = os.path.expanduser("~/.config/my_project")
+_OFFSET_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "tool_offset.json")
+_OFFSET_DEFAULTS = {"tool_offset_x": 0.64, "tool_offset_y": -1.29, "tool_offset_z": 0.17}
+
+
+def _load_offset_config():
+    try:
+        with open(_OFFSET_CONFIG_PATH, "r") as f:
+            data = json.load(f)
+        return {
+            "tool_offset_x": float(data.get("tool_offset_x", _OFFSET_DEFAULTS["tool_offset_x"])),
+            "tool_offset_y": float(data.get("tool_offset_y", _OFFSET_DEFAULTS["tool_offset_y"])),
+            "tool_offset_z": float(data.get("tool_offset_z", _OFFSET_DEFAULTS["tool_offset_z"])),
+        }
+    except Exception:
+        return dict(_OFFSET_DEFAULTS)
+
+
+def _save_offset_config(x, y, z):
+    os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
+    with open(_OFFSET_CONFIG_PATH, "w") as f:
+        json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z}, f, indent=2)
+
+
+class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
+    zoom_changed = QtCore.pyqtSignal(float)
+
+    def wheelEvent(self, event):
+        factor = 1.15
+        if event.angleDelta().y() > 0:
+            zoom = factor
+        else:
+            zoom = 1.0 / factor
+        self.scale(zoom, zoom)
+        self.zoom_changed.emit(self.transform().m11())
+
+
+class _LayerViewerDialog(QtWidgets.QDialog):
+    def __init__(self, npz_dir: str, parent=None):
+        super().__init__(parent)
+        self._npz_dir = npz_dir
+        self._images: list[Path] = []
+        self._index = 0
+        self._zoom = 1.0
+
+        self.setWindowTitle(f"Layer Preview - {Path(npz_dir).name}")
+        self.resize(900, 700)
+
+        self._scan_images()
+        self._build_ui()
+        self._show_current()
+
+    def _scan_images(self):
+        preview_dir = Path(self._npz_dir) / "layer_previews"
+        if not preview_dir.is_dir():
+            return
+        pattern = re.compile(r"layer_(\d+)\.png$")
+        files = []
+        for f in sorted(preview_dir.iterdir()):
+            m = pattern.match(f.name)
+            if m:
+                files.append((int(m.group(1)), f))
+        files.sort(key=lambda x: x[0])
+        self._images = [f[1] for f in files]
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        # Top bar: prev / label / next
+        top_bar = QtWidgets.QHBoxLayout()
+        self._btn_prev = QtWidgets.QPushButton("←  Prev")
+        self._btn_prev.setFixedWidth(100)
+        self._btn_prev.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_next = QtWidgets.QPushButton("Next  →")
+        self._btn_next.setFixedWidth(100)
+        self._btn_next.setCursor(QtCore.Qt.PointingHandCursor)
+        self._label_index = QtWidgets.QLabel("")
+        self._label_index.setAlignment(QtCore.Qt.AlignCenter)
+        top_bar.addWidget(self._btn_prev)
+        top_bar.addStretch()
+        top_bar.addWidget(self._label_index)
+        top_bar.addStretch()
+        top_bar.addWidget(self._btn_next)
+        layout.addLayout(top_bar)
+
+        # Image area
+        self._scene = QtWidgets.QGraphicsScene(self)
+        self._view = _ZoomableGraphicsView(self._scene)
+        self._view.setDragMode(QtWidgets.QGraphicsView.ScrollHandDrag)
+        self._view.setRenderHints(
+            QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform
+        )
+        layout.addWidget(self._view, 1)
+
+        # Bottom bar: zoom label + reset + close
+        bottom_bar = QtWidgets.QHBoxLayout()
+        self._label_zoom = QtWidgets.QLabel("Zoom: 100%")
+        btn_reset = QtWidgets.QPushButton("Reset View")
+        btn_reset.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_close = QtWidgets.QPushButton("Close")
+        btn_close.setCursor(QtCore.Qt.PointingHandCursor)
+        bottom_bar.addWidget(self._label_zoom)
+        bottom_bar.addStretch()
+        bottom_bar.addWidget(btn_reset)
+        bottom_bar.addWidget(btn_close)
+        layout.addLayout(bottom_bar)
+
+        # Connections
+        self._btn_prev.clicked.connect(self._on_prev)
+        self._btn_next.clicked.connect(self._on_next)
+        btn_reset.clicked.connect(self._on_reset)
+        btn_close.clicked.connect(self.accept)
+        self._view.zoom_changed.connect(self._on_zoom_changed)
+
+    def _show_current(self):
+        if not self._images:
+            self._label_index.setText("No images found")
+            self._btn_prev.setEnabled(False)
+            self._btn_next.setEnabled(False)
+            return
+        total = len(self._images)
+        self._label_index.setText(f"Layer {self._index + 1} / {total}")
+        self._btn_prev.setEnabled(self._index > 0)
+        self._btn_next.setEnabled(self._index < total - 1)
+
+        pixmap = QtGui.QPixmap(str(self._images[self._index]))
+        if pixmap.isNull():
+            self._label_index.setText("Failed to load image")
+            return
+        self._scene.clear()
+        self._scene.addPixmap(pixmap)
+        self._scene.setSceneRect(pixmap.rect())
+        self._on_reset()
+
+    def _on_prev(self):
+        if self._index > 0:
+            self._index -= 1
+            self._show_current()
+
+    def _on_next(self):
+        if self._index < len(self._images) - 1:
+            self._index += 1
+            self._show_current()
+
+    def _on_reset(self):
+        self._view.fitInView(self._scene.sceneRect(), QtCore.Qt.KeepAspectRatio)
+        self._zoom = 1.0
+        self._label_zoom.setText("Zoom: 100%")
+
+    def _on_zoom_changed(self, scale):
+        self._zoom = scale
+        self._label_zoom.setText(f"Zoom: {scale * 100:.0f}%")
+
+    def keyPressEvent(self, event):
+        if event.key() == QtCore.Qt.Key_Left:
+            self._on_prev()
+        elif event.key() == QtCore.Qt.Key_Right:
+            self._on_next()
+        else:
+            super().keyPressEvent(event)
+
+
 class _UiStatusWidget(QtWidgets.QWidget):
     status_received = QtCore.pyqtSignal(object)
     scale_submit = QtCore.pyqtSignal(float)
     command_submit = QtCore.pyqtSignal(str)
     uart_command_submit = QtCore.pyqtSignal(str)
+    export_finished = QtCore.pyqtSignal(bool, str)  # (success, message)
+    export_progress = QtCore.pyqtSignal(str)  # status text
+    export_progress_val = QtCore.pyqtSignal(int)  # percentage (0-100)
 
     def __init__(self):
         super().__init__()
         self._extrude_scale_current = 1.0
         self._build_ui()
         self.status_received.connect(self._update_ui)
+        self.export_progress_val.connect(self._on_export_progress_val)
+        
+        self._align_timer = QtCore.QTimer(self)
+        self._align_timer.timeout.connect(self._dynamic_align)
+        self._align_timer.start(50)
+
+    def _dynamic_align(self):
+        if not hasattr(self, '_system_box'): return
+        h1 = self._col1_layout.sizeHint().height()
+        h0_widgets = [self._kuka_box, self._heartbeat_box, self._traj_box]
+        h0_rest = sum(w.sizeHint().height() for w in h0_widgets)
+        h0_rest += self._col0_layout.spacing() * len(h0_widgets)
+        target_h = h1 - h0_rest
+        if target_h > 40 and abs(self._system_box.height() - target_h) > 1:
+            self._system_box.setFixedHeight(target_h)
 
     def _build_ui(self):
         layout = QtWidgets.QGridLayout(self)
@@ -252,6 +427,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         layout.setVerticalSpacing(6)
         layout.setColumnStretch(0, 1)
         layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 1)
 
         self._labels = {}
         value_min_width = QtWidgets.QLabel("0").fontMetrics().horizontalAdvance("0") * 5
@@ -273,11 +449,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             label_metrics.horizontalAdvance(text) for text in cf_resin_label_titles
         )
 
-        title = QtWidgets.QLabel("Status Overview")
+        title = QtWidgets.QLabel("System Control Panel")
         title.setObjectName("titleLabel")
         title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         title.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        layout.addWidget(title, 0, 0, 1, 2)
+        layout.addWidget(title, 0, 0, 1, 3)
 
         def add_group(
             group_title,
@@ -291,6 +467,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             group_box = QtWidgets.QGroupBox(group_title)
             if object_name:
                 group_box.setObjectName(object_name)
+            
             form = QtWidgets.QFormLayout(group_box)
             form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
@@ -313,58 +490,46 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 label_value.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
                 form.addRow(label_title, label_value)
                 self._labels[key] = label_value
+
             if parent_layout is not None:
                 parent_layout.addWidget(group_box)
             elif add_to_layout:
                 layout.addWidget(group_box)
             return group_box
 
-        left_column = QtWidgets.QVBoxLayout()
-        left_column.setSpacing(6)
-        right_column = QtWidgets.QVBoxLayout()
-        right_column.setSpacing(6)
+        col0_layout = QtWidgets.QVBoxLayout()
+        col0_layout.setSpacing(6)
+        self._col0_layout = col0_layout
+        col1_layout = QtWidgets.QVBoxLayout()
+        col1_layout.setSpacing(6)
+        self._col1_layout = col1_layout
+        col2_layout = QtWidgets.QVBoxLayout()
+        col2_layout.setSpacing(6)
 
-        system_box = add_group("System", [
-            ("System State", "State"),
-        ], add_to_layout=False)
+        system_box = QtWidgets.QGroupBox("System State")
+        system_box.setObjectName("groupSystem")
         system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        printhead_box = QtWidgets.QGroupBox("Printhead")
-        printhead_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        printhead_layout = QtWidgets.QVBoxLayout(printhead_box)
-        printhead_layout.setSpacing(6)
-        add_group("General", [
-            ("Printhead Ready", "Ready"),
-            ("Printhead Age", "Age"),
-            ("Printhead Stamp", "Stamp"),
-            ("Ready Event Seq", "Ready Seq"),
-            ("Ready Event Type", "Ready Type"),
-            ("Current Tool", "Tool"),
-        ], parent_layout=printhead_layout)
-        printhead_row = QtWidgets.QHBoxLayout()
-        printhead_row.setSpacing(8)
-        cf_box = add_group("Carbon Fiber", cf_labels,
-        parent_layout=printhead_row, object_name="groupPrintheadCF",
-            label_min_width=cf_resin_label_min_width,
-            value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        resin_box = add_group("Resin", resin_labels,
-        parent_layout=printhead_row, object_name="groupPrintheadResin",
-            label_min_width=cf_resin_label_min_width,
-            value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        cf_box.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        resin_box.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Preferred)
-        printhead_row.setStretch(0, 1)
-        printhead_row.setStretch(1, 1)
-        printhead_layout.addLayout(printhead_row)
-        printhead_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        right_column.addWidget(printhead_box)
+        self._system_box = system_box
+        system_layout = QtWidgets.QVBoxLayout(system_box)
+        system_layout.setSpacing(0)
+        system_layout.setContentsMargins(4, 12, 4, 12)
+        
+        sys_val = _AutoScaleLabel("OFFLINE")
+        sys_val.setObjectName("valueLabel")
+        sys_val.setAlignment(QtCore.Qt.AlignCenter)
+        
+        system_layout.addWidget(sys_val, 1)
+        
+        self._labels["System State"] = sys_val
+        col0_layout.addWidget(system_box)
+
         kuka_box = QtWidgets.QGroupBox("KUKA Pos")
+        self._kuka_box = kuka_box
         kuka_box.setObjectName("groupKuka")
         kuka_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        kuka_layout = QtWidgets.QVBoxLayout(kuka_box)
+        kuka_layout = QtWidgets.QGridLayout(kuka_box)
         kuka_layout.setSpacing(6)
-        axes_row = QtWidgets.QHBoxLayout()
-        axes_row.setSpacing(6)
-        for axis in ("X", "Y", "Z", "A", "B", "C"):
+        for i, axis in enumerate(("X", "Y", "Z", "A", "B", "C")):
             axis_widget = QtWidgets.QWidget()
             axis_layout = QtWidgets.QVBoxLayout(axis_widget)
             axis_layout.setContentsMargins(2, 2, 2, 2)
@@ -381,19 +546,22 @@ class _UiStatusWidget(QtWidgets.QWidget):
             axis_value.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
             axis_layout.addWidget(axis_label)
             axis_layout.addWidget(axis_value)
-            axes_row.addWidget(axis_widget)
+            kuka_layout.addWidget(axis_widget, i // 3, i % 3)
             self._labels[f"KUKA {axis}"] = axis_value
-        kuka_layout.addLayout(axes_row)
-        left_column.addWidget(kuka_box)
+        col0_layout.addWidget(kuka_box)
+        
         heartbeat_box = add_group("Heartbeat", [
             ("Heartbeat Age", "Age"),
             ("Heartbeat Seq", "Seq"),
             ("Heartbeat IPOC", "IPOC"),
             ("Heartbeat Tool", "Tool"),
             ("Heartbeat Extrude", "Extrude"),
-        ], parent_layout=left_column, object_name="groupHeartbeat")
+        ], parent_layout=col0_layout, object_name="groupHeartbeat")
+        self._heartbeat_box = heartbeat_box
         heartbeat_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        
         traj_box = QtWidgets.QGroupBox("Trajectory")
+        self._traj_box = traj_box
         traj_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         traj_layout = QtWidgets.QVBoxLayout(traj_box)
         traj_layout.setSpacing(6)
@@ -428,25 +596,62 @@ class _UiStatusWidget(QtWidgets.QWidget):
         traj_row.setStretch(0, 1)
         traj_row.setStretch(1, 1)
         traj_layout.addLayout(traj_row)
-        left_column.addWidget(traj_box)
-
-        events_box = QtWidgets.QGroupBox("Events")
-        events_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        events_layout = QtWidgets.QVBoxLayout(events_box)
-        events_layout.setSpacing(6)
-        add_group("Summary", [
-            ("Next Event Seq", "Next Seq"),
-            ("Events Pending", "Pending"),
-        ], parent_layout=events_layout)
+        col0_layout.addWidget(traj_box)
+        
+        # ======== Column 1: Printhead ========
+        
+        ph_overview_box = QtWidgets.QGroupBox("Printhead Overview")
+        ph_overview_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        ph_overview_layout = QtWidgets.QVBoxLayout(ph_overview_box)
+        ph_overview_layout.setSpacing(6)
+        
+        events_summary_box = QtWidgets.QGroupBox("Events Summary")
+        events_summary_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        events_summary_layout = QtWidgets.QHBoxLayout(events_summary_box)
+        events_summary_layout.setSpacing(12)
+        
+        lbl1 = QtWidgets.QLabel("Next Seq")
+        lbl1.setObjectName("fieldLabel")
+        val1 = QtWidgets.QLabel("-")
+        val1.setObjectName("valueLabel")
+        val1.setMinimumWidth(value_min_width)
+        val1.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        events_summary_layout.addWidget(lbl1)
+        events_summary_layout.addWidget(val1)
+        
+        lbl2 = QtWidgets.QLabel("Pending")
+        lbl2.setObjectName("fieldLabel")
+        val2 = QtWidgets.QLabel("-")
+        val2.setObjectName("valueLabel")
+        val2.setMinimumWidth(value_min_width)
+        val2.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        events_summary_layout.addWidget(lbl2)
+        events_summary_layout.addWidget(val2)
+        
+        events_summary_layout.addStretch(1)
+        ph_overview_layout.addWidget(events_summary_box)
+        
+        add_group("General", [
+            ("Printhead Ready", "Ready"),
+            ("Printhead Age", "Age"),
+            ("Printhead Stamp", "Stamp"),
+            ("Ready Event Seq", "Ready Seq"),
+            ("Ready Event Type", "Ready Type"),
+            ("Current Tool", "Tool"),
+        ], parent_layout=ph_overview_layout)
+        
+        self._labels["Next Event Seq"] = val1
+        self._labels["Events Pending"] = val2
+        
         events_row = QtWidgets.QHBoxLayout()
         events_row.setSpacing(8)
-        add_group("Current", [
+        add_group("Current Event", [
             ("Event Type", "Type"),
             ("Event Payload", "Payload"),
             ("Event Src Line", "Src Line"),
             ("Event Trigger Seq", "Trigger Seq"),
         ], parent_layout=events_row)
-        add_group("Next", [
+        add_group("Next Event", [
             ("Event Type (Next)", "Type"),
             ("Event Payload (Next)", "Payload"),
             ("Event Src Line (Next)", "Src Line"),
@@ -454,17 +659,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         ], parent_layout=events_row)
         events_row.setStretch(0, 1)
         events_row.setStretch(1, 1)
-        events_layout.addLayout(events_row)
-        right_column.addWidget(events_box)
-
-        # ======== Printhead Control 区域 ========
-        ph_control_box = QtWidgets.QGroupBox("Printhead Control")
-        ph_control_box.setObjectName("groupPrintheadControl")
-        ph_control_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        ph_control_outer = QtWidgets.QVBoxLayout(ph_control_box)
-        ph_control_outer.setSpacing(8)
-
-        # -- Tool Switch row --
+        ph_overview_layout.addLayout(events_row)
+        
+        col1_layout.addWidget(ph_overview_box)
+        
+        ph_tools_box = QtWidgets.QGroupBox("Tool Management")
+        ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        ph_tools_layout = QtWidgets.QVBoxLayout(ph_tools_box)
+        ph_tools_layout.setSpacing(8)
+        
         tool_row = QtWidgets.QHBoxLayout()
         tool_row.setSpacing(12)
         tool_label = QtWidgets.QLabel("Switch Tool")
@@ -480,20 +683,58 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_tool_resin.setCursor(QtCore.Qt.PointingHandCursor)
         tool_row.addWidget(self._btn_tool_cf)
         tool_row.addWidget(self._btn_tool_resin)
-        ph_control_outer.addLayout(tool_row)
-
-        # -- Carbon Fiber / RESIN side-by-side panels --
+        ph_tools_layout.addLayout(tool_row)
+        
+        extrude_inner = QtWidgets.QHBoxLayout()
+        extrude_inner.setSpacing(10)
+        extrude_cur_label = QtWidgets.QLabel("Extrude Scale Current")
+        extrude_cur_label.setObjectName("fieldLabel")
+        self._extrude_scale_value = QtWidgets.QLabel("1.000")
+        self._extrude_scale_value.setObjectName("valueLabel")
+        self._extrude_scale_value.setMinimumWidth(value_min_width)
+        extrude_set_label = QtWidgets.QLabel("Set")
+        extrude_set_label.setObjectName("fieldLabel")
+        self._extrude_scale_input = QtWidgets.QLineEdit()
+        self._extrude_scale_input.setPlaceholderText("1.0")
+        self._extrude_scale_input.setMaximumWidth(80)
+        validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, self._extrude_scale_input)
+        validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+        self._extrude_scale_input.setValidator(validator)
+        self._extrude_scale_apply = QtWidgets.QPushButton("Apply")
+        self._extrude_scale_apply.setObjectName("btnTempApply_extrude")
+        self._extrude_scale_apply.setMinimumHeight(28)
+        self._extrude_scale_apply.setCursor(QtCore.Qt.PointingHandCursor)
+        self._extrude_scale_status = QtWidgets.QLabel("-")
+        self._extrude_scale_status.setObjectName("valueLabel")
+        extrude_inner.addWidget(extrude_cur_label)
+        extrude_inner.addWidget(self._extrude_scale_value)
+        extrude_inner.addSpacing(8)
+        extrude_inner.addWidget(extrude_set_label)
+        extrude_inner.addWidget(self._extrude_scale_input)
+        extrude_inner.addWidget(self._extrude_scale_apply)
+        extrude_inner.addSpacing(8)
+        extrude_inner.addWidget(self._extrude_scale_status, 1)
+        ph_tools_layout.addLayout(extrude_inner)
+        
         head_panels_row = QtWidgets.QHBoxLayout()
         head_panels_row.setSpacing(12)
-
+        
         for head_id, head_name in (("cf", "Carbon Fiber"), ("resin", "Resin")):
-            panel = QtWidgets.QGroupBox(head_name)
-            panel.setObjectName(f"groupCtrl{head_id}")
-            panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
-            panel_layout = QtWidgets.QVBoxLayout(panel)
-            panel_layout.setSpacing(6)
-
-            # Fan row
+            master_panel = QtWidgets.QGroupBox(head_name)
+            master_panel.setObjectName(f"groupMaster{head_id}")
+            master_panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+            master_layout = QtWidgets.QVBoxLayout(master_panel)
+            master_layout.setSpacing(6)
+            
+            status_box = add_group("Status", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
+                label_min_width=cf_resin_label_min_width,
+                value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            master_layout.addWidget(status_box)
+            
+            ctrl_box = QtWidgets.QGroupBox("Control")
+            ctrl_layout = QtWidgets.QVBoxLayout(ctrl_box)
+            ctrl_layout.setSpacing(6)
+            
             fan_row = QtWidgets.QHBoxLayout()
             fan_row.setSpacing(8)
             fan_label = QtWidgets.QLabel("Fan")
@@ -510,9 +751,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             fan_row.addWidget(fan_label)
             fan_row.addWidget(btn_fan_on)
             fan_row.addWidget(btn_fan_off)
-            panel_layout.addLayout(fan_row)
-
-            # Temperature row
+            ctrl_layout.addLayout(fan_row)
+            
             temp_row = QtWidgets.QHBoxLayout()
             temp_row.setSpacing(8)
             temp_label = QtWidgets.QLabel("Temp")
@@ -531,62 +771,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
             temp_row.addWidget(temp_label)
             temp_row.addWidget(temp_input, 1)
             temp_row.addWidget(btn_temp_apply)
-            panel_layout.addLayout(temp_row)
-
-            head_panels_row.addWidget(panel)
-
-            # Store references
+            ctrl_layout.addLayout(temp_row)
+            
+            master_layout.addWidget(ctrl_box)
+            head_panels_row.addWidget(master_panel)
+            
             setattr(self, f"_btn_fan_on_{head_id}", btn_fan_on)
             setattr(self, f"_btn_fan_off_{head_id}", btn_fan_off)
             setattr(self, f"_temp_input_{head_id}", temp_input)
             setattr(self, f"_btn_temp_apply_{head_id}", btn_temp_apply)
-
-        ph_control_outer.addLayout(head_panels_row)
-
-        # -- Extrude Scale row (inside Printhead Control) --
-        extrude_group = QtWidgets.QGroupBox("Extrude Scale")
-        extrude_group.setObjectName("groupExtrudeScale")
-        extrude_group.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        extrude_inner = QtWidgets.QHBoxLayout(extrude_group)
-        extrude_inner.setSpacing(10)
-
-        extrude_cur_label = QtWidgets.QLabel("Current")
-        extrude_cur_label.setObjectName("fieldLabel")
-        self._extrude_scale_value = QtWidgets.QLabel("1.000")
-        self._extrude_scale_value.setObjectName("valueLabel")
-        self._extrude_scale_value.setMinimumWidth(value_min_width)
-
-        extrude_set_label = QtWidgets.QLabel("Set")
-        extrude_set_label.setObjectName("fieldLabel")
-        self._extrude_scale_input = QtWidgets.QLineEdit()
-        self._extrude_scale_input.setPlaceholderText("1.0")
-        self._extrude_scale_input.setMaximumWidth(80)
-        validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, self._extrude_scale_input)
-        validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
-        self._extrude_scale_input.setValidator(validator)
-        self._extrude_scale_apply = QtWidgets.QPushButton("Apply")
-        self._extrude_scale_apply.setObjectName("btnTempApply_extrude")
-        self._extrude_scale_apply.setMinimumHeight(28)
-        self._extrude_scale_apply.setCursor(QtCore.Qt.PointingHandCursor)
-
-        self._extrude_scale_status = QtWidgets.QLabel("-")
-        self._extrude_scale_status.setObjectName("valueLabel")
-
-        extrude_inner.addWidget(extrude_cur_label)
-        extrude_inner.addWidget(self._extrude_scale_value)
-        extrude_inner.addSpacing(8)
-        extrude_inner.addWidget(extrude_set_label)
-        extrude_inner.addWidget(self._extrude_scale_input)
-        extrude_inner.addWidget(self._extrude_scale_apply)
-        extrude_inner.addSpacing(8)
-        extrude_inner.addWidget(self._extrude_scale_status, 1)
-
-        ph_control_outer.addWidget(extrude_group)
-
-        layout.addWidget(system_box, 1, 0, 1, 2)
-        layout.addLayout(left_column, 2, 0, 1, 1)
-        layout.addLayout(right_column, 2, 1, 1, 1)
-        layout.addWidget(ph_control_box, 3, 0, 1, 2)
+            
+        ph_tools_layout.addLayout(head_panels_row)
+        col1_layout.addWidget(ph_tools_box)
 
         # ======== Print Control 区域 ========
         control_box = QtWidgets.QGroupBox("Print Control")
@@ -619,17 +815,179 @@ class _UiStatusWidget(QtWidgets.QWidget):
         btn_row.addWidget(self._btn_stop)
         control_layout.addLayout(btn_row)
 
-        ctrl_status_row = QtWidgets.QHBoxLayout()
-        ctrl_status_row.setSpacing(8)
-        ctrl_label = QtWidgets.QLabel("Status")
-        ctrl_label.setObjectName("fieldLabel")
-        self._control_status = QtWidgets.QLabel("WAIT_HEARTBEAT")
-        self._control_status.setObjectName("controlStatus")
-        ctrl_status_row.addWidget(ctrl_label)
-        ctrl_status_row.addWidget(self._control_status, 1)
-        control_layout.addLayout(ctrl_status_row)
 
-        layout.addWidget(control_box, 4, 0, 1, 2, QtCore.Qt.AlignTop)
+
+        # Wait to add control_box until after launch_box
+
+        # ======== GCode Export 区域 ========
+        export_box = QtWidgets.QGroupBox("GCode Export")
+        export_box.setObjectName("groupExport")
+        export_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        export_layout = QtWidgets.QVBoxLayout(export_box)
+        export_layout.setSpacing(6)
+
+        # Subtitle: Tool Offset
+        offset_subtitle = QtWidgets.QLabel("Tool Offset")
+        offset_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+        export_layout.addWidget(offset_subtitle)
+
+        # Tool Offset Description & Input Fields (placed inside GCode Export)
+        offset_desc = QtWidgets.QLabel(
+            "Movement needed when switching to Tool 1 (CF),\n"
+            "relative to Tool 2 (Resin) base position."
+        )
+        offset_desc.setObjectName("fieldLabel")
+        offset_desc.setWordWrap(True)
+        export_layout.addWidget(offset_desc)
+
+        offset_cfg = _load_offset_config()
+        offset_grid = QtWidgets.QHBoxLayout()
+        offset_grid.setSpacing(8)
+        self._offset_spins = {}
+        for axis, default_val in [("X", offset_cfg["tool_offset_x"]),
+                                   ("Y", offset_cfg["tool_offset_y"]),
+                                   ("Z", offset_cfg["tool_offset_z"])]:
+            axis_w = QtWidgets.QWidget()
+            axis_lay = QtWidgets.QVBoxLayout(axis_w)
+            axis_lay.setContentsMargins(0, 0, 0, 0)
+            axis_lay.setSpacing(2)
+            lbl = QtWidgets.QLabel(f"{axis} (mm)")
+            lbl.setObjectName("fieldLabel")
+            lbl.setAlignment(QtCore.Qt.AlignCenter)
+            spin = QtWidgets.QDoubleSpinBox()
+            spin.setRange(-100.0, 100.0)
+            spin.setDecimals(2)
+            spin.setSingleStep(0.01)
+            spin.setValue(default_val)
+            spin.setMinimumHeight(28)
+            axis_lay.addWidget(lbl)
+            axis_lay.addWidget(spin)
+            offset_grid.addWidget(axis_w)
+            self._offset_spins[axis] = spin
+            spin.valueChanged.connect(self._on_offset_changed)
+        export_layout.addLayout(offset_grid)
+
+        self._offset_status = QtWidgets.QLabel("Loaded from config.")
+        self._offset_status.setObjectName("fieldLabel")
+        export_layout.addWidget(self._offset_status)
+
+        # Visual Separator Line
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.HLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        export_layout.addWidget(separator)
+
+        # Subtitle: GCode File
+        gcode_subtitle = QtWidgets.QLabel("GCode File")
+        gcode_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
+        export_layout.addWidget(gcode_subtitle)
+
+        # GCode file selector
+        gcode_row = QtWidgets.QHBoxLayout()
+        gcode_row.setSpacing(4)
+        gcode_lbl = QtWidgets.QLabel("GCode")
+        gcode_lbl.setObjectName("fieldLabel")
+        gcode_lbl.setMinimumWidth(50)
+        self._gcode_path_input = QtWidgets.QLineEdit()
+        self._gcode_path_input.setPlaceholderText("Select .gcode file...")
+        self._btn_browse_gcode = QtWidgets.QPushButton("…")
+        self._btn_browse_gcode.setFixedWidth(32)
+        self._btn_browse_gcode.setFixedHeight(28)
+        self._btn_browse_gcode.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_browse_gcode.setObjectName("btnBrowseGcode")
+        gcode_row.addWidget(gcode_lbl)
+        gcode_row.addWidget(self._gcode_path_input, 1)
+        gcode_row.addWidget(self._btn_browse_gcode)
+        export_layout.addLayout(gcode_row)
+
+        # NPZ output path (internal, hidden from UI)
+        self._npz_out_input = QtWidgets.QLineEdit()
+        self._npz_out_input.setPlaceholderText("Auto-generated from GCode name")
+
+        # Planner settings (collapsible)
+        planner_toggle = QtWidgets.QPushButton("▶ Planner Settings")
+        planner_toggle.setObjectName("btnPlannerToggle")
+        planner_toggle.setMinimumHeight(28)
+        planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
+        planner_toggle.setCheckable(True)
+        export_layout.addWidget(planner_toggle)
+
+        planner_container = QtWidgets.QWidget()
+        planner_container.setVisible(False)
+        planner_form = QtWidgets.QFormLayout(planner_container)
+        planner_form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        planner_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+        planner_form.setHorizontalSpacing(8)
+        planner_form.setVerticalSpacing(4)
+
+        _PLANNER_PARAMS = [
+            ("dt", "0.004", "Sampling period (s)"),
+            ("default_feed_mm_s", "10.0", "Default feed speed (mm/s)"),
+            ("corner_angle_deg", "10.0", "Corner angle threshold (°)"),
+            ("corner_retreat_ratio", "0.2", "Corner retreat ratio"),
+            ("density", "0", "Point density multiplier"),
+            ("degree", "3", "B-spline degree"),
+            ("max_fit_points_per_segment", "20000", "Max fit points/segment"),
+            ("export_sleep_ms", "0", "Export throttle sleep (ms)"),
+            ("export_yield_every", "0", "Export yield interval"),
+            ("split_by_layer_type", "true", "Split NPZ by layer & type"),
+            ("plot_layer_xy", "true", "Plot XY path image per layer"),
+            ("plot_stride", "5", "Plotting stride/sampling step"),
+        ]
+        self._planner_inputs = {}
+        for param_name, default_val, desc in _PLANNER_PARAMS:
+            lbl = QtWidgets.QLabel(param_name)
+            lbl.setObjectName("fieldLabel")
+            lbl.setToolTip(desc)
+            if param_name in ("split_by_layer_type", "plot_layer_xy"):
+                inp = QtWidgets.QCheckBox()
+                inp.setChecked(default_val.lower() == "true")
+                inp.setToolTip(desc)
+                planner_form.addRow(lbl, inp)
+            else:
+                inp = QtWidgets.QLineEdit(default_val)
+                inp.setToolTip(desc)
+                planner_form.addRow(lbl, inp)
+            self._planner_inputs[param_name] = inp
+
+        export_layout.addWidget(planner_container)
+        self._planner_container = planner_container
+
+        def _toggle_planner(checked):
+            planner_container.setVisible(checked)
+            planner_toggle.setText(
+                "▼ Planner Settings" if checked else "▶ Planner Settings"
+            )
+        planner_toggle.toggled.connect(_toggle_planner)
+
+        # Export button + progress
+        export_btn_row = QtWidgets.QHBoxLayout()
+        export_btn_row.setSpacing(8)
+        self._btn_export_npz = QtWidgets.QPushButton("Export NPZ")
+        self._btn_export_npz.setObjectName("btnExportNpz")
+        self._btn_export_npz.setMinimumHeight(36)
+        self._btn_export_npz.setCursor(QtCore.Qt.PointingHandCursor)
+        export_btn_row.addWidget(self._btn_export_npz)
+        export_layout.addLayout(export_btn_row)
+
+        self._export_progress = QtWidgets.QProgressBar()
+        self._export_progress.setMinimumHeight(18)
+        self._export_progress.setRange(0, 0)  # indeterminate
+        self._export_progress.setVisible(False)
+        export_layout.addWidget(self._export_progress)
+
+        self._export_status = QtWidgets.QLabel("")
+        self._export_status.setObjectName("fieldLabel")
+        self._export_status.setWordWrap(True)
+        export_layout.addWidget(self._export_status)
+
+        # Connect export signals
+        self._btn_browse_gcode.clicked.connect(self._on_browse_gcode)
+        self._gcode_path_input.textChanged.connect(self._on_gcode_path_changed)
+        self._btn_export_npz.clicked.connect(self._on_export_npz)
+        self.export_finished.connect(self._on_export_finished)
+        self.export_progress.connect(self._on_export_progress)
+
 
         # ======== Launch Control 区域 ========
         launch_box = QtWidgets.QGroupBox("Launch")
@@ -674,15 +1032,27 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
-        layout.addWidget(launch_box, 5, 0, 1, 2, QtCore.Qt.AlignTop)
+        # Add all boxes to col2_layout in the desired order
+        col2_layout.addWidget(export_box)
+        col2_layout.addWidget(launch_box)
+        col2_layout.addWidget(control_box)
+
+
+
+
+
+
+
+        col0_layout.addStretch(1)
+        col1_layout.addStretch(1)
+        col2_layout.addStretch(1)
+
+        layout.addLayout(col0_layout, 1, 0)
+        layout.addLayout(col1_layout, 1, 1)
+        layout.addLayout(col2_layout, 1, 2)
 
         layout.setRowStretch(0, 0)
-        layout.setRowStretch(1, 0)
-        layout.setRowStretch(2, 0)
-        layout.setRowStretch(3, 0)
-        layout.setRowStretch(4, 0)
-        layout.setRowStretch(5, 0)
-        layout.setRowStretch(6, 1)
+        layout.setRowStretch(1, 1)
 
         self.setStyleSheet(
             "QWidget { background: #f7f7f7; }"
@@ -905,6 +1275,67 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  font-size: 13px;"
             "  color: #666666;"
             "}"
+            "QGroupBox#groupExport QDoubleSpinBox {"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 4px;"
+            "  padding: 4px 6px;"
+            "  background: #ffffff;"
+            "}"
+            "QGroupBox#groupExport QDoubleSpinBox:focus {"
+            "  border-color: #1a73e8;"
+            "}"
+            "QGroupBox#groupExport::title { color: #1a73e8; }"
+            "QGroupBox#groupExport QLineEdit {"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 4px;"
+            "  padding: 4px 6px;"
+            "  background: #ffffff;"
+            "}"
+            "QGroupBox#groupExport QLineEdit:focus {"
+            "  border-color: #1a73e8;"
+            "}"
+            "QPushButton#btnBrowseGcode {"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 4px;"
+            "  background: #ffffff;"
+            "  color: #1a73e8;"
+            "  font-weight: 600;"
+            "}"
+            "QPushButton#btnBrowseGcode:hover {"
+            "  background: #e8f0fe;"
+            "}"
+            "QPushButton#btnPlannerToggle {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 5px;"
+            "  background: #fafafa;"
+            "  color: #555555;"
+            "  padding: 4px 12px;"
+            "  text-align: left;"
+            "}"
+            "QPushButton#btnPlannerToggle:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnExportNpz {"
+            "  font-weight: 600;"
+            "  font-size: 13px;"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 6px;"
+            "  background: #1a73e8;"
+            "  color: #ffffff;"
+            "  padding: 6px 16px;"
+            "}"
+            "QPushButton#btnExportNpz:hover {"
+            "  background: #1558b0;"
+            "  border-color: #1558b0;"
+            "}"
+            "QPushButton#btnExportNpz:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
+            "}"
         )
 
         self._extrude_scale_apply.clicked.connect(self._on_extrude_scale_apply)
@@ -930,10 +1361,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not label:
             return
         label.setText(text)
-        if color:
-            label.setStyleSheet(f"color: {color};")
+        if isinstance(label, _AutoScaleLabel):
+            if color:
+                label.set_color(color)
         else:
-            label.setStyleSheet("")
+            if color:
+                label.setStyleSheet(f"color: {color};")
+            else:
+                label.setStyleSheet("")
 
     def _format_tool(self, tool_id):
         if tool_id == 1:
@@ -978,7 +1413,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         return self._extrude_scale_current
 
     def _update_ui(self, msg: UiStatus):
-        self._set_value("System State", msg.state or "-", "#2b2b2b")
+        state_str = msg.state or "-"
+        state_color = self._STATE_COLORS.get(state_str, "#2b2b2b")
+        self._set_value("System State", state_str, state_color)
         self._update_control_buttons(msg.state or "")
         if msg.rsi_heartbeat_valid:
             self._set_value("Heartbeat Age", f"{msg.rsi_heartbeat_age_s:.3f}", "#1b6e3c")
@@ -1180,6 +1617,161 @@ class _UiStatusWidget(QtWidgets.QWidget):
         cmd = f"EV 0 {event_type} {tool_id}\n"
         self.uart_command_submit.emit(cmd)
 
+    # ---- Offset persistence ----
+
+    def _on_offset_changed(self, _value=None):
+        x = self._offset_spins["X"].value()
+        y = self._offset_spins["Y"].value()
+        z = self._offset_spins["Z"].value()
+        try:
+            _save_offset_config(x, y, z)
+            self._offset_status.setText(f"Saved: X={x:.2f}  Y={y:.2f}  Z={z:.2f}")
+            self._offset_status.setStyleSheet("color: #1b6e3c;")
+        except Exception as exc:
+            self._offset_status.setText(f"Save failed: {exc}")
+            self._offset_status.setStyleSheet("color: #b42318;")
+
+    def get_tool_offset(self):
+        return (
+            self._offset_spins["X"].value(),
+            self._offset_spins["Y"].value(),
+            self._offset_spins["Z"].value(),
+        )
+
+    # ---- GCode Export ----
+
+    def _on_browse_gcode(self):
+        path, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "Select GCode File",
+            os.path.dirname(self._gcode_path_input.text()) or os.path.expanduser("~"),
+            "GCode Files (*.gcode *.gc *.g);;All Files (*)",
+        )
+        if path:
+            self._gcode_path_input.setText(path)
+
+    def _on_gcode_path_changed(self, text):
+        if not text:
+            return
+        base = os.path.splitext(os.path.basename(text))[0]
+        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        self._npz_out_input.setText(os.path.join(data_root, base + ".npz"))
+
+    def _on_export_npz(self):
+        gcode_path = self._gcode_path_input.text().strip()
+        if not gcode_path or not os.path.isfile(gcode_path):
+            self._export_status.setText("Please select a valid GCode file.")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+
+        npz_out = self._npz_out_input.text().strip()
+        if not npz_out:
+            self._export_status.setText("Please specify an NPZ output path.")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+
+        # Gather planner params
+        try:
+            params = {
+                "dt": float(self._planner_inputs["dt"].text()),
+                "default_feed_mm_s": float(self._planner_inputs["default_feed_mm_s"].text()),
+                "corner_angle_deg": float(self._planner_inputs["corner_angle_deg"].text()),
+                "corner_retreat_ratio": float(self._planner_inputs["corner_retreat_ratio"].text()),
+                "density": int(self._planner_inputs["density"].text()),
+                "degree": int(self._planner_inputs["degree"].text()),
+                "max_fit_points_per_segment": int(self._planner_inputs["max_fit_points_per_segment"].text()),
+                "export_sleep_ms": int(self._planner_inputs["export_sleep_ms"].text()),
+                "export_yield_every": int(self._planner_inputs["export_yield_every"].text()),
+                "split_by_layer_type": self._planner_inputs["split_by_layer_type"].isChecked(),
+                "plot_layer_xy": self._planner_inputs["plot_layer_xy"].isChecked(),
+                "plot_stride": int(self._planner_inputs["plot_stride"].text()),
+            }
+        except (ValueError, KeyError) as exc:
+            self._export_status.setText(f"Invalid planner parameter: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+
+        offset = self.get_tool_offset()
+
+        # Disable button, show progress
+        self._btn_export_npz.setEnabled(False)
+        self._export_progress.setVisible(True)
+        self._export_progress.setRange(0, 100)
+        self._export_progress.setValue(0)
+        self._export_status.setText("Exporting...")
+        self._export_status.setStyleSheet("color: #b15e00;")
+
+        def _worker():
+            try:
+                self.export_progress.emit("Reading GCode...")
+                from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
+                from gcode_planner.npz_exporter import export_npz
+
+                def progress_cb(ratio):
+                    self.export_progress_val.emit(int(ratio * 100))
+
+                lines = load_gcode_lines(gcode_path)
+                self.export_progress.emit("Parsing GCode...")
+                parsed = parse_gcode_lines(lines)
+                self.export_progress.emit(f"Exporting NPZ ({len(parsed)} commands)...")
+
+                out_dir = os.path.dirname(npz_out)
+                if out_dir:
+                    os.makedirs(out_dir, exist_ok=True)
+                    # Also create a subdirectory named after the GCode base name
+                    gcode_base = os.path.splitext(os.path.basename(gcode_path))[0]
+                    os.makedirs(os.path.join(out_dir, gcode_base), exist_ok=True)
+
+                stats = export_npz(
+                    parsed,
+                    npz_out,
+                    dt=params["dt"],
+                    chunk_size=5000000,
+                    default_feed_mm_s=params["default_feed_mm_s"],
+                    corner_angle_deg=params["corner_angle_deg"],
+                    corner_retreat_ratio=params["corner_retreat_ratio"],
+                    density=params["density"],
+                    degree=params["degree"],
+                    max_fit_points_per_segment=params["max_fit_points_per_segment"],
+                    export_sleep_ms=params["export_sleep_ms"],
+                    export_yield_every=params["export_yield_every"],
+                    tool_offset=offset,
+                    progress_callback=progress_cb,
+                    split_by_layer_type=params["split_by_layer_type"],
+                    plot_layer_xy=params["plot_layer_xy"],
+                    plot_stride=params["plot_stride"],
+                )
+                rows = stats.get("rows", 0)
+                parts = stats.get("parts", 0)
+                total_s = stats.get("total_s", 0.0)
+                msg = (
+                    f"Done: {rows} rows, {parts} parts, {total_s:.1f}s\n"
+                    f"Offset: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
+                )
+                self.export_finished.emit(True, msg)
+            except Exception as exc:
+                self.export_finished.emit(False, str(exc))
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+
+    def _on_export_progress(self, text):
+        self._export_status.setText(text)
+        self._export_status.setStyleSheet("color: #b15e00;")
+
+    def _on_export_progress_val(self, val):
+        self._export_progress.setValue(val)
+
+    def _on_export_finished(self, success, message):
+        self._btn_export_npz.setEnabled(True)
+        self._export_progress.setVisible(False)
+        if success:
+            self._export_status.setText(message)
+            self._export_status.setStyleSheet("color: #1b6e3c;")
+        else:
+            self._export_status.setText(f"Export failed: {message}")
+            self._export_status.setStyleSheet("color: #b42318;")
+
     _STATE_COLORS = {
         "RUNNING": "#1b6e3c",
         "WAIT_HEARTBEAT": "#b15e00",
@@ -1190,9 +1782,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
     }
 
     def _update_control_buttons(self, state):
-        color = self._STATE_COLORS.get(state, "#2b2b2b")
-        self._control_status.setText(state or "-")
-        self._control_status.setStyleSheet(f"color: {color}; font-weight: 700; font-size: 13px;")
         if state == "PAUSED":
             self._btn_pause.setEnabled(False)
             self._btn_resume.setEnabled(True)
@@ -1237,7 +1826,18 @@ class MyProjectUiPlugin(Plugin):
 
         # Launch state
         self._launch_params = dict(_LAUNCH_DEFAULTS)
+        self._launch_params["gcode_path"] = "/home/jayson/kuka_ram_ws/data/input_gcode/test.gcode"
         self._launch_process = None
+        self._pending_launch = False
+        
+        # Initialize text inputs in widget from launch state
+        self._widget._gcode_path_input.setText(self._launch_params["gcode_path"])
+        
+        # Sync changes from main UI to launch params
+        self._widget._gcode_path_input.textChanged.connect(self._on_gcode_path_changed_sync)
+        # Connect export signals to launch flow
+        self._widget.export_finished.connect(self._on_export_finished_launcher)
+
         self._widget._btn_launch_settings.clicked.connect(
             self._on_launch_settings
         )
@@ -1303,7 +1903,82 @@ class MyProjectUiPlugin(Plugin):
     def _on_launch_settings(self):
         dialog = _LaunchSettingsDialog(self._launch_params, self._widget)
         if dialog.exec_() == QtWidgets.QDialog.Accepted:
-            self._launch_params = dialog.get_params()
+            self._launch_params.update(dialog.get_params())
+
+    def _on_gcode_path_changed_sync(self, text):
+        self._launch_params["gcode_path"] = text
+
+    def _on_export_finished_launcher(self, success, message):
+        if not self._pending_launch:
+            return
+        self._pending_launch = False
+        if success:
+            self._do_launch()
+        else:
+            self._widget._btn_launch.setEnabled(True)
+            self._widget._launch_status.setText("Launch aborted: GCode export failed.")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+
+    def _check_npz_exists(self, gcode_path):
+        if not gcode_path:
+            return False
+        base = os.path.splitext(os.path.basename(gcode_path))[0]
+        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        
+        # Check standard single NPZ file
+        npz_file = os.path.join(data_root, base + ".npz")
+        if os.path.isfile(npz_file):
+            return True
+            
+        # Check multi-part NPZ files (e.g. switch_test_part0000.npz)
+        npz_part = os.path.join(data_root, base + "_part0000.npz")
+        if os.path.isfile(npz_part):
+            return True
+            
+        # Check directory case
+        npz_dir = os.path.join(data_root, base)
+        if os.path.isdir(npz_dir):
+            try:
+                if os.listdir(npz_dir):
+                    return True
+            except Exception:
+                pass
+                
+        return False
+
+    def _check_npz_and_offset_match(self, gcode_path):
+        if not gcode_path:
+            return False, "missing"
+            
+        if not self._check_npz_exists(gcode_path):
+            return False, "missing"
+            
+        base = os.path.splitext(os.path.basename(gcode_path))[0]
+        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        offset_file = os.path.join(data_root, base + ".offset.json")
+        
+        if not os.path.isfile(offset_file):
+            return False, "mismatch"
+            
+        try:
+            with open(offset_file, "r") as f:
+                data = json.load(f)
+            saved_offset = data.get("tool_offset")
+            if not saved_offset or len(saved_offset) != 3:
+                return False, "mismatch"
+                
+            cur_offset = self._widget.get_tool_offset() # (x, y, z)
+            
+            # Compare up to 0.005 mm tolerance (since spin boxes are 2 decimal places)
+            for val_saved, val_cur in zip(saved_offset, cur_offset):
+                if abs(val_saved - val_cur) > 0.005:
+                    return False, "mismatch"
+            
+            return True, "ok"
+        except Exception:
+            return False, "mismatch"
 
     def _on_launch(self):
         if (
@@ -1311,11 +1986,58 @@ class MyProjectUiPlugin(Plugin):
             and self._launch_process.poll() is None
         ):
             return
+
+        gcode_path = self._launch_params.get("gcode_path", "").strip()
+        if not gcode_path or not os.path.isfile(gcode_path):
+            self._widget._launch_status.setText("Launch failed: GCode file not found.")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+            return
+
+        # Enforce check for matching NPZ files/folders and offsets
+        exists, status = self._check_npz_and_offset_match(gcode_path)
+        if not exists:
+            if status == "missing":
+                msg = (
+                    "No matching NPZ files found for this GCode.\n\n"
+                    "Please click the 'Export NPZ' button first to generate the trajectory."
+                )
+                title = "NPZ Missing"
+            else:  # mismatch
+                msg = (
+                    "The current Tool Offset values do not match the offsets saved in the existing NPZ trajectory.\n\n"
+                    "Please click the 'Export NPZ' button first to regenerate the trajectory with the new offsets."
+                )
+                title = "Offset Mismatch"
+
+            QtWidgets.QMessageBox.warning(
+                self._widget,
+                title,
+                msg,
+                QtWidgets.QMessageBox.Ok
+            )
+            self._widget._launch_status.setText(f"Launch cancelled: NPZ {status}.")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+            return
+
+        # Directly launch since NPZ is verified to exist and offsets match
+        self._do_launch()
+
+    def _do_launch(self):
         cmd = ["ros2", "launch", "my_project_startup", "startup.launch.py"]
         for name, value in self._launch_params.items():
-            default = _LAUNCH_DEFAULTS.get(name, "")
-            if value != default:
-                cmd.append(f"{name}:={value}")
+            if name == "gcode_path":
+                base = os.path.splitext(os.path.basename(value))[0]
+                data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+                npz_val = os.path.join(data_root, base + ".npz")
+                cmd.append(f"npz_path:={npz_val}")
+            else:
+                default = _LAUNCH_DEFAULTS.get(name, "")
+                if value != default:
+                    cmd.append(f"{name}:={value}")
         try:
             self._launch_process = subprocess.Popen(
                 cmd,
@@ -1329,6 +2051,7 @@ class MyProjectUiPlugin(Plugin):
                 "color: #1b6e3c; font-weight: 700; font-size: 13px;"
             )
         except Exception as exc:
+            self._widget._btn_launch.setEnabled(True)
             self._widget._launch_status.setText(f"Launch failed: {exc}")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
