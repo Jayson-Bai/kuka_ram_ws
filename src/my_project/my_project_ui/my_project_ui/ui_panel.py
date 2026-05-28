@@ -252,6 +252,8 @@ def _save_offset_config(x, y, z):
 
 class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
     zoom_changed = QtCore.pyqtSignal(float)
+    ZOOM_MIN = 0.1
+    ZOOM_MAX = 20.0
 
     def wheelEvent(self, event):
         factor = 1.15
@@ -259,6 +261,9 @@ class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
             zoom = factor
         else:
             zoom = 1.0 / factor
+        new_scale = self.transform().m11() * zoom
+        if new_scale < self.ZOOM_MIN or new_scale > self.ZOOM_MAX:
+            return
         self.scale(zoom, zoom)
         self.zoom_changed.emit(self.transform().m11())
 
@@ -320,6 +325,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self._view.setRenderHints(
             QtGui.QPainter.Antialiasing | QtGui.QPainter.SmoothPixmapTransform
         )
+        self._view.setTransformationAnchor(QtWidgets.QGraphicsView.AnchorUnderMouse)
         layout.addWidget(self._view, 1)
 
         # Bottom bar: zoom label + reset + close
@@ -1783,7 +1789,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #1b6e3c;")
             npz_path = self._npz_out_input.text().strip()
             if npz_path:
-                self._last_npz_dir = os.path.dirname(npz_path)
+                self._last_npz_dir = os.path.splitext(npz_path)[0]
                 self._btn_view_layers.setEnabled(True)
         else:
             self._export_status.setText(f"Export failed: {message}")
