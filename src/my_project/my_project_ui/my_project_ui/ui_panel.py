@@ -976,7 +976,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         view_row.setSpacing(8)
         self._btn_view_layers = QtWidgets.QPushButton("View Layer Images")
         self._btn_view_layers.setObjectName("btnViewLayers")
-        self._btn_view_layers.setMinimumHeight(28)
+        self._btn_view_layers.setMinimumHeight(36)
         self._btn_view_layers.setCursor(QtCore.Qt.PointingHandCursor)
         self._btn_view_layers.setEnabled(False)
         view_row.addWidget(self._btn_view_layers)
