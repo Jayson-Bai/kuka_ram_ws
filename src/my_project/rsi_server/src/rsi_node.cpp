@@ -58,6 +58,7 @@ private:
   rclcpp::Publisher<RsiHeartBeat>::SharedPtr heartbeat_pub_;  //RSI心跳
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr resync_pub_; //请求中心节点同步
   rclcpp::Publisher<PlannedEvent>::SharedPtr triggered_event_pub_; //转发给UART的事件
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr sent_xml_pub_; //发出的RSI XML
 
   //数据缓存
   //互斥锁
@@ -183,6 +184,9 @@ public:
 
     //发布触发事件给UART
     triggered_event_pub_ = create_publisher<PlannedEvent>("/rsi/triggered_event", 10);
+
+    //发布发出的XML给UI日志
+    sent_xml_pub_ = create_publisher<std_msgs::msg::String>("/rsi/sent_xml", 10);
 
     //打开UDP
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0); //ipv4 udp套接字
@@ -388,6 +392,11 @@ private:
 
       //回复XML
       std::string reply = build_reply(ipoc, to_send);
+      {
+        std_msgs::msg::String sent_msg;
+        sent_msg.data = reply;
+        sent_xml_pub_->publish(sent_msg);
+      }
       sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
 
     }

@@ -404,6 +404,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     export_finished = QtCore.pyqtSignal(bool, str)  # (success, message)
     export_progress = QtCore.pyqtSignal(str)  # status text
     export_progress_val = QtCore.pyqtSignal(int)  # percentage (0-100)
+    rsi_xml_received = QtCore.pyqtSignal(str)  # RSI 发出 XML 日志
 
     def __init__(self):
         super().__init__()
@@ -411,6 +412,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._last_npz_dir = None
         self._build_ui()
         self.status_received.connect(self._update_ui)
+        self.rsi_xml_received.connect(self._on_rsi_xml)
         self.export_progress_val.connect(self._on_export_progress_val)
         
         self._align_timer = QtCore.QTimer(self)
@@ -1051,14 +1053,41 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
+        # ======== RSI 日志区域 ========
+        rsi_log_box = QtWidgets.QGroupBox("RSI 日志")
+        rsi_log_box.setObjectName("groupRsiLog")
+        rsi_log_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding
+        )
+        rsi_log_layout = QtWidgets.QVBoxLayout(rsi_log_box)
+        rsi_log_layout.setContentsMargins(4, 8, 4, 4)
+        rsi_log_layout.setSpacing(2)
+
+        self._rsi_log_text = QtWidgets.QPlainTextEdit()
+        self._rsi_log_text.setReadOnly(True)
+        self._rsi_log_text.setMaximumBlockCount(30)
+        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._rsi_log_text.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #1e1e1e;"
+            "  color: #d4d4d4;"
+            "  font-family: 'Courier New', 'Noto Mono', monospace;"
+            "  font-size: 11px;"
+            "  border: 1px solid #3c3c3c;"
+            "  border-radius: 4px;"
+            "  padding: 4px;"
+            "}"
+        )
+        rsi_log_layout.addWidget(self._rsi_log_text)
+
+        self._rsi_log_last_xml = ""
+        self._rsi_log_dup_count = 0
+
         # Add all boxes to col2_layout in the desired order
         col2_layout.addWidget(export_box)
         col2_layout.addWidget(launch_box)
         col2_layout.addWidget(control_box)
-
-
-
-
+        col2_layout.addWidget(rsi_log_box)
 
 
 
@@ -1830,6 +1859,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._btn_resume.setEnabled(False)
             self._btn_stop.setEnabled(True)
 
+    def _on_rsi_xml(self, xml_text):
+        import time, re
+        xml_stripped = re.sub(r'<IPOC>[^<]*</IPOC>', '<IPOC>...</IPOC>', xml_text)
+        if xml_stripped == self._rsi_log_last_xml:
+            return
+        self._rsi_log_last_xml = xml_stripped
+        t = time.localtime()
+        ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
+        lines = xml_text.strip().split("\n")
+        for line in lines:
+            self._rsi_log_text.appendPlainText(f"[{ts}] {line}")
+
 
 class MyProjectUiPlugin(Plugin):
     def __init__(self, context):
@@ -1878,6 +1919,9 @@ class MyProjectUiPlugin(Plugin):
         self._node.create_subscription(
             UiStatus, "/ui/status", self._on_status, 10
         )
+        self._node.create_subscription(
+            StringMsg, "/rsi/sent_xml", self._on_rsi_xml, 10
+        )
 
         self._spin_timer = QtCore.QTimer(self._widget)
         self._spin_timer.timeout.connect(self._spin_once)
@@ -1889,6 +1933,9 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_status(self, msg: UiStatus):
         self._widget.status_received.emit(msg)
+
+    def _on_rsi_xml(self, msg: StringMsg):
+        self._widget.rsi_xml_received.emit(msg.data)
 
     def _on_command_submit(self, cmd: str):
         msg = StringMsg()
