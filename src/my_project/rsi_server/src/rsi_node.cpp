@@ -110,8 +110,8 @@ private:
 public:
   RSINode(): Node("rsi_node")
   { 
-    sen_type_ = declare_parameter<std::string>("sen_type", "PosCorr");  //与kuka的xml文件中规定一致
-    decimal_precision_ = declare_parameter<int>("decimal_precision", 6);  //收发数据小数点位数，需在rsi上下文同步修改
+    sen_type_ = declare_parameter<std::string>("sen_type", "PythonDemo");  //与kuka的xml文件中规定一致
+    decimal_precision_ = declare_parameter<int>("decimal_precision", 4);  //收发数据小数点位数，需在rsi上下文同步修改
     local_ip_ = declare_parameter<std::string>("local_ip", "192.168.1.1");  //ip
     local_port_ = declare_parameter<int>("local_port", 49152);  //端口
     abort_lift_mm_ = declare_parameter<double>("abort_lift_mm", 100.0);  //ABORT抬升距离(mm)

@@ -30,8 +30,8 @@ LAUNCH_PARAMS = [
     ("e_decimals", "2", "挤出小数精度", "中心节点"),
     ("kuka_status_raw", "false", "打印 KUKA 原始 XML 长度", "中心节点"),
     ("summary_period_ms", "200", "控制中心发布周期（ms）", "中心节点"),
-    ("sen_type", "PosCorr", "RSI XML SEN 类型", "RSI 节点"),
-    ("decimal_precision", "6", "RSI 数据小数精度", "RSI 节点"),
+    ("sen_type", "PythonDemo", "RSI XML SEN 类型", "RSI 节点"),
+    ("decimal_precision", "4", "RSI 数据小数精度", "RSI 节点"),
     ("local_ip", "192.168.1.1", "RSI 本地监听 IP", "RSI 节点"),
     ("local_port", "49152", "RSI 本地监听端口", "RSI 节点"),
     ("abort_lift_mm", "100.0", "ABORT 时 Z 轴抬升距离（mm）", "RSI 节点"),
@@ -206,7 +206,7 @@ class _AutoScaleLabel(QtWidgets.QLabel):
         super().__init__(text)
         self.setAlignment(QtCore.Qt.AlignCenter)
         self.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
-        self._color = "#2b2b2b"
+        self._color = "#a0a0a0"
 
     def set_color(self, color):
         self._color = color
@@ -405,6 +405,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     export_progress = QtCore.pyqtSignal(str)  # status text
     export_progress_val = QtCore.pyqtSignal(int)  # percentage (0-100)
     rsi_xml_received = QtCore.pyqtSignal(str)  # RSI 发出 XML 日志
+    uart_log_received = QtCore.pyqtSignal(str)  # UART 原始日志
 
     def __init__(self):
         super().__init__()
@@ -413,6 +414,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._build_ui()
         self.status_received.connect(self._update_ui)
         self.rsi_xml_received.connect(self._on_rsi_xml)
+        self.uart_log_received.connect(self._on_uart_log)
         self.export_progress_val.connect(self._on_export_progress_val)
         
         self._align_timer = QtCore.QTimer(self)
@@ -422,8 +424,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _dynamic_align(self):
         if not hasattr(self, '_system_box'): return
         h1 = self._col1_layout.sizeHint().height()
-        h0_widgets = [self._kuka_box, self._heartbeat_box, self._traj_box]
-        h0_rest = sum(w.sizeHint().height() for w in h0_widgets)
+        h0_widgets = [self._kuka_box, self._rsi_log_box, self._traj_box]
+        h0_rest = sum(w.height() for w in h0_widgets)
         h0_rest += self._col0_layout.spacing() * len(h0_widgets)
         target_h = h1 - h0_rest
         if target_h > 40 and abs(self._system_box.height() - target_h) > 1:
@@ -441,14 +443,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._labels = {}
         value_min_width = QtWidgets.QLabel("0").fontMetrics().horizontalAdvance("0") * 5
         cf_labels = [
-            ("Carbon Fiber State", "状态"),
-            ("Carbon Fiber Fan OK", "风扇正常"),
+            ("Carbon Fiber State", "当前状态"),
+            ("Carbon Fiber Fan OK", "风扇状态"),
             ("Carbon Fiber Current Temp", "当前温度"),
             ("Carbon Fiber Target Temp", "目标温度"),
         ]
         resin_labels = [
-            ("Resin State", "状态"),
-            ("Resin Fan OK", "风扇正常"),
+            ("Resin State", "当前状态"),
+            ("Resin Fan OK", "风扇状态"),
             ("Resin Current Temp", "当前温度"),
             ("Resin Target Temp", "目标温度"),
         ]
@@ -517,7 +519,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         system_box = QtWidgets.QGroupBox("系统状态")
         system_box.setObjectName("groupSystem")
-        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         self._system_box = system_box
         system_layout = QtWidgets.QVBoxLayout(system_box)
         system_layout.setSpacing(0)
@@ -526,13 +528,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         sys_val = _AutoScaleLabel("离线")
         sys_val.setObjectName("valueLabel")
         sys_val.setAlignment(QtCore.Qt.AlignCenter)
+        sys_val.setMinimumHeight(40)
         
         system_layout.addWidget(sys_val, 1)
         
         self._labels["System State"] = sys_val
         col0_layout.addWidget(system_box)
 
-        kuka_box = QtWidgets.QGroupBox("KUKA 位姿")
+        kuka_box = QtWidgets.QGroupBox("KUKA 实时位姿")
         self._kuka_box = kuka_box
         kuka_box.setObjectName("groupKuka")
         kuka_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
@@ -559,28 +562,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._labels[f"KUKA {axis}"] = axis_value
         col0_layout.addWidget(kuka_box)
         
-        heartbeat_box = add_group("心跳", [
-            ("Heartbeat Age", "延迟"),
-            ("Heartbeat Seq", "序号"),
-            ("Heartbeat IPOC", "IPOC"),
-            ("Heartbeat Tool", "工具"),
-            ("Heartbeat Extrude", "挤出"),
-        ], parent_layout=col0_layout, object_name="groupHeartbeat")
-        self._heartbeat_box = heartbeat_box
-        heartbeat_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
-        
-        traj_box = QtWidgets.QGroupBox("轨迹")
+        traj_box = QtWidgets.QGroupBox("RSI 节点")
         self._traj_box = traj_box
         traj_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         traj_layout = QtWidgets.QVBoxLayout(traj_box)
         traj_layout.setSpacing(6)
         add_group("概览", [
-            ("Traj Backlog", "积压"),
-            ("Next Traj Seq", "下一序号"),
+            ("Traj Backlog", "待发送"),
+            ("Next Traj Seq", "下一帧UDP发送"),
         ], parent_layout=traj_layout)
         traj_row = QtWidgets.QHBoxLayout()
         traj_row.setSpacing(8)
-        add_group("当前", [
+        add_group("当前帧UDP发送", [
             ("Traj Seq", "序号"),
             ("Traj Tool", "工具"),
             ("Traj X", "X"),
@@ -591,7 +584,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("Traj C", "C"),
             ("Traj E", "E"),
         ], parent_layout=traj_row)
-        add_group("下一个", [
+        add_group("下一帧UDP发送", [
             ("Traj Seq (Next)", "序号"),
             ("Traj Tool (Next)", "工具"),
             ("Traj X (Next)", "X"),
@@ -606,10 +599,44 @@ class _UiStatusWidget(QtWidgets.QWidget):
         traj_row.setStretch(1, 1)
         traj_layout.addLayout(traj_row)
         col0_layout.addWidget(traj_box)
-        
+
+        # ======== RSI 日志区域 ========
+        rsi_log_box = QtWidgets.QGroupBox("RSI 日志")
+        rsi_log_box.setObjectName("groupRsiLog")
+        rsi_log_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+        )
+        rsi_log_layout = QtWidgets.QVBoxLayout(rsi_log_box)
+        rsi_log_layout.setContentsMargins(4, 8, 4, 4)
+        rsi_log_layout.setSpacing(2)
+
+        self._rsi_log_text = QtWidgets.QPlainTextEdit()
+        self._rsi_log_text.setReadOnly(True)
+        self._rsi_log_text.setMaximumBlockCount(30)
+        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._rsi_log_text.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #1e1e1e;"
+            "  color: #d4d4d4;"
+            "  font-family: 'Courier New', 'Noto Mono', monospace;"
+            "  font-size: 11px;"
+            "  border: 1px solid #3c3c3c;"
+            "  border-radius: 4px;"
+            "  padding: 4px;"
+            "}"
+        )
+        rsi_log_layout.addWidget(self._rsi_log_text)
+
+        self._rsi_log_text.setMaximumHeight(100)
+
+        self._rsi_log_last_xml = ""
+        self._rsi_log_dup_count = 0
+        col0_layout.addWidget(rsi_log_box)
+        self._rsi_log_box = rsi_log_box
+
         # ======== Column 1: Printhead ========
         
-        ph_overview_box = QtWidgets.QGroupBox("打印头概览")
+        ph_overview_box = QtWidgets.QGroupBox("Uart 节点")
         ph_overview_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         ph_overview_layout = QtWidgets.QVBoxLayout(ph_overview_box)
         ph_overview_layout.setSpacing(6)
@@ -634,20 +661,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         val2.setObjectName("valueLabel")
         val2.setMinimumWidth(value_min_width)
         val2.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        events_summary_layout.addStretch(1)
+        
         events_summary_layout.addWidget(lbl2)
         events_summary_layout.addWidget(val2)
-        
         events_summary_layout.addStretch(1)
         ph_overview_layout.addWidget(events_summary_box)
-        
-        add_group("基本信息", [
-            ("Printhead Ready", "就绪"),
-            ("Printhead Age", "延迟"),
-            ("Printhead Stamp", "时间戳"),
-            ("Ready Event Seq", "就绪序号"),
-            ("Ready Event Type", "就绪类型"),
-            ("Current Tool", "工具"),
-        ], parent_layout=ph_overview_layout)
         
         self._labels["Next Event Seq"] = val1
         self._labels["Events Pending"] = val2
@@ -673,28 +692,48 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col1_layout.addWidget(ph_overview_box)
         
         ph_tools_box = QtWidgets.QGroupBox("工具管理")
-        ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
+        ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         ph_tools_layout = QtWidgets.QVBoxLayout(ph_tools_box)
         ph_tools_layout.setSpacing(8)
         
         tool_row = QtWidgets.QHBoxLayout()
-        tool_row.setSpacing(12)
-        tool_label = QtWidgets.QLabel("切换工具")
-        tool_label.setObjectName("fieldLabel")
-        tool_row.addWidget(tool_label)
+        tool_row.setSpacing(8)
+
+        cur_tool_title = QtWidgets.QLabel("当前工具")
+        cur_tool_title.setObjectName("fieldLabel")
+        tool_row.addWidget(cur_tool_title)
+        self._current_tool_value = QtWidgets.QLabel("-")
+        self._current_tool_value.setObjectName("valueLabel")
+        tool_row.addWidget(self._current_tool_value)
+
+        sep = QtWidgets.QLabel("│")
+        sep.setStyleSheet("color: #5a5a5a; font-size: 16px;")
+        sep.setAlignment(QtCore.Qt.AlignCenter)
+        tool_row.addWidget(sep)
+
+        switch_title = QtWidgets.QLabel("切换工具")
+        switch_title.setObjectName("fieldLabel")
+        tool_row.addWidget(switch_title)
         self._btn_tool_cf = QtWidgets.QPushButton("碳纤维")
         self._btn_tool_cf.setObjectName("btnToolCF")
-        self._btn_tool_cf.setMinimumHeight(32)
+        self._btn_tool_cf.setMinimumHeight(24)
+        self._btn_tool_cf.setMaximumHeight(24)
         self._btn_tool_cf.setCursor(QtCore.Qt.PointingHandCursor)
         self._btn_tool_resin = QtWidgets.QPushButton("树脂")
         self._btn_tool_resin.setObjectName("btnToolResin")
-        self._btn_tool_resin.setMinimumHeight(32)
+        self._btn_tool_resin.setMinimumHeight(24)
+        self._btn_tool_resin.setMaximumHeight(24)
         self._btn_tool_resin.setCursor(QtCore.Qt.PointingHandCursor)
         tool_row.addWidget(self._btn_tool_cf)
         tool_row.addWidget(self._btn_tool_resin)
+        tool_row.addStretch(1)
+
         ph_tools_layout.addLayout(tool_row)
         
-        extrude_inner = QtWidgets.QHBoxLayout()
+        extrude_row_widget = QtWidgets.QWidget()
+        extrude_row_widget.setFixedHeight(26)
+        extrude_inner = QtWidgets.QHBoxLayout(extrude_row_widget)
+        extrude_inner.setContentsMargins(0, 0, 0, 0)
         extrude_inner.setSpacing(10)
         extrude_cur_label = QtWidgets.QLabel("当前挤出倍率")
         extrude_cur_label.setObjectName("fieldLabel")
@@ -711,7 +750,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._extrude_scale_input.setValidator(validator)
         self._extrude_scale_apply = QtWidgets.QPushButton("应用")
         self._extrude_scale_apply.setObjectName("btnTempApply_extrude")
-        self._extrude_scale_apply.setMinimumHeight(28)
         self._extrude_scale_apply.setCursor(QtCore.Qt.PointingHandCursor)
         self._extrude_scale_status = QtWidgets.QLabel("-")
         self._extrude_scale_status.setObjectName("valueLabel")
@@ -723,7 +761,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         extrude_inner.addWidget(self._extrude_scale_apply)
         extrude_inner.addSpacing(8)
         extrude_inner.addWidget(self._extrude_scale_status, 1)
-        ph_tools_layout.addLayout(extrude_inner)
+        ph_tools_layout.addWidget(extrude_row_widget)
         
         head_panels_row = QtWidgets.QHBoxLayout()
         head_panels_row.setSpacing(12)
@@ -735,7 +773,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             master_layout = QtWidgets.QVBoxLayout(master_panel)
             master_layout.setSpacing(6)
             
-            status_box = add_group("状态", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
+            status_box = add_group("概况", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
                 label_min_width=cf_resin_label_min_width,
                 value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
             master_layout.addWidget(status_box)
@@ -751,11 +789,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
             fan_label.setMinimumWidth(30)
             btn_fan_on = QtWidgets.QPushButton("开")
             btn_fan_on.setObjectName(f"btnFanOn_{head_id}")
-            btn_fan_on.setMinimumHeight(28)
+            btn_fan_on.setMinimumHeight(24)
+            btn_fan_on.setMaximumHeight(24)
             btn_fan_on.setCursor(QtCore.Qt.PointingHandCursor)
             btn_fan_off = QtWidgets.QPushButton("关")
             btn_fan_off.setObjectName(f"btnFanOff_{head_id}")
-            btn_fan_off.setMinimumHeight(28)
+            btn_fan_off.setMinimumHeight(24)
+            btn_fan_off.setMaximumHeight(24)
             btn_fan_off.setCursor(QtCore.Qt.PointingHandCursor)
             fan_row.addWidget(fan_label)
             fan_row.addWidget(btn_fan_on)
@@ -775,7 +815,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             temp_input.setValidator(temp_validator)
             btn_temp_apply = QtWidgets.QPushButton("设定")
             btn_temp_apply.setObjectName(f"btnTempApply_{head_id}")
-            btn_temp_apply.setMinimumHeight(28)
+            btn_temp_apply.setMinimumHeight(24)
+            btn_temp_apply.setMaximumHeight(24)
             btn_temp_apply.setCursor(QtCore.Qt.PointingHandCursor)
             temp_row.addWidget(temp_label)
             temp_row.addWidget(temp_input, 1)
@@ -792,6 +833,37 @@ class _UiStatusWidget(QtWidgets.QWidget):
             
         ph_tools_layout.addLayout(head_panels_row)
         col1_layout.addWidget(ph_tools_box)
+
+        # ======== UART 日志区域 ========
+        uart_log_box = QtWidgets.QGroupBox("UART 日志")
+        uart_log_box.setObjectName("groupUartLog")
+        uart_log_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+        )
+        uart_log_layout = QtWidgets.QVBoxLayout(uart_log_box)
+        uart_log_layout.setContentsMargins(4, 8, 4, 4)
+        uart_log_layout.setSpacing(2)
+
+        self._uart_log_text = QtWidgets.QPlainTextEdit()
+        self._uart_log_text.setReadOnly(True)
+        self._uart_log_text.setMaximumBlockCount(30)
+        self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._uart_log_text.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #1e1e1e;"
+            "  color: #d4d4d4;"
+            "  font-family: 'Courier New', 'Noto Mono', monospace;"
+            "  font-size: 11px;"
+            "  border: 1px solid #3c3c3c;"
+            "  border-radius: 4px;"
+            "  padding: 4px;"
+            "}"
+        )
+        uart_log_layout.addWidget(self._uart_log_text)
+        self._uart_log_text.setMaximumHeight(100)
+
+        col1_layout.addWidget(uart_log_box)
+        col1_layout.addStretch(1)
 
         # ======== Print Control 区域 ========
         control_box = QtWidgets.QGroupBox("打印控制")
@@ -1053,47 +1125,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
-        # ======== RSI 日志区域 ========
-        rsi_log_box = QtWidgets.QGroupBox("RSI 日志")
-        rsi_log_box.setObjectName("groupRsiLog")
-        rsi_log_box.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding
-        )
-        rsi_log_layout = QtWidgets.QVBoxLayout(rsi_log_box)
-        rsi_log_layout.setContentsMargins(4, 8, 4, 4)
-        rsi_log_layout.setSpacing(2)
-
-        self._rsi_log_text = QtWidgets.QPlainTextEdit()
-        self._rsi_log_text.setReadOnly(True)
-        self._rsi_log_text.setMaximumBlockCount(30)
-        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
-        self._rsi_log_text.setStyleSheet(
-            "QPlainTextEdit {"
-            "  background: #1e1e1e;"
-            "  color: #d4d4d4;"
-            "  font-family: 'Courier New', 'Noto Mono', monospace;"
-            "  font-size: 11px;"
-            "  border: 1px solid #3c3c3c;"
-            "  border-radius: 4px;"
-            "  padding: 4px;"
-            "}"
-        )
-        rsi_log_layout.addWidget(self._rsi_log_text)
-
-        self._rsi_log_last_xml = ""
-        self._rsi_log_dup_count = 0
-
         # Add all boxes to col2_layout in the desired order
         col2_layout.addWidget(export_box)
         col2_layout.addWidget(launch_box)
         col2_layout.addWidget(control_box)
-        col2_layout.addWidget(rsi_log_box)
-
-
+        col2_layout.addStretch(1)
 
         col0_layout.addStretch(1)
-        col1_layout.addStretch(1)
-        col2_layout.addStretch(1)
 
         layout.addLayout(col0_layout, 1, 0)
         layout.addLayout(col1_layout, 1, 1)
@@ -1462,57 +1500,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _update_ui(self, msg: UiStatus):
         state_str = msg.state or "-"
-        state_color = self._STATE_COLORS.get(state_str, "#2b2b2b")
+        state_color = self._STATE_COLORS.get(state_str, "#a0a0a0")
         self._set_value("System State", state_str, state_color)
         self._update_control_buttons(msg.state or "")
-        if msg.rsi_heartbeat_valid:
-            self._set_value("Heartbeat Age", f"{msg.rsi_heartbeat_age_s:.3f}", "#1b6e3c")
-            self._set_value("Heartbeat Seq", str(msg.rsi_heartbeat.seq_used), "#1b6e3c")
-            self._set_value("Heartbeat IPOC", msg.rsi_heartbeat.ipoc or "-", "#2b2b2b")
-            self._set_value("Heartbeat Tool", self._format_tool(msg.rsi_heartbeat.tool_id), "#2b2b2b")
-            self._set_value("Heartbeat Extrude", f"{msg.rsi_heartbeat.extrude_abs:.3f}", "#2b2b2b")
-        else:
-            self._set_value("Heartbeat Age", "-", "#b42318")
-            self._set_value("Heartbeat Seq", "-", "#b42318")
-            self._set_value("Heartbeat IPOC", "-", "#b42318")
-            self._set_value("Heartbeat Tool", "-", "#b42318")
-            self._set_value("Heartbeat Extrude", "-", "#b42318")
+
 
         if msg.printhead_status_valid:
             ps = msg.printhead_status
-            ready = "是" if ps.ready_for_motion else "否"
-            ready_color = "#1b6e3c" if ps.ready_for_motion else "#b42318"
-            self._set_value("Printhead Ready", ready, ready_color)
-            self._set_value("Printhead Age", f"{msg.printhead_status_age_s:.3f}", "#1b6e3c")
-            stamp_text = f"{ps.stamp.sec}.{ps.stamp.nanosec:09d}"
-            self._set_value("Printhead Stamp", stamp_text, "#2b2b2b")
-            self._set_value("Ready Event Seq", str(ps.ready_event_seq), "#2b2b2b")
-            self._set_value("Ready Event Type", ps.ready_event_type or "-", "#2b2b2b")
-            self._set_value("Current Tool", self._format_tool(ps.current_tool), "#2b2b2b")
+            self._current_tool_value.setText(self._format_tool(ps.current_tool))
 
             using_color = "#1b6e3c"
-            cf_state = "USING" if ps.current_tool == 1 else "HOME"
-            resin_state = "USING" if ps.current_tool == 2 else "HOME"
-            self._set_value("Carbon Fiber State", cf_state, using_color if cf_state == "USING" else "#2b2b2b")
-            self._set_value("Resin State", resin_state, using_color if resin_state == "USING" else "#2b2b2b")
+            cf_state = "使用中" if ps.current_tool == 1 else "空闲"
+            resin_state = "使用中" if ps.current_tool == 2 else "空闲"
+            self._set_value("Carbon Fiber State", cf_state, using_color if cf_state == "使用中" else "#2b2b2b")
+            self._set_value("Resin State", resin_state, using_color if resin_state == "使用中" else "#2b2b2b")
 
             cf_fan_color = "#1b6e3c" if ps.fan_ok_cf else "#b42318"
-            self._set_value("Carbon Fiber Fan OK", "是" if ps.fan_ok_cf else "否", cf_fan_color)
+            self._set_value("Carbon Fiber Fan OK", "开" if ps.fan_ok_cf else "关", cf_fan_color)
             self._set_value("Carbon Fiber Current Temp", f"{ps.current_temp_cf:.1f}", "#2b2b2b")
             self._set_value("Carbon Fiber Target Temp", f"{ps.target_temp_cf:.1f}", "#2b2b2b")
 
             resin_fan_color = "#1b6e3c" if ps.fan_ok_resin else "#b42318"
-            self._set_value("Resin Fan OK", "是" if ps.fan_ok_resin else "否", resin_fan_color)
+            self._set_value("Resin Fan OK", "开" if ps.fan_ok_resin else "关", resin_fan_color)
             self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
         else:
             missing_keys = [
-                "Printhead Ready",
-                "Printhead Age",
-                "Printhead Stamp",
-                "Ready Event Seq",
-                "Ready Event Type",
-                "Current Tool",
                 "Carbon Fiber State",
                 "Carbon Fiber Fan OK",
                 "Carbon Fiber Current Temp",
@@ -1524,6 +1537,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ]
             for key in missing_keys:
                 self._set_value(key, "-", "#b42318")
+            self._current_tool_value.setText("-")
 
         if msg.kuka_status_valid:
             ks = msg.kuka_status
@@ -1871,6 +1885,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         for line in lines:
             self._rsi_log_text.appendPlainText(f"[{ts}] {line}")
 
+    def _on_uart_log(self, line_text):
+        import time
+        t = time.localtime()
+        ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
+        self._uart_log_text.appendPlainText(f"[{ts}] {line_text}")
+
 
 class MyProjectUiPlugin(Plugin):
     def __init__(self, context):
@@ -1880,7 +1900,7 @@ class MyProjectUiPlugin(Plugin):
         if not rclpy.ok():
             rclpy.init(args=None)
 
-        self._node = rclpy.create_node("my_project_ui_panel")
+        self._node = context.node
         self._param_client = self._node.create_client(
             SetParameters, "/uart_node/set_parameters"
         )
@@ -1922,6 +1942,9 @@ class MyProjectUiPlugin(Plugin):
         self._node.create_subscription(
             StringMsg, "/rsi/sent_xml", self._on_rsi_xml, 10
         )
+        self._node.create_subscription(
+            StringMsg, "/uart/raw", self._on_uart_log_msg, 10
+        )
 
         self._spin_timer = QtCore.QTimer(self._widget)
         self._spin_timer.timeout.connect(self._spin_once)
@@ -1936,6 +1959,9 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_rsi_xml(self, msg: StringMsg):
         self._widget.rsi_xml_received.emit(msg.data)
+
+    def _on_uart_log_msg(self, msg: StringMsg):
+        self._widget.uart_log_received.emit(msg.data)
 
     def _on_command_submit(self, cmd: str):
         msg = StringMsg()

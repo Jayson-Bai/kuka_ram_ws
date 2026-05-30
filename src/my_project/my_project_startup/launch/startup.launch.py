@@ -193,12 +193,12 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "sen_type",
-            default_value="PosCorr",
+            default_value="PythonDemo",
             description="RSI XML 发送类型（需与 KUKA 端配置一致）。",
         ),
         DeclareLaunchArgument(
             "decimal_precision",
-            default_value="6",
+            default_value="4",
             description="RSI 收发数据小数位精度。",
         ),
         DeclareLaunchArgument(
