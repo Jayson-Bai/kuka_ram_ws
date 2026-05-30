@@ -1048,8 +1048,8 @@ def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:
 
     x = np.concatenate(xs_all)
     y = np.concatenate(ys_all)
-    fig, ax = plt.subplots(figsize=(8, 8), dpi=150)
-    ax.plot(x, y, linewidth=0.6, color="#2b2b2b")
+    fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+    ax.plot(x, y, linewidth=0.8, color="#2b2b2b")
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("X (mm)")
     ax.set_ylabel("Y (mm)")

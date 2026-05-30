@@ -37,806 +37,806 @@
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_Skirt-Brim_occ_0001",
     "start_seq": 10969,
-    "end_seq": 22249
+    "end_seq": 22255
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_TRAVEL_occ_0002",
-    "start_seq": 20461,
-    "end_seq": 22248
+    "start_seq": 20467,
+    "end_seq": 22254
   },
   {
     "layer": 1,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_Perimeter_occ_0001",
-    "start_seq": 22250,
-    "end_seq": 30777
+    "start_seq": 22256,
+    "end_seq": 30793
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_TRAVEL_occ_0003",
-    "start_seq": 30778,
-    "end_seq": 31778
+    "start_seq": 30794,
+    "end_seq": 31794
   },
   {
     "layer": 1,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_Perimeter_occ_0002",
-    "start_seq": 31779,
-    "end_seq": 39646
+    "start_seq": 31795,
+    "end_seq": 39672
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_TRAVEL_occ_0004",
-    "start_seq": 39647,
-    "end_seq": 40647
+    "start_seq": 39673,
+    "end_seq": 40673
   },
   {
     "layer": 1,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_External_perimeter_occ_0001",
-    "start_seq": 40648,
-    "end_seq": 49853
+    "start_seq": 40674,
+    "end_seq": 49890
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_TRAVEL_occ_0005",
-    "start_seq": 48852,
-    "end_seq": 49852
+    "start_seq": 48889,
+    "end_seq": 49889
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 6,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_TRAVEL_occ_0006",
-    "start_seq": 49854,
-    "end_seq": 51476
+    "start_seq": 49891,
+    "end_seq": 51513
   },
   {
     "layer": 1,
     "type": "Solid infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0001/cylinder_test_100_50_first10layers_layer_0001_type_Solid_infill_occ_0001",
-    "start_seq": 51477,
-    "end_seq": 121835
+    "start_seq": 51514,
+    "end_seq": 177918
   },
   {
     "layer": 2,
     "type": "Solid infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_Solid_infill_occ_0001",
-    "start_seq": 121836,
-    "end_seq": 121836
+    "start_seq": 177919,
+    "end_seq": 177919
   },
   {
     "layer": 2,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_TRAVEL_occ_0001",
-    "start_seq": 121837,
-    "end_seq": 125327
+    "start_seq": 177920,
+    "end_seq": 181410
   },
   {
     "layer": 2,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_Perimeter_occ_0001",
-    "start_seq": 125328,
-    "end_seq": 133856
+    "start_seq": 181411,
+    "end_seq": 189949
   },
   {
     "layer": 2,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_TRAVEL_occ_0002",
-    "start_seq": 133857,
-    "end_seq": 134857
+    "start_seq": 189950,
+    "end_seq": 190950
   },
   {
     "layer": 2,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_Perimeter_occ_0002",
-    "start_seq": 134858,
-    "end_seq": 142725
+    "start_seq": 190951,
+    "end_seq": 198828
   },
   {
     "layer": 2,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_TRAVEL_occ_0003",
-    "start_seq": 142726,
-    "end_seq": 143726
+    "start_seq": 198829,
+    "end_seq": 199829
   },
   {
     "layer": 2,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_External_perimeter_occ_0001",
-    "start_seq": 143727,
-    "end_seq": 152932
+    "start_seq": 199830,
+    "end_seq": 209046
   },
   {
     "layer": 2,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_TRAVEL_occ_0004",
-    "start_seq": 151931,
-    "end_seq": 152931
+    "start_seq": 208045,
+    "end_seq": 209045
   },
   {
     "layer": 2,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_TRAVEL_occ_0005",
-    "start_seq": 152933,
-    "end_seq": 154364
+    "start_seq": 209047,
+    "end_seq": 210478
   },
   {
     "layer": 2,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0002/cylinder_test_100_50_first10layers_layer_0002_type_Internal_infill_occ_0001",
-    "start_seq": 154365,
-    "end_seq": 171559
+    "start_seq": 210479,
+    "end_seq": 253155
   },
   {
     "layer": 3,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_Internal_infill_occ_0001",
-    "start_seq": 171560,
-    "end_seq": 171560
+    "start_seq": 253156,
+    "end_seq": 253156
   },
   {
     "layer": 3,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_TRAVEL_occ_0001",
-    "start_seq": 171561,
-    "end_seq": 175158
+    "start_seq": 253157,
+    "end_seq": 256754
   },
   {
     "layer": 3,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_Perimeter_occ_0001",
-    "start_seq": 175159,
-    "end_seq": 183687
+    "start_seq": 256755,
+    "end_seq": 265293
   },
   {
     "layer": 3,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_TRAVEL_occ_0002",
-    "start_seq": 183688,
-    "end_seq": 184688
+    "start_seq": 265294,
+    "end_seq": 266294
   },
   {
     "layer": 3,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_Perimeter_occ_0002",
-    "start_seq": 184689,
-    "end_seq": 192556
+    "start_seq": 266295,
+    "end_seq": 274172
   },
   {
     "layer": 3,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_TRAVEL_occ_0003",
-    "start_seq": 192557,
-    "end_seq": 193557
+    "start_seq": 274173,
+    "end_seq": 275173
   },
   {
     "layer": 3,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_External_perimeter_occ_0001",
-    "start_seq": 193558,
-    "end_seq": 202763
+    "start_seq": 275174,
+    "end_seq": 284388
   },
   {
     "layer": 3,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_TRAVEL_occ_0004",
-    "start_seq": 201762,
-    "end_seq": 202762
+    "start_seq": 283387,
+    "end_seq": 284387
   },
   {
     "layer": 3,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_TRAVEL_occ_0005",
-    "start_seq": 202764,
-    "end_seq": 204218
+    "start_seq": 284389,
+    "end_seq": 285843
   },
   {
     "layer": 3,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0003/cylinder_test_100_50_first10layers_layer_0003_type_Internal_infill_occ_0002",
-    "start_seq": 204219,
-    "end_seq": 221439
+    "start_seq": 285844,
+    "end_seq": 302618
   },
   {
     "layer": 4,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_Internal_infill_occ_0001",
-    "start_seq": 221440,
-    "end_seq": 221440
+    "start_seq": 302619,
+    "end_seq": 302619
   },
   {
     "layer": 4,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_TRAVEL_occ_0001",
-    "start_seq": 221441,
-    "end_seq": 225009
+    "start_seq": 302620,
+    "end_seq": 306188
   },
   {
     "layer": 4,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_Perimeter_occ_0001",
-    "start_seq": 225010,
-    "end_seq": 233538
+    "start_seq": 306189,
+    "end_seq": 314727
   },
   {
     "layer": 4,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_TRAVEL_occ_0002",
-    "start_seq": 233539,
-    "end_seq": 234539
+    "start_seq": 314728,
+    "end_seq": 315728
   },
   {
     "layer": 4,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_Perimeter_occ_0002",
-    "start_seq": 234540,
-    "end_seq": 242407
+    "start_seq": 315729,
+    "end_seq": 323606
   },
   {
     "layer": 4,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_TRAVEL_occ_0003",
-    "start_seq": 242408,
-    "end_seq": 243408
+    "start_seq": 323607,
+    "end_seq": 324607
   },
   {
     "layer": 4,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_External_perimeter_occ_0001",
-    "start_seq": 243409,
-    "end_seq": 252614
+    "start_seq": 324608,
+    "end_seq": 333822
   },
   {
     "layer": 4,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_TRAVEL_occ_0004",
-    "start_seq": 251613,
-    "end_seq": 252613
+    "start_seq": 332821,
+    "end_seq": 333821
   },
   {
     "layer": 4,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_TRAVEL_occ_0005",
-    "start_seq": 252615,
-    "end_seq": 254046
+    "start_seq": 333823,
+    "end_seq": 335254
   },
   {
     "layer": 4,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0004/cylinder_test_100_50_first10layers_layer_0004_type_Internal_infill_occ_0002",
-    "start_seq": 254047,
-    "end_seq": 271241
+    "start_seq": 335255,
+    "end_seq": 377931
   },
   {
     "layer": 5,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_Internal_infill_occ_0001",
-    "start_seq": 271242,
-    "end_seq": 271242
+    "start_seq": 377932,
+    "end_seq": 377932
   },
   {
     "layer": 5,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_TRAVEL_occ_0001",
-    "start_seq": 271243,
-    "end_seq": 274840
+    "start_seq": 377933,
+    "end_seq": 381530
   },
   {
     "layer": 5,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_Perimeter_occ_0001",
-    "start_seq": 274841,
-    "end_seq": 283369
+    "start_seq": 381531,
+    "end_seq": 390069
   },
   {
     "layer": 5,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_TRAVEL_occ_0002",
-    "start_seq": 283370,
-    "end_seq": 284370
+    "start_seq": 390070,
+    "end_seq": 391070
   },
   {
     "layer": 5,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_Perimeter_occ_0002",
-    "start_seq": 284371,
-    "end_seq": 293238
+    "start_seq": 391071,
+    "end_seq": 399948
   },
   {
     "layer": 5,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_TRAVEL_occ_0003",
-    "start_seq": 293239,
-    "end_seq": 294239
+    "start_seq": 399949,
+    "end_seq": 400949
   },
   {
     "layer": 5,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_External_perimeter_occ_0001",
-    "start_seq": 294240,
-    "end_seq": 304446
+    "start_seq": 400950,
+    "end_seq": 411165
   },
   {
     "layer": 5,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_TRAVEL_occ_0004",
-    "start_seq": 303445,
-    "end_seq": 304445
+    "start_seq": 410164,
+    "end_seq": 411164
   },
   {
     "layer": 5,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_TRAVEL_occ_0005",
-    "start_seq": 304447,
-    "end_seq": 305901
+    "start_seq": 411166,
+    "end_seq": 412620
   },
   {
     "layer": 5,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0005/cylinder_test_100_50_first10layers_layer_0005_type_Internal_infill_occ_0002",
-    "start_seq": 305902,
-    "end_seq": 323122
+    "start_seq": 412621,
+    "end_seq": 429395
   },
   {
     "layer": 6,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_Internal_infill_occ_0001",
-    "start_seq": 323123,
-    "end_seq": 323123
+    "start_seq": 429396,
+    "end_seq": 429396
   },
   {
     "layer": 6,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_TRAVEL_occ_0001",
-    "start_seq": 323124,
-    "end_seq": 326692
+    "start_seq": 429397,
+    "end_seq": 432965
   },
   {
     "layer": 6,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_Perimeter_occ_0001",
-    "start_seq": 326693,
-    "end_seq": 335221
+    "start_seq": 432966,
+    "end_seq": 441503
   },
   {
     "layer": 6,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_TRAVEL_occ_0002",
-    "start_seq": 335222,
-    "end_seq": 336222
+    "start_seq": 441504,
+    "end_seq": 442504
   },
   {
     "layer": 6,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_Perimeter_occ_0002",
-    "start_seq": 336223,
-    "end_seq": 345088
+    "start_seq": 442505,
+    "end_seq": 451380
   },
   {
     "layer": 6,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_TRAVEL_occ_0003",
-    "start_seq": 345089,
-    "end_seq": 346089
+    "start_seq": 451381,
+    "end_seq": 452381
   },
   {
     "layer": 6,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_External_perimeter_occ_0001",
-    "start_seq": 346090,
-    "end_seq": 356294
+    "start_seq": 452382,
+    "end_seq": 462596
   },
   {
     "layer": 6,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_TRAVEL_occ_0004",
-    "start_seq": 355293,
-    "end_seq": 356293
+    "start_seq": 461595,
+    "end_seq": 462595
   },
   {
     "layer": 6,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_TRAVEL_occ_0005",
-    "start_seq": 356295,
-    "end_seq": 357726
+    "start_seq": 462597,
+    "end_seq": 464028
   },
   {
     "layer": 6,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0006/cylinder_test_100_50_first10layers_layer_0006_type_Internal_infill_occ_0002",
-    "start_seq": 357727,
-    "end_seq": 374921
+    "start_seq": 464029,
+    "end_seq": 506705
   },
   {
     "layer": 7,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_Internal_infill_occ_0001",
-    "start_seq": 374922,
-    "end_seq": 374922
+    "start_seq": 506706,
+    "end_seq": 506706
   },
   {
     "layer": 7,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_TRAVEL_occ_0001",
-    "start_seq": 374923,
-    "end_seq": 378520
+    "start_seq": 506707,
+    "end_seq": 510304
   },
   {
     "layer": 7,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_Perimeter_occ_0001",
-    "start_seq": 378521,
-    "end_seq": 386051
+    "start_seq": 510305,
+    "end_seq": 517843
   },
   {
     "layer": 7,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_TRAVEL_occ_0002",
-    "start_seq": 386052,
-    "end_seq": 387052
+    "start_seq": 517844,
+    "end_seq": 518844
   },
   {
     "layer": 7,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_Perimeter_occ_0002",
-    "start_seq": 387053,
-    "end_seq": 395916
+    "start_seq": 518845,
+    "end_seq": 527718
   },
   {
     "layer": 7,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_TRAVEL_occ_0003",
-    "start_seq": 395917,
-    "end_seq": 396917
+    "start_seq": 527719,
+    "end_seq": 528719
   },
   {
     "layer": 7,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_External_perimeter_occ_0001",
-    "start_seq": 396918,
-    "end_seq": 407120
+    "start_seq": 528720,
+    "end_seq": 538931
   },
   {
     "layer": 7,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_TRAVEL_occ_0004",
-    "start_seq": 406119,
-    "end_seq": 407119
+    "start_seq": 537930,
+    "end_seq": 538930
   },
   {
     "layer": 7,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_TRAVEL_occ_0005",
-    "start_seq": 407121,
-    "end_seq": 408575
+    "start_seq": 538932,
+    "end_seq": 540386
   },
   {
     "layer": 7,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0007/cylinder_test_100_50_first10layers_layer_0007_type_Internal_infill_occ_0002",
-    "start_seq": 408576,
-    "end_seq": 425796
+    "start_seq": 540387,
+    "end_seq": 557161
   },
   {
     "layer": 8,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_Internal_infill_occ_0001",
-    "start_seq": 425797,
-    "end_seq": 425797
+    "start_seq": 557162,
+    "end_seq": 557162
   },
   {
     "layer": 8,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_TRAVEL_occ_0001",
-    "start_seq": 425798,
-    "end_seq": 429366
+    "start_seq": 557163,
+    "end_seq": 560731
   },
   {
     "layer": 8,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_Perimeter_occ_0001",
-    "start_seq": 429367,
-    "end_seq": 436897
+    "start_seq": 560732,
+    "end_seq": 568270
   },
   {
     "layer": 8,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_TRAVEL_occ_0002",
-    "start_seq": 436898,
-    "end_seq": 437898
+    "start_seq": 568271,
+    "end_seq": 569271
   },
   {
     "layer": 8,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_Perimeter_occ_0002",
-    "start_seq": 437899,
-    "end_seq": 446760
+    "start_seq": 569272,
+    "end_seq": 578142
   },
   {
     "layer": 8,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_TRAVEL_occ_0003",
-    "start_seq": 446761,
-    "end_seq": 447761
+    "start_seq": 578143,
+    "end_seq": 579143
   },
   {
     "layer": 8,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_External_perimeter_occ_0001",
-    "start_seq": 447762,
-    "end_seq": 457961
+    "start_seq": 579144,
+    "end_seq": 589352
   },
   {
     "layer": 8,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_TRAVEL_occ_0004",
-    "start_seq": 456960,
-    "end_seq": 457960
+    "start_seq": 588351,
+    "end_seq": 589351
   },
   {
     "layer": 8,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_TRAVEL_occ_0005",
-    "start_seq": 457962,
-    "end_seq": 459393
+    "start_seq": 589353,
+    "end_seq": 590784
   },
   {
     "layer": 8,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0008/cylinder_test_100_50_first10layers_layer_0008_type_Internal_infill_occ_0002",
-    "start_seq": 459394,
-    "end_seq": 476588
+    "start_seq": 590785,
+    "end_seq": 633461
   },
   {
     "layer": 9,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_Internal_infill_occ_0001",
-    "start_seq": 476589,
-    "end_seq": 476589
+    "start_seq": 633462,
+    "end_seq": 633462
   },
   {
     "layer": 9,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_TRAVEL_occ_0001",
-    "start_seq": 476590,
-    "end_seq": 480187
+    "start_seq": 633463,
+    "end_seq": 637060
   },
   {
     "layer": 9,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_Perimeter_occ_0001",
-    "start_seq": 480188,
-    "end_seq": 487718
+    "start_seq": 637061,
+    "end_seq": 644599
   },
   {
     "layer": 9,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_TRAVEL_occ_0002",
-    "start_seq": 487719,
-    "end_seq": 488719
+    "start_seq": 644600,
+    "end_seq": 645600
   },
   {
     "layer": 9,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_Perimeter_occ_0002",
-    "start_seq": 488720,
-    "end_seq": 497579
+    "start_seq": 645601,
+    "end_seq": 654470
   },
   {
     "layer": 9,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_TRAVEL_occ_0003",
-    "start_seq": 497580,
-    "end_seq": 498580
+    "start_seq": 654471,
+    "end_seq": 655471
   },
   {
     "layer": 9,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_External_perimeter_occ_0001",
-    "start_seq": 498581,
-    "end_seq": 508778
+    "start_seq": 655472,
+    "end_seq": 665680
   },
   {
     "layer": 9,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_TRAVEL_occ_0004",
-    "start_seq": 507777,
-    "end_seq": 508777
+    "start_seq": 664679,
+    "end_seq": 665679
   },
   {
     "layer": 9,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_TRAVEL_occ_0005",
-    "start_seq": 508779,
-    "end_seq": 510233
+    "start_seq": 665681,
+    "end_seq": 667135
   },
   {
     "layer": 9,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0009/cylinder_test_100_50_first10layers_layer_0009_type_Internal_infill_occ_0002",
-    "start_seq": 510234,
-    "end_seq": 527454
+    "start_seq": 667136,
+    "end_seq": 683910
   },
   {
     "layer": 10,
     "type": "Internal infill",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_Internal_infill_occ_0001",
-    "start_seq": 527455,
-    "end_seq": 527455
+    "start_seq": 683911,
+    "end_seq": 683911
   },
   {
     "layer": 10,
     "type": "TRAVEL",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_TRAVEL_occ_0001",
-    "start_seq": 527456,
-    "end_seq": 531024
+    "start_seq": 683912,
+    "end_seq": 687480
   },
   {
     "layer": 10,
     "type": "Perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_Perimeter_occ_0001",
-    "start_seq": 531025,
-    "end_seq": 538555
+    "start_seq": 687481,
+    "end_seq": 695019
   },
   {
     "layer": 10,
     "type": "TRAVEL",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_TRAVEL_occ_0002",
-    "start_seq": 538556,
-    "end_seq": 539556
+    "start_seq": 695020,
+    "end_seq": 696020
   },
   {
     "layer": 10,
     "type": "Perimeter",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_Perimeter_occ_0002",
-    "start_seq": 539557,
-    "end_seq": 548414
+    "start_seq": 696021,
+    "end_seq": 704886
   },
   {
     "layer": 10,
     "type": "TRAVEL",
     "occ": 3,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_TRAVEL_occ_0003",
-    "start_seq": 548415,
-    "end_seq": 549415
+    "start_seq": 704887,
+    "end_seq": 705887
   },
   {
     "layer": 10,
     "type": "External perimeter",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_External_perimeter_occ_0001",
-    "start_seq": 549416,
-    "end_seq": 559611
+    "start_seq": 705888,
+    "end_seq": 716094
   },
   {
     "layer": 10,
     "type": "TRAVEL",
     "occ": 4,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_TRAVEL_occ_0004",
-    "start_seq": 558610,
-    "end_seq": 559610
+    "start_seq": 715093,
+    "end_seq": 716093
   },
   {
     "layer": 10,
     "type": "TRAVEL",
     "occ": 5,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_TRAVEL_occ_0005",
-    "start_seq": 559612,
-    "end_seq": 561043
+    "start_seq": 716095,
+    "end_seq": 717526
   },
   {
     "layer": 10,
     "type": "Internal infill",
     "occ": 2,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_Internal_infill_occ_0002",
-    "start_seq": 561044,
-    "end_seq": 578240
+    "start_seq": 717527,
+    "end_seq": 760205
   },
   {
     "layer": 10,
     "type": "Custom",
     "occ": 1,
     "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/cylinder_test_100_50_first10layers/layer_0010/cylinder_test_100_50_first10layers_layer_0010_type_Custom_occ_0001",
-    "start_seq": 578241,
-    "end_seq": 578241
+    "start_seq": 760206,
+    "end_seq": 760206
   }
 ]

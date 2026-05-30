@@ -18,35 +18,35 @@ from pathlib import Path
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
-    ("center_start_delay_s", "1.0", "Delay before starting center_node (seconds)", "Center Node"),
-    ("npz_preload_chunks", "2", "NPZ preload chunk count", "Center Node"),
-    ("queue_low", "1000", "Trajectory queue low watermark", "Center Node"),
-    ("queue_high", "2000", "Trajectory queue high watermark", "Center Node"),
-    ("plan_qos_depth", "2000", "Plan topic QoS depth", "Center Node"),
-    ("traj_prefill", "1000", "Trajectory prefill count on startup", "Center Node"),
-    ("traj_low", "500", "Trajectory backlog low threshold", "Center Node"),
-    ("traj_high", "1500", "Trajectory backlog high threshold", "Center Node"),
-    ("xyzabc_decimals", "6", "Pose decimal precision", "Center Node"),
-    ("e_decimals", "2", "Extrusion decimal precision", "Center Node"),
-    ("kuka_status_raw", "false", "Print KUKA raw XML length", "Center Node"),
-    ("summary_period_ms", "200", "Control center publish period (ms)", "Center Node"),
-    ("sen_type", "PosCorr", "RSI XML SEN type", "RSI Node"),
-    ("decimal_precision", "6", "RSI data decimal precision", "RSI Node"),
-    ("local_ip", "192.168.1.1", "RSI local listen IP", "RSI Node"),
-    ("local_port", "49152", "RSI local listen port", "RSI Node"),
-    ("abort_lift_mm", "100.0", "Z lift distance on ABORT (mm)", "RSI Node"),
-    ("abort_lift_speed_mm_s", "10.0", "Z lift speed on ABORT (mm/s)", "RSI Node"),
-    ("port", "/dev/ttyUSB0", "UART serial device path", "UART Node"),
-    ("baudrate", "115200", "UART baud rate", "UART Node"),
-    ("extrude_scale", "1.0", "UART extrusion scale factor", "UART Node"),
-    ("ui_publish_period_ms", "200", "UI status publish period (ms)", "System Manager"),
-    ("heartbeat_timeout_s", "1.0", "Heartbeat timeout (seconds)", "System Manager"),
-    ("traj_queue_limit", "5000", "UI trajectory queue limit", "System Manager"),
-    ("event_queue_limit", "2000", "UI event queue limit", "System Manager"),
+    ("center_start_delay_s", "1.0", "中心节点启动延迟（秒）", "中心节点"),
+    ("npz_preload_chunks", "2", "NPZ 预加载块数", "中心节点"),
+    ("queue_low", "1000", "轨迹队列低水位", "中心节点"),
+    ("queue_high", "2000", "轨迹队列高水位", "中心节点"),
+    ("plan_qos_depth", "2000", "Plan 话题 QoS 深度", "中心节点"),
+    ("traj_prefill", "1000", "启动时轨迹预填充数量", "中心节点"),
+    ("traj_low", "500", "轨迹积压低阈值", "中心节点"),
+    ("traj_high", "1500", "轨迹积压高阈值", "中心节点"),
+    ("xyzabc_decimals", "6", "位姿小数精度", "中心节点"),
+    ("e_decimals", "2", "挤出小数精度", "中心节点"),
+    ("kuka_status_raw", "false", "打印 KUKA 原始 XML 长度", "中心节点"),
+    ("summary_period_ms", "200", "控制中心发布周期（ms）", "中心节点"),
+    ("sen_type", "PosCorr", "RSI XML SEN 类型", "RSI 节点"),
+    ("decimal_precision", "6", "RSI 数据小数精度", "RSI 节点"),
+    ("local_ip", "192.168.1.1", "RSI 本地监听 IP", "RSI 节点"),
+    ("local_port", "49152", "RSI 本地监听端口", "RSI 节点"),
+    ("abort_lift_mm", "100.0", "ABORT 时 Z 轴抬升距离（mm）", "RSI 节点"),
+    ("abort_lift_speed_mm_s", "10.0", "ABORT 时 Z 轴抬升速度（mm/s）", "RSI 节点"),
+    ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART 节点"),
+    ("baudrate", "115200", "UART 波特率", "UART 节点"),
+    ("extrude_scale", "1.0", "UART 挤出倍率因子", "UART 节点"),
+    ("ui_publish_period_ms", "200", "UI 状态发布周期（ms）", "系统管理器"),
+    ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
+    ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
+    ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
-_LAUNCH_GROUPS_ORDER = ["Center Node", "RSI Node", "UART Node", "System Manager"]
+_LAUNCH_GROUPS_ORDER = ["中心节点", "RSI 节点", "UART 节点", "系统管理器"]
 
 
 class _LaunchSettingsDialog(QtWidgets.QDialog):
@@ -54,7 +54,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
 
     def __init__(self, current_params, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Launch Settings")
+        self.setWindowTitle("启动参数设置")
         self.setMinimumSize(620, 520)
         self._inputs = {}
         self._build_ui(current_params)
@@ -64,7 +64,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
-        title = QtWidgets.QLabel("Launch Parameter Configuration")
+        title = QtWidgets.QLabel("启动参数配置")
         title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
         main_layout.addWidget(title)
 
@@ -82,10 +82,10 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             groups.setdefault(group, []).append((name, default, desc))
 
         group_colors = {
-            "Center Node": "#1a73e8",
-            "RSI Node": "#b15e00",
-            "UART Node": "#1b6e3c",
-            "System Manager": "#7b1fa2",
+            "中心节点": "#1a73e8",
+            "RSI 节点": "#b15e00",
+            "UART 节点": "#1b6e3c",
+            "系统管理器": "#7b1fa2",
         }
 
         for group_name in _LAUNCH_GROUPS_ORDER:
@@ -143,7 +143,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         # Bottom buttons
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(8)
-        btn_reset = QtWidgets.QPushButton("Reset Defaults")
+        btn_reset = QtWidgets.QPushButton("恢复默认")
         btn_reset.setMinimumHeight(32)
         btn_reset.setCursor(QtCore.Qt.PointingHandCursor)
         btn_reset.setStyleSheet(
@@ -152,7 +152,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             " color: #666666; padding: 4px 16px;"
         )
         btn_reset.clicked.connect(self._reset_defaults)
-        btn_ok = QtWidgets.QPushButton("OK")
+        btn_ok = QtWidgets.QPushButton("确定")
         btn_ok.setMinimumHeight(32)
         btn_ok.setCursor(QtCore.Qt.PointingHandCursor)
         btn_ok.setStyleSheet(
@@ -161,7 +161,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             " color: #ffffff; padding: 4px 20px;"
         )
         btn_ok.clicked.connect(self.accept)
-        btn_cancel = QtWidgets.QPushButton("Cancel")
+        btn_cancel = QtWidgets.QPushButton("取消")
         btn_cancel.setMinimumHeight(32)
         btn_cancel.setCursor(QtCore.Qt.PointingHandCursor)
         btn_cancel.setStyleSheet(
@@ -276,7 +276,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self._index = 0
         self._zoom = 1.0
 
-        self.setWindowTitle(f"Layer Preview - {Path(npz_dir).name}")
+        self.setWindowTitle(f"层预览 - {Path(npz_dir).name}")
         self.resize(900, 700)
 
         self._scan_images()
@@ -303,10 +303,10 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
         # Top bar: prev / label / next
         top_bar = QtWidgets.QHBoxLayout()
-        self._btn_prev = QtWidgets.QPushButton("←  Prev")
+        self._btn_prev = QtWidgets.QPushButton("← 上一层")
         self._btn_prev.setFixedWidth(100)
         self._btn_prev.setCursor(QtCore.Qt.PointingHandCursor)
-        self._btn_next = QtWidgets.QPushButton("Next  →")
+        self._btn_next = QtWidgets.QPushButton("下一层 →")
         self._btn_next.setFixedWidth(100)
         self._btn_next.setCursor(QtCore.Qt.PointingHandCursor)
         self._label_index = QtWidgets.QLabel("")
@@ -330,10 +330,10 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
         # Bottom bar: zoom label + reset + close
         bottom_bar = QtWidgets.QHBoxLayout()
-        self._label_zoom = QtWidgets.QLabel("Zoom: 100%")
-        btn_reset = QtWidgets.QPushButton("Reset View")
+        self._label_zoom = QtWidgets.QLabel("缩放: 100%")
+        btn_reset = QtWidgets.QPushButton("重置视图")
         btn_reset.setCursor(QtCore.Qt.PointingHandCursor)
-        btn_close = QtWidgets.QPushButton("Close")
+        btn_close = QtWidgets.QPushButton("关闭")
         btn_close.setCursor(QtCore.Qt.PointingHandCursor)
         bottom_bar.addWidget(self._label_zoom)
         bottom_bar.addStretch()
@@ -350,18 +350,18 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
     def _show_current(self):
         if not self._images:
-            self._label_index.setText("No images found")
+            self._label_index.setText("未找到图像")
             self._btn_prev.setEnabled(False)
             self._btn_next.setEnabled(False)
             return
         total = len(self._images)
-        self._label_index.setText(f"Layer {self._index + 1} / {total}")
+        self._label_index.setText(f"层 {self._index + 1} / {total}")
         self._btn_prev.setEnabled(self._index > 0)
         self._btn_next.setEnabled(self._index < total - 1)
 
         pixmap = QtGui.QPixmap(str(self._images[self._index]))
         if pixmap.isNull():
-            self._label_index.setText("Failed to load image")
+            self._label_index.setText("图像加载失败")
             return
         self._scene.clear()
         self._scene.addPixmap(pixmap)
@@ -381,11 +381,11 @@ class _LayerViewerDialog(QtWidgets.QDialog):
     def _on_reset(self):
         self._view.fitInView(self._scene.sceneRect(), QtCore.Qt.KeepAspectRatio)
         self._zoom = self._view.transform().m11()
-        self._label_zoom.setText(f"Zoom: {self._zoom * 100:.0f}%")
+        self._label_zoom.setText(f"缩放: {self._zoom * 100:.0f}%")
 
     def _on_zoom_changed(self, scale):
         self._zoom = scale
-        self._label_zoom.setText(f"Zoom: {scale * 100:.0f}%")
+        self._label_zoom.setText(f"缩放: {scale * 100:.0f}%")
 
     def keyPressEvent(self, event):
         if event.key() == QtCore.Qt.Key_Left:
@@ -439,16 +439,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._labels = {}
         value_min_width = QtWidgets.QLabel("0").fontMetrics().horizontalAdvance("0") * 5
         cf_labels = [
-            ("Carbon Fiber State", "State"),
-            ("Carbon Fiber Fan OK", "Fan OK"),
-            ("Carbon Fiber Current Temp", "Current Temp"),
-            ("Carbon Fiber Target Temp", "Target Temp"),
+            ("Carbon Fiber State", "状态"),
+            ("Carbon Fiber Fan OK", "风扇正常"),
+            ("Carbon Fiber Current Temp", "当前温度"),
+            ("Carbon Fiber Target Temp", "目标温度"),
         ]
         resin_labels = [
-            ("Resin State", "State"),
-            ("Resin Fan OK", "Fan OK"),
-            ("Resin Current Temp", "Current Temp"),
-            ("Resin Target Temp", "Target Temp"),
+            ("Resin State", "状态"),
+            ("Resin Fan OK", "风扇正常"),
+            ("Resin Current Temp", "当前温度"),
+            ("Resin Target Temp", "目标温度"),
         ]
         label_metrics = QtWidgets.QLabel("X").fontMetrics()
         cf_resin_label_titles = [title for _, title in (cf_labels + resin_labels)]
@@ -456,7 +456,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             label_metrics.horizontalAdvance(text) for text in cf_resin_label_titles
         )
 
-        title = QtWidgets.QLabel("System Control Panel")
+        title = QtWidgets.QLabel("系统控制面板")
         title.setObjectName("titleLabel")
         title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         title.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
@@ -513,7 +513,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col2_layout = QtWidgets.QVBoxLayout()
         col2_layout.setSpacing(6)
 
-        system_box = QtWidgets.QGroupBox("System State")
+        system_box = QtWidgets.QGroupBox("系统状态")
         system_box.setObjectName("groupSystem")
         system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         self._system_box = system_box
@@ -521,7 +521,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         system_layout.setSpacing(0)
         system_layout.setContentsMargins(4, 12, 4, 12)
         
-        sys_val = _AutoScaleLabel("OFFLINE")
+        sys_val = _AutoScaleLabel("离线")
         sys_val.setObjectName("valueLabel")
         sys_val.setAlignment(QtCore.Qt.AlignCenter)
         
@@ -530,7 +530,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._labels["System State"] = sys_val
         col0_layout.addWidget(system_box)
 
-        kuka_box = QtWidgets.QGroupBox("KUKA Pos")
+        kuka_box = QtWidgets.QGroupBox("KUKA 位姿")
         self._kuka_box = kuka_box
         kuka_box.setObjectName("groupKuka")
         kuka_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
@@ -557,30 +557,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._labels[f"KUKA {axis}"] = axis_value
         col0_layout.addWidget(kuka_box)
         
-        heartbeat_box = add_group("Heartbeat", [
-            ("Heartbeat Age", "Age"),
-            ("Heartbeat Seq", "Seq"),
+        heartbeat_box = add_group("心跳", [
+            ("Heartbeat Age", "延迟"),
+            ("Heartbeat Seq", "序号"),
             ("Heartbeat IPOC", "IPOC"),
-            ("Heartbeat Tool", "Tool"),
-            ("Heartbeat Extrude", "Extrude"),
+            ("Heartbeat Tool", "工具"),
+            ("Heartbeat Extrude", "挤出"),
         ], parent_layout=col0_layout, object_name="groupHeartbeat")
         self._heartbeat_box = heartbeat_box
         heartbeat_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         
-        traj_box = QtWidgets.QGroupBox("Trajectory")
+        traj_box = QtWidgets.QGroupBox("轨迹")
         self._traj_box = traj_box
         traj_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         traj_layout = QtWidgets.QVBoxLayout(traj_box)
         traj_layout.setSpacing(6)
-        add_group("Summary", [
-            ("Traj Backlog", "Backlog"),
-            ("Next Traj Seq", "Next Seq"),
+        add_group("概览", [
+            ("Traj Backlog", "积压"),
+            ("Next Traj Seq", "下一序号"),
         ], parent_layout=traj_layout)
         traj_row = QtWidgets.QHBoxLayout()
         traj_row.setSpacing(8)
-        add_group("Current", [
-            ("Traj Seq", "Seq"),
-            ("Traj Tool", "Tool"),
+        add_group("当前", [
+            ("Traj Seq", "序号"),
+            ("Traj Tool", "工具"),
             ("Traj X", "X"),
             ("Traj Y", "Y"),
             ("Traj Z", "Z"),
@@ -589,9 +589,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("Traj C", "C"),
             ("Traj E", "E"),
         ], parent_layout=traj_row)
-        add_group("Next", [
-            ("Traj Seq (Next)", "Seq"),
-            ("Traj Tool (Next)", "Tool"),
+        add_group("下一个", [
+            ("Traj Seq (Next)", "序号"),
+            ("Traj Tool (Next)", "工具"),
             ("Traj X (Next)", "X"),
             ("Traj Y (Next)", "Y"),
             ("Traj Z (Next)", "Z"),
@@ -607,17 +607,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         
         # ======== Column 1: Printhead ========
         
-        ph_overview_box = QtWidgets.QGroupBox("Printhead Overview")
+        ph_overview_box = QtWidgets.QGroupBox("打印头概览")
         ph_overview_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         ph_overview_layout = QtWidgets.QVBoxLayout(ph_overview_box)
         ph_overview_layout.setSpacing(6)
         
-        events_summary_box = QtWidgets.QGroupBox("Events Summary")
+        events_summary_box = QtWidgets.QGroupBox("事件概览")
         events_summary_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         events_summary_layout = QtWidgets.QHBoxLayout(events_summary_box)
         events_summary_layout.setSpacing(12)
         
-        lbl1 = QtWidgets.QLabel("Next Seq")
+        lbl1 = QtWidgets.QLabel("下一序号")
         lbl1.setObjectName("fieldLabel")
         val1 = QtWidgets.QLabel("-")
         val1.setObjectName("valueLabel")
@@ -626,7 +626,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         events_summary_layout.addWidget(lbl1)
         events_summary_layout.addWidget(val1)
         
-        lbl2 = QtWidgets.QLabel("Pending")
+        lbl2 = QtWidgets.QLabel("待处理")
         lbl2.setObjectName("fieldLabel")
         val2 = QtWidgets.QLabel("-")
         val2.setObjectName("valueLabel")
@@ -638,13 +638,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         events_summary_layout.addStretch(1)
         ph_overview_layout.addWidget(events_summary_box)
         
-        add_group("General", [
-            ("Printhead Ready", "Ready"),
-            ("Printhead Age", "Age"),
-            ("Printhead Stamp", "Stamp"),
-            ("Ready Event Seq", "Ready Seq"),
-            ("Ready Event Type", "Ready Type"),
-            ("Current Tool", "Tool"),
+        add_group("基本信息", [
+            ("Printhead Ready", "就绪"),
+            ("Printhead Age", "延迟"),
+            ("Printhead Stamp", "时间戳"),
+            ("Ready Event Seq", "就绪序号"),
+            ("Ready Event Type", "就绪类型"),
+            ("Current Tool", "工具"),
         ], parent_layout=ph_overview_layout)
         
         self._labels["Next Event Seq"] = val1
@@ -652,17 +652,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         
         events_row = QtWidgets.QHBoxLayout()
         events_row.setSpacing(8)
-        add_group("Current Event", [
-            ("Event Type", "Type"),
-            ("Event Payload", "Payload"),
-            ("Event Src Line", "Src Line"),
-            ("Event Trigger Seq", "Trigger Seq"),
+        add_group("当前事件", [
+            ("Event Type", "类型"),
+            ("Event Payload", "载荷"),
+            ("Event Src Line", "源码行"),
+            ("Event Trigger Seq", "触发序号"),
         ], parent_layout=events_row)
-        add_group("Next Event", [
-            ("Event Type (Next)", "Type"),
-            ("Event Payload (Next)", "Payload"),
-            ("Event Src Line (Next)", "Src Line"),
-            ("Event Trigger Seq (Next)", "Trigger Seq"),
+        add_group("下一事件", [
+            ("Event Type (Next)", "类型"),
+            ("Event Payload (Next)", "载荷"),
+            ("Event Src Line (Next)", "源码行"),
+            ("Event Trigger Seq (Next)", "触发序号"),
         ], parent_layout=events_row)
         events_row.setStretch(0, 1)
         events_row.setStretch(1, 1)
@@ -670,21 +670,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
         
         col1_layout.addWidget(ph_overview_box)
         
-        ph_tools_box = QtWidgets.QGroupBox("Tool Management")
+        ph_tools_box = QtWidgets.QGroupBox("工具管理")
         ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Expanding)
         ph_tools_layout = QtWidgets.QVBoxLayout(ph_tools_box)
         ph_tools_layout.setSpacing(8)
         
         tool_row = QtWidgets.QHBoxLayout()
         tool_row.setSpacing(12)
-        tool_label = QtWidgets.QLabel("Switch Tool")
+        tool_label = QtWidgets.QLabel("切换工具")
         tool_label.setObjectName("fieldLabel")
         tool_row.addWidget(tool_label)
-        self._btn_tool_cf = QtWidgets.QPushButton("Carbon Fiber")
+        self._btn_tool_cf = QtWidgets.QPushButton("碳纤维")
         self._btn_tool_cf.setObjectName("btnToolCF")
         self._btn_tool_cf.setMinimumHeight(32)
         self._btn_tool_cf.setCursor(QtCore.Qt.PointingHandCursor)
-        self._btn_tool_resin = QtWidgets.QPushButton("Resin")
+        self._btn_tool_resin = QtWidgets.QPushButton("树脂")
         self._btn_tool_resin.setObjectName("btnToolResin")
         self._btn_tool_resin.setMinimumHeight(32)
         self._btn_tool_resin.setCursor(QtCore.Qt.PointingHandCursor)
@@ -694,12 +694,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         
         extrude_inner = QtWidgets.QHBoxLayout()
         extrude_inner.setSpacing(10)
-        extrude_cur_label = QtWidgets.QLabel("Extrude Scale Current")
+        extrude_cur_label = QtWidgets.QLabel("当前挤出倍率")
         extrude_cur_label.setObjectName("fieldLabel")
         self._extrude_scale_value = QtWidgets.QLabel("1.000")
         self._extrude_scale_value.setObjectName("valueLabel")
         self._extrude_scale_value.setMinimumWidth(value_min_width)
-        extrude_set_label = QtWidgets.QLabel("Set")
+        extrude_set_label = QtWidgets.QLabel("设置")
         extrude_set_label.setObjectName("fieldLabel")
         self._extrude_scale_input = QtWidgets.QLineEdit()
         self._extrude_scale_input.setPlaceholderText("1.0")
@@ -707,7 +707,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, self._extrude_scale_input)
         validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
         self._extrude_scale_input.setValidator(validator)
-        self._extrude_scale_apply = QtWidgets.QPushButton("Apply")
+        self._extrude_scale_apply = QtWidgets.QPushButton("应用")
         self._extrude_scale_apply.setObjectName("btnTempApply_extrude")
         self._extrude_scale_apply.setMinimumHeight(28)
         self._extrude_scale_apply.setCursor(QtCore.Qt.PointingHandCursor)
@@ -726,32 +726,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
         head_panels_row = QtWidgets.QHBoxLayout()
         head_panels_row.setSpacing(12)
         
-        for head_id, head_name in (("cf", "Carbon Fiber"), ("resin", "Resin")):
+        for head_id, head_name in (("cf", "碳纤维"), ("resin", "树脂")):
             master_panel = QtWidgets.QGroupBox(head_name)
             master_panel.setObjectName(f"groupMaster{head_id}")
             master_panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
             master_layout = QtWidgets.QVBoxLayout(master_panel)
             master_layout.setSpacing(6)
             
-            status_box = add_group("Status", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
+            status_box = add_group("状态", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
                 label_min_width=cf_resin_label_min_width,
                 value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
             master_layout.addWidget(status_box)
             
-            ctrl_box = QtWidgets.QGroupBox("Control")
+            ctrl_box = QtWidgets.QGroupBox("控制")
             ctrl_layout = QtWidgets.QVBoxLayout(ctrl_box)
             ctrl_layout.setSpacing(6)
             
             fan_row = QtWidgets.QHBoxLayout()
             fan_row.setSpacing(8)
-            fan_label = QtWidgets.QLabel("Fan")
+            fan_label = QtWidgets.QLabel("风扇")
             fan_label.setObjectName("fieldLabel")
             fan_label.setMinimumWidth(30)
-            btn_fan_on = QtWidgets.QPushButton("ON")
+            btn_fan_on = QtWidgets.QPushButton("开")
             btn_fan_on.setObjectName(f"btnFanOn_{head_id}")
             btn_fan_on.setMinimumHeight(28)
             btn_fan_on.setCursor(QtCore.Qt.PointingHandCursor)
-            btn_fan_off = QtWidgets.QPushButton("OFF")
+            btn_fan_off = QtWidgets.QPushButton("关")
             btn_fan_off.setObjectName(f"btnFanOff_{head_id}")
             btn_fan_off.setMinimumHeight(28)
             btn_fan_off.setCursor(QtCore.Qt.PointingHandCursor)
@@ -762,7 +762,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             
             temp_row = QtWidgets.QHBoxLayout()
             temp_row.setSpacing(8)
-            temp_label = QtWidgets.QLabel("Temp")
+            temp_label = QtWidgets.QLabel("温度")
             temp_label.setObjectName("fieldLabel")
             temp_label.setMinimumWidth(30)
             temp_input = QtWidgets.QLineEdit()
@@ -771,7 +771,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             temp_validator = QtGui.QDoubleValidator(0.0, 500.0, 1, temp_input)
             temp_validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             temp_input.setValidator(temp_validator)
-            btn_temp_apply = QtWidgets.QPushButton("Set")
+            btn_temp_apply = QtWidgets.QPushButton("设定")
             btn_temp_apply.setObjectName(f"btnTempApply_{head_id}")
             btn_temp_apply.setMinimumHeight(28)
             btn_temp_apply.setCursor(QtCore.Qt.PointingHandCursor)
@@ -792,7 +792,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col1_layout.addWidget(ph_tools_box)
 
         # ======== Print Control 区域 ========
-        control_box = QtWidgets.QGroupBox("Print Control")
+        control_box = QtWidgets.QGroupBox("打印控制")
         control_box.setObjectName("groupControl")
         control_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         control_layout = QtWidgets.QVBoxLayout(control_box)
@@ -801,18 +801,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.setSpacing(12)
 
-        self._btn_pause = QtWidgets.QPushButton("Pause")
+        self._btn_pause = QtWidgets.QPushButton("暂停")
         self._btn_pause.setObjectName("btnPause")
         self._btn_pause.setMinimumHeight(36)
         self._btn_pause.setCursor(QtCore.Qt.PointingHandCursor)
 
-        self._btn_resume = QtWidgets.QPushButton("Resume")
+        self._btn_resume = QtWidgets.QPushButton("继续")
         self._btn_resume.setObjectName("btnResume")
         self._btn_resume.setMinimumHeight(36)
         self._btn_resume.setCursor(QtCore.Qt.PointingHandCursor)
         self._btn_resume.setEnabled(False)
 
-        self._btn_stop = QtWidgets.QPushButton("Stop")
+        self._btn_stop = QtWidgets.QPushButton("停止")
         self._btn_stop.setObjectName("btnStop")
         self._btn_stop.setMinimumHeight(36)
         self._btn_stop.setCursor(QtCore.Qt.PointingHandCursor)
@@ -827,21 +827,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
         # Wait to add control_box until after launch_box
 
         # ======== GCode Export 区域 ========
-        export_box = QtWidgets.QGroupBox("GCode Export")
+        export_box = QtWidgets.QGroupBox("GCode 导出")
         export_box.setObjectName("groupExport")
         export_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         export_layout = QtWidgets.QVBoxLayout(export_box)
         export_layout.setSpacing(6)
 
         # Subtitle: Tool Offset
-        offset_subtitle = QtWidgets.QLabel("Tool Offset")
+        offset_subtitle = QtWidgets.QLabel("工具偏移")
         offset_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         export_layout.addWidget(offset_subtitle)
 
         # Tool Offset Description & Input Fields (placed inside GCode Export)
         offset_desc = QtWidgets.QLabel(
-            "Movement needed when switching to Tool 1 (CF),\n"
-            "relative to Tool 2 (Resin) base position."
+            "切换到工具 1（碳纤维）时的移动量，\n"
+            "相对于工具 2（树脂）基准位置。"
         )
         offset_desc.setObjectName("fieldLabel")
         offset_desc.setWordWrap(True)
@@ -874,7 +874,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             spin.valueChanged.connect(self._on_offset_changed)
         export_layout.addLayout(offset_grid)
 
-        self._offset_status = QtWidgets.QLabel("Loaded from config.")
+        self._offset_status = QtWidgets.QLabel("已加载配置。")
         self._offset_status.setObjectName("fieldLabel")
         export_layout.addWidget(self._offset_status)
 
@@ -885,7 +885,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(separator)
 
         # Subtitle: GCode File
-        gcode_subtitle = QtWidgets.QLabel("GCode File")
+        gcode_subtitle = QtWidgets.QLabel("GCode 文件")
         gcode_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
         export_layout.addWidget(gcode_subtitle)
 
@@ -896,7 +896,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         gcode_lbl.setObjectName("fieldLabel")
         gcode_lbl.setMinimumWidth(50)
         self._gcode_path_input = QtWidgets.QLineEdit()
-        self._gcode_path_input.setPlaceholderText("Select .gcode file...")
+        self._gcode_path_input.setPlaceholderText("选择 .gcode 文件...")
         self._btn_browse_gcode = QtWidgets.QPushButton("…")
         self._btn_browse_gcode.setFixedWidth(32)
         self._btn_browse_gcode.setFixedHeight(28)
@@ -909,10 +909,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         # NPZ output path (internal, hidden from UI)
         self._npz_out_input = QtWidgets.QLineEdit()
-        self._npz_out_input.setPlaceholderText("Auto-generated from GCode name")
+        self._npz_out_input.setPlaceholderText("根据 GCode 文件名自动生成")
 
         # Planner settings (collapsible)
-        planner_toggle = QtWidgets.QPushButton("▶ Planner Settings")
+        planner_toggle = QtWidgets.QPushButton("▶ 规划器设置")
         planner_toggle.setObjectName("btnPlannerToggle")
         planner_toggle.setMinimumHeight(28)
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
@@ -928,18 +928,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
         planner_form.setVerticalSpacing(4)
 
         _PLANNER_PARAMS = [
-            ("dt", "0.004", "Sampling period (s)"),
-            ("default_feed_mm_s", "10.0", "Default feed speed (mm/s)"),
-            ("corner_angle_deg", "10.0", "Corner angle threshold (°)"),
-            ("corner_retreat_ratio", "0.2", "Corner retreat ratio"),
-            ("density", "0", "Point density multiplier"),
-            ("degree", "3", "B-spline degree"),
-            ("max_fit_points_per_segment", "20000", "Max fit points/segment"),
-            ("export_sleep_ms", "0", "Export throttle sleep (ms)"),
-            ("export_yield_every", "0", "Export yield interval"),
-            ("split_by_layer_type", "true", "Split NPZ by layer & type"),
-            ("plot_layer_xy", "true", "Plot XY path image per layer"),
-            ("plot_stride", "5", "Plotting stride/sampling step"),
+            ("dt", "0.004", "采样周期（s）"),
+            ("default_feed_mm_s", "10.0", "默认进给速度（mm/s）"),
+            ("corner_angle_deg", "10.0", "拐角角度阈值（°）"),
+            ("corner_retreat_ratio", "0.2", "拐角回退比例"),
+            ("density", "0", "点密度倍率"),
+            ("degree", "3", "B 样条阶数"),
+            ("max_fit_points_per_segment", "20000", "每段最大拟合点数"),
+            ("export_sleep_ms", "0", "导出节流休眠（ms）"),
+            ("export_yield_every", "0", "导出 yield 间隔"),
+            ("split_by_layer_type", "true", "按层+类型拆分 NPZ"),
+            ("plot_layer_xy", "true", "每层生成 XY 路径图"),
+            ("plot_stride", "5", "绘图采样步长"),
         ]
         self._planner_inputs = {}
         for param_name, default_val, desc in _PLANNER_PARAMS:
@@ -963,14 +963,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         def _toggle_planner(checked):
             planner_container.setVisible(checked)
             planner_toggle.setText(
-                "▼ Planner Settings" if checked else "▶ Planner Settings"
+                "▼ 规划器设置" if checked else "▶ 规划器设置"
             )
         planner_toggle.toggled.connect(_toggle_planner)
 
         # Export button + progress
         export_btn_row = QtWidgets.QHBoxLayout()
         export_btn_row.setSpacing(8)
-        self._btn_export_npz = QtWidgets.QPushButton("Export NPZ")
+        self._btn_export_npz = QtWidgets.QPushButton("导出 NPZ")
         self._btn_export_npz.setObjectName("btnExportNpz")
         self._btn_export_npz.setMinimumHeight(36)
         self._btn_export_npz.setCursor(QtCore.Qt.PointingHandCursor)
@@ -980,7 +980,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         # View Layer Images button
         view_row = QtWidgets.QHBoxLayout()
         view_row.setSpacing(8)
-        self._btn_view_layers = QtWidgets.QPushButton("View Layer Images")
+        self._btn_view_layers = QtWidgets.QPushButton("查看层图像")
         self._btn_view_layers.setObjectName("btnViewLayers")
         self._btn_view_layers.setMinimumHeight(36)
         self._btn_view_layers.setCursor(QtCore.Qt.PointingHandCursor)
@@ -1009,7 +1009,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
 
         # ======== Launch Control 区域 ========
-        launch_box = QtWidgets.QGroupBox("Launch")
+        launch_box = QtWidgets.QGroupBox("启动")
         launch_box.setObjectName("groupLaunch")
         launch_box.setSizePolicy(
             QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
@@ -1020,17 +1020,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_btn_row = QtWidgets.QHBoxLayout()
         launch_btn_row.setSpacing(12)
 
-        self._btn_launch_settings = QtWidgets.QPushButton("Settings")
+        self._btn_launch_settings = QtWidgets.QPushButton("设置")
         self._btn_launch_settings.setObjectName("btnLaunchSettings")
         self._btn_launch_settings.setMinimumHeight(36)
         self._btn_launch_settings.setCursor(QtCore.Qt.PointingHandCursor)
 
-        self._btn_launch = QtWidgets.QPushButton("Start")
+        self._btn_launch = QtWidgets.QPushButton("启动")
         self._btn_launch.setObjectName("btnLaunch")
         self._btn_launch.setMinimumHeight(36)
         self._btn_launch.setCursor(QtCore.Qt.PointingHandCursor)
 
-        self._btn_stop_launch = QtWidgets.QPushButton("Stop Nodes")
+        self._btn_stop_launch = QtWidgets.QPushButton("停止节点")
         self._btn_stop_launch.setObjectName("btnStopLaunch")
         self._btn_stop_launch.setMinimumHeight(36)
         self._btn_stop_launch.setCursor(QtCore.Qt.PointingHandCursor)
@@ -1043,9 +1043,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         launch_status_row = QtWidgets.QHBoxLayout()
         launch_status_row.setSpacing(8)
-        launch_label = QtWidgets.QLabel("Launch Status")
+        launch_label = QtWidgets.QLabel("启动状态")
         launch_label.setObjectName("fieldLabel")
-        self._launch_status = QtWidgets.QLabel("Not Started")
+        self._launch_status = QtWidgets.QLabel("未启动")
         self._launch_status.setObjectName("launchStatus")
         launch_status_row.addWidget(launch_label)
         launch_status_row.addWidget(self._launch_status, 1)
@@ -1074,7 +1074,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         layout.setRowStretch(1, 1)
 
         self.setStyleSheet(
-            "QWidget { background: #f7f7f7; }"
+            "QWidget { background: #f7f7f7; font-family: 'WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif; }"
             "QGroupBox {"
             "  font-weight: 600;"
             "  margin-top: 4px;"
@@ -1391,25 +1391,25 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _format_tool(self, tool_id):
         if tool_id == 1:
-            return "Carbon Fiber"
+            return "碳纤维"
         if tool_id == 2:
-            return "Resin"
+            return "树脂"
         return str(tool_id)
 
     def _on_extrude_scale_apply(self):
         text = self._extrude_scale_input.text().strip()
         if not text:
-            self._set_extrude_status("Enter a scale value.", "#b42318")
+            self._set_extrude_status("请输入倍率值。", "#b42318")
             return
         try:
             val = float(text)
         except ValueError:
-            self._set_extrude_status("Invalid scale value.", "#b42318")
+            self._set_extrude_status("无效倍率值。", "#b42318")
             return
         if not (val > 0.0):
-            self._set_extrude_status("Scale must be > 0.", "#b42318")
+            self._set_extrude_status("倍率必须大于 0。", "#b42318")
             return
-        self._set_extrude_status("Submitting...", "#b15e00")
+        self._set_extrude_status("提交中...", "#b15e00")
         self.scale_submit.emit(val)
 
     def _set_extrude_status(self, text, color=None):
@@ -1451,7 +1451,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         if msg.printhead_status_valid:
             ps = msg.printhead_status
-            ready = "Yes" if ps.ready_for_motion else "No"
+            ready = "是" if ps.ready_for_motion else "否"
             ready_color = "#1b6e3c" if ps.ready_for_motion else "#b42318"
             self._set_value("Printhead Ready", ready, ready_color)
             self._set_value("Printhead Age", f"{msg.printhead_status_age_s:.3f}", "#1b6e3c")
@@ -1468,12 +1468,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_value("Resin State", resin_state, using_color if resin_state == "USING" else "#2b2b2b")
 
             cf_fan_color = "#1b6e3c" if ps.fan_ok_cf else "#b42318"
-            self._set_value("Carbon Fiber Fan OK", "Yes" if ps.fan_ok_cf else "No", cf_fan_color)
+            self._set_value("Carbon Fiber Fan OK", "是" if ps.fan_ok_cf else "否", cf_fan_color)
             self._set_value("Carbon Fiber Current Temp", f"{ps.current_temp_cf:.1f}", "#2b2b2b")
             self._set_value("Carbon Fiber Target Temp", f"{ps.target_temp_cf:.1f}", "#2b2b2b")
 
             resin_fan_color = "#1b6e3c" if ps.fan_ok_resin else "#b42318"
-            self._set_value("Resin Fan OK", "Yes" if ps.fan_ok_resin else "No", resin_fan_color)
+            self._set_value("Resin Fan OK", "是" if ps.fan_ok_resin else "否", resin_fan_color)
             self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
         else:
@@ -1601,10 +1601,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _on_stop(self):
         reply = QtWidgets.QMessageBox.warning(
             self,
-            "Confirm Stop",
-            "Are you sure you want to STOP the print?\n\n"
-            "This will raise the Z axis and then cut all communication.\n"
-            "KUKA will trigger a safety stop.",
+            "确认停止",
+            "确定要停止打印吗？\n\n"
+            "这将抬升 Z 轴，然后切断所有通信。\n"
+            "KUKA 将触发安全停机。",
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.No,
         )
@@ -1644,10 +1644,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
         z = self._offset_spins["Z"].value()
         try:
             _save_offset_config(x, y, z)
-            self._offset_status.setText(f"Saved: X={x:.2f}  Y={y:.2f}  Z={z:.2f}")
+            self._offset_status.setText(f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}")
             self._offset_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
-            self._offset_status.setText(f"Save failed: {exc}")
+            self._offset_status.setText(f"保存失败: {exc}")
             self._offset_status.setStyleSheet("color: #b42318;")
 
     def get_tool_offset(self):
@@ -1662,7 +1662,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _on_browse_gcode(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "Select GCode File",
+            "选择 GCode 文件",
             os.path.dirname(self._gcode_path_input.text()) or os.path.expanduser("~"),
             "GCode Files (*.gcode *.gc *.g);;All Files (*)",
         )
@@ -1679,13 +1679,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _on_export_npz(self):
         gcode_path = self._gcode_path_input.text().strip()
         if not gcode_path or not os.path.isfile(gcode_path):
-            self._export_status.setText("Please select a valid GCode file.")
+            self._export_status.setText("请选择有效的 GCode 文件。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
         npz_out = self._npz_out_input.text().strip()
         if not npz_out:
-            self._export_status.setText("Please specify an NPZ output path.")
+            self._export_status.setText("请指定 NPZ 输出路径。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
@@ -1706,7 +1706,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "plot_stride": int(self._planner_inputs["plot_stride"].text()),
             }
         except (ValueError, KeyError) as exc:
-            self._export_status.setText(f"Invalid planner parameter: {exc}")
+            self._export_status.setText(f"无效的规划器参数: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
@@ -1717,12 +1717,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._export_progress.setVisible(True)
         self._export_progress.setRange(0, 100)
         self._export_progress.setValue(0)
-        self._export_status.setText("Exporting...")
+        self._export_status.setText("导出中...")
         self._export_status.setStyleSheet("color: #b15e00;")
 
         def _worker():
             try:
-                self.export_progress.emit("Reading GCode...")
+                self.export_progress.emit("读取 GCode...")
                 from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
                 from gcode_planner.npz_exporter import export_npz
 
@@ -1730,9 +1730,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     self.export_progress_val.emit(int(ratio * 100))
 
                 lines = load_gcode_lines(gcode_path)
-                self.export_progress.emit("Parsing GCode...")
+                self.export_progress.emit("解析 GCode...")
                 parsed = parse_gcode_lines(lines)
-                self.export_progress.emit(f"Exporting NPZ ({len(parsed)} commands)...")
+                self.export_progress.emit(f"导出 NPZ（{len(parsed)} 条指令）...")
 
                 out_dir = os.path.dirname(npz_out)
                 if out_dir:
@@ -1764,8 +1764,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 parts = stats.get("parts", 0)
                 total_s = stats.get("total_s", 0.0)
                 msg = (
-                    f"Done: {rows} rows, {parts} parts, {total_s:.1f}s\n"
-                    f"Offset: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
+                    f"完成: {rows} 行, {parts} 分块, {total_s:.1f}秒\n"
+                    f"偏移: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
                 )
                 self.export_finished.emit(True, msg)
             except Exception as exc:
@@ -1792,12 +1792,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._last_npz_dir = os.path.splitext(npz_path)[0]
                 self._btn_view_layers.setEnabled(True)
         else:
-            self._export_status.setText(f"Export failed: {message}")
+            self._export_status.setText(f"导出失败: {message}")
             self._export_status.setStyleSheet("color: #b42318;")
 
     def _on_view_layers(self):
         if not self._last_npz_dir or not os.path.isdir(self._last_npz_dir):
-            self._export_status.setText("No NPZ export directory found.")
+            self._export_status.setText("未找到 NPZ 导出目录。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
         dlg = _LayerViewerDialog(self._last_npz_dir, self)
@@ -1902,7 +1902,7 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_scale_submit(self, value: float):
         if not self._param_client.service_is_ready():
-            self._widget.set_extrude_status("UART parameter service not ready.", "#b42318")
+            self._widget.set_extrude_status("UART 参数服务未就绪。", "#b42318")
             return
 
         req = SetParameters.Request()
@@ -1915,14 +1915,14 @@ class MyProjectUiPlugin(Plugin):
             try:
                 resp = fut.result()
             except Exception:
-                self._widget.set_extrude_scale(value, "Submit failed.", "#b42318")
+                self._widget.set_extrude_scale(value, "提交失败。", "#b42318")
                 return
             results = resp.results if resp is not None else []
             if results and all(r.successful for r in results):
-                self._widget.set_extrude_scale(value, "Applied.", "#1b6e3c")
+                self._widget.set_extrude_scale(value, "已应用。", "#1b6e3c")
             else:
-                reason = results[0].reason if results else "Submit failed"
-                self._widget.set_extrude_scale(value, reason or "Submit failed.", "#b42318")
+                reason = results[0].reason if results else "提交失败"
+                self._widget.set_extrude_scale(value, reason or "提交失败。", "#b42318")
 
         future.add_done_callback(_done)
 
@@ -1947,7 +1947,7 @@ class MyProjectUiPlugin(Plugin):
             self._do_launch()
         else:
             self._widget._btn_launch.setEnabled(True)
-            self._widget._launch_status.setText("Launch aborted: GCode export failed.")
+            self._widget._launch_status.setText("启动中止: GCode 导出失败。")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
@@ -2020,7 +2020,7 @@ class MyProjectUiPlugin(Plugin):
 
         gcode_path = self._launch_params.get("gcode_path", "").strip()
         if not gcode_path or not os.path.isfile(gcode_path):
-            self._widget._launch_status.setText("Launch failed: GCode file not found.")
+            self._widget._launch_status.setText("启动失败: GCode 文件未找到。")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
@@ -2031,16 +2031,16 @@ class MyProjectUiPlugin(Plugin):
         if not exists:
             if status == "missing":
                 msg = (
-                    "No matching NPZ files found for this GCode.\n\n"
-                    "Please click the 'Export NPZ' button first to generate the trajectory."
+                    "未找到与此 GCode 匹配的 NPZ 文件。\n\n"
+                    "请先点击“导出 NPZ”按钮生成轨迹数据。"
                 )
-                title = "NPZ Missing"
+                title = "NPZ 文件缺失"
             else:  # mismatch
                 msg = (
-                    "The current Tool Offset values do not match the offsets saved in the existing NPZ trajectory.\n\n"
-                    "Please click the 'Export NPZ' button first to regenerate the trajectory with the new offsets."
+                    "当前工具偏移值与已保存的 NPZ 轨迹中的偏移值不匹配。\n\n"
+                    "请先点击“导出 NPZ”按钮使用新偏移重新生成轨迹。"
                 )
-                title = "Offset Mismatch"
+                title = "偏移量不匹配"
 
             QtWidgets.QMessageBox.warning(
                 self._widget,
@@ -2048,7 +2048,7 @@ class MyProjectUiPlugin(Plugin):
                 msg,
                 QtWidgets.QMessageBox.Ok
             )
-            self._widget._launch_status.setText(f"Launch cancelled: NPZ {status}.")
+            self._widget._launch_status.setText(f"启动已取消: NPZ {status}。")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
@@ -2077,13 +2077,13 @@ class MyProjectUiPlugin(Plugin):
             self._widget._btn_launch.setEnabled(False)
             self._widget._btn_stop_launch.setEnabled(True)
             self._widget._btn_launch_settings.setEnabled(False)
-            self._widget._launch_status.setText("Running (waiting for KUKA first packet...)")
+            self._widget._launch_status.setText("运行中（等待 KUKA 首包...")
             self._widget._launch_status.setStyleSheet(
                 "color: #1b6e3c; font-weight: 700; font-size: 13px;"
             )
         except Exception as exc:
             self._widget._btn_launch.setEnabled(True)
-            self._widget._launch_status.setText(f"Launch failed: {exc}")
+            self._widget._launch_status.setText(f"启动失败: {exc}")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
@@ -2103,7 +2103,7 @@ class MyProjectUiPlugin(Plugin):
         self._widget._btn_launch.setEnabled(True)
         self._widget._btn_stop_launch.setEnabled(False)
         self._widget._btn_launch_settings.setEnabled(True)
-        self._widget._launch_status.setText("Stopped")
+        self._widget._launch_status.setText("已停止")
         self._widget._launch_status.setStyleSheet(
             "color: #b42318; font-weight: 700; font-size: 13px;"
         )
@@ -2118,13 +2118,13 @@ class MyProjectUiPlugin(Plugin):
             self._widget._btn_stop_launch.setEnabled(False)
             self._widget._btn_launch_settings.setEnabled(True)
             if rc == 0:
-                self._widget._launch_status.setText("Exited")
+                self._widget._launch_status.setText("已退出")
                 self._widget._launch_status.setStyleSheet(
                     "color: #666666; font-weight: 700; font-size: 13px;"
                 )
             else:
                 self._widget._launch_status.setText(
-                    f"Exited abnormally (code {rc})"
+                    f"异常退出（代码 {rc}）"
                 )
                 self._widget._launch_status.setStyleSheet(
                     "color: #b42318; font-weight: 700; font-size: 13px;"
