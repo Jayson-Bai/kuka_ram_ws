@@ -1,0 +1,9 @@
+{
+  "kp": 2.0,
+  "ki": 0.85,
+  "kd": 40.0,
+  "max_output": 100.0,
+  "min_output": 82.0,
+  "max_integral": 95.0,
+  "min_integral": 0.0
+}

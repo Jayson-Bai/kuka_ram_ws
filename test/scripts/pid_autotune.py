@@ -4,7 +4,7 @@ PID 自动调优工具 (全参数)
 调优范围: Kp, Ki, Kd, max_output, min_output, max_integral, min_integral
 """
 
-import serial, time, csv, sys, threading, signal, os
+import serial, time, csv, sys, threading, signal, os, json
 from datetime import datetime
 from collections import OrderedDict
 
@@ -108,22 +108,46 @@ class AutoTuner:
             if not self.data: return 25.0
             return self.data[-1].get(self.temp_key, 25.0)
 
-    def wait_stable(self, target, tol=2.0, min_secs=20):
+    def wait_stable(self, channel, target, tol=2.0, min_secs=60, max_overshoot=10,
+                     near_tol=4.0, near_min_secs=120):
         enter_time = None
+        near_time = None
+        above_time = None
         while self.running:
             time.sleep(1)
             cur = self.get_temp()
+            if cur > target + max_overshoot:
+                self.stop_heat(channel)
+                print(f"\n  ⚠ 超调过大 ({cur:.1f}°C > {target+max_overshoot:.1f}°C)，停止加热")
+                return 'overshoot'
+            if cur > target + tol:
+                if above_time is None:
+                    above_time = time.time()
+                elif time.time() - above_time >= 30:
+                    self.stop_heat(channel)
+                    print(f"\n  ⚠ 温度卡滞 ({cur:.1f}°C > {target:.0f}°C 持续超30s)，停止加热")
+                    return 'overshoot'
+            else:
+                above_time = None
             if abs(cur - target) <= tol:
                 if enter_time is None:
                     enter_time = time.time()
                 elif time.time() - enter_time >= min_secs:
-                    print(f"\n  ✓ 稳定: {cur:.1f}°C")
-                    return True
+                    print(f"\n  ✓ 严格达标: {cur:.1f}°C 维持{min_secs}s")
+                    return 'stable'
             else:
                 enter_time = None
+            if abs(cur - target) <= near_tol:
+                if near_time is None:
+                    near_time = time.time()
+                elif time.time() - near_time >= near_min_secs:
+                    print(f"\n  ✓ 近稳态: {cur:.1f}°C 在±{near_tol:.0f}°C维持{near_min_secs}s")
+                    return 'stable'
+            else:
+                near_time = None
             sys.stdout.write(f"\r  {cur:.1f}°C / {target:.0f}°C")
             sys.stdout.flush()
-        return False
+        return 'stopped'
 
     def wait_cool(self, below=45):
         while self.running:
@@ -198,25 +222,33 @@ class AutoTuner:
             'steady_ripple': steady_ripple, 'points': n,
         }
 
-    def suggest(self, params, result, target):
-        """自动调优（min_output保持原始值附近，不动它）
-           重点调 Kp/Ki/Kd + max_integral"""
+    def suggest(self, params, result, target, status='stable'):
+        """自动调优（min_output开放调整，下限10%保护）"""
         p = dict(params)
         orig = ORIG_CF if 'cf' in self.temp_key else ORIG_RESIN
         changes = []
 
-        # ---- Kp, Kd, max_integral: 超调控制 ----
-        # min_output固定偏高时，积分饱和是超调主因，降max_integral最有效
-        if result['overshoot_pct'] > 10:
+        overshoot_exit = status == 'overshoot'
+
+        # ---- Kp, Kd, max_integral, min_output: 超调控制 ----
+        if overshoot_exit:
+            fac = 0.90
+            p['kp'] *= fac
+            p['max_integral'] *= fac
+            p['min_output'] *= fac
+            changes.append(f"超调退出(max_overshoot) → Kp×{fac} max_integral×{fac} min_output×{fac}")
+        elif result['overshoot_pct'] > 10:
             p['kp'] *= 0.85
             p['kd'] *= 1.2
             p['max_integral'] *= 0.80
-            changes.append(f"超调{result['overshoot_pct']:.0f}% → Kp×0.85 Kd×1.2 max_integral×0.8")
+            p['min_output'] *= 0.85
+            changes.append(f"超调{result['overshoot_pct']:.0f}% → Kp×0.85 Kd×1.2 max_integral×0.8 min_output×0.85")
         elif result['overshoot_pct'] > 5:
             p['kp'] *= 0.95
             p['kd'] *= 1.1
             p['max_integral'] *= 0.90
-            changes.append(f"超调{result['overshoot_pct']:.0f}% → Kp×0.95 Kd×1.1 max_integral×0.9")
+            p['min_output'] *= 0.95
+            changes.append(f"超调{result['overshoot_pct']:.0f}% → Kp×0.95 Kd×1.1 max_integral×0.9 min_output×0.95")
 
         # ---- Kp: 升温速度 ----
         if result['rise_time'] is not None:
@@ -227,39 +259,34 @@ class AutoTuner:
                 p['kp'] *= 1.1
                 changes.append(f"升温{result['rise_time']:.0f}s偏慢 → Kp×1.1")
 
-        # ---- Ki, max_integral: 稳态误差 ----
-        if abs(result['steady_err']) > 3:
-            p['ki'] *= 1.3
-            p['max_integral'] = min(500, p['max_integral'] * 1.15)
-            changes.append(f"静差{result['steady_err']:+.1f}°C → Ki×1.3 max_integral×1.15")
-        elif abs(result['steady_err']) > 2:
-            p['ki'] *= 1.15
-            p['max_integral'] = min(500, p['max_integral'] * 1.1)
-            changes.append(f"静差{result['steady_err']:+.1f}°C → Ki×1.15 max_integral×1.1")
+        if overshoot_exit:
+            changes.append("(超调退出，跳过稳态误差/波动调整)")
+        else:
+            # ---- Ki, max_integral: 稳态误差 ----
+            if abs(result['steady_err']) > 3:
+                p['ki'] *= 1.3
+                p['max_integral'] = min(500, p['max_integral'] * 1.15)
+                changes.append(f"静差{result['steady_err']:+.1f}°C → Ki×1.3 max_integral×1.15")
+            elif abs(result['steady_err']) > 2:
+                p['ki'] *= 1.15
+                p['max_integral'] = min(500, p['max_integral'] * 1.1)
+                changes.append(f"静差{result['steady_err']:+.1f}°C → Ki×1.15 max_integral×1.1")
 
-        # ---- Ki, Kd: 稳态波动 ----
-        # 波动靠降低Ki（减少积分震荡）+ 增大Kd（增加阻尼），不动min_output
-        if result['steady_ripple'] > 3:
-            p['ki'] *= 0.8
-            p['kd'] *= 1.2
-            changes.append(f"波动{result['steady_ripple']:.1f}°C过大 → Ki×0.8 Kd×1.2")
-        elif result['steady_ripple'] > 2:
-            p['ki'] *= 0.9
-            p['kd'] *= 1.1
-            changes.append(f"波动{result['steady_ripple']:.1f}°C偏大 → Ki×0.9 Kd×1.1")
-
-        # ---- min_output 保持原始值 ----
-        # 这是你实测的最低维持功率，调优不动它，最多允许±2的微调
-        if p['min_output'] < orig['min_output'] - 2:
-            p['min_output'] = orig['min_output'] - 2
-        if p['min_output'] > orig['min_output'] + 2:
-            p['min_output'] = orig['min_output'] + 2
+            # ---- Ki, Kd: 稳态波动 ----
+            if result['steady_ripple'] > 3:
+                p['ki'] *= 0.8
+                p['kd'] *= 1.2
+                changes.append(f"波动{result['steady_ripple']:.1f}°C过大 → Ki×0.8 Kd×1.2")
+            elif result['steady_ripple'] > 2:
+                p['ki'] *= 0.9
+                p['kd'] *= 1.1
+                changes.append(f"波动{result['steady_ripple']:.1f}°C偏大 → Ki×0.9 Kd×1.1")
 
         # ---- 限幅保护 ----
         p['kp'] = max(0.1, min(20.0, p['kp']))
         p['ki'] = max(0.0, min(5.0, p['ki']))
         p['kd'] = max(0.0, min(500.0, p['kd']))
-        p['min_output'] = max(5.0, min(p['max_output'], p['min_output']))
+        p['min_output'] = max(0.0, min(p['max_output'], p['min_output']))
         p['max_integral'] = max(p['min_integral'] + 1, min(500.0, p['max_integral']))
 
         if not changes:
@@ -289,6 +316,22 @@ def main():
     if ch not in (1, 2):
         print("无效通道"); sys.exit(1)
 
+    save_file = f"pid_params_ch{ch}.json"
+    saved = OrderedDict()
+    if os.path.exists(save_file):
+        try:
+            with open(save_file) as f:
+                raw = json.load(f, object_pairs_hook=OrderedDict)
+            saved.update(raw)
+            print(f"\n发现上次保存的参数: {dict((k,f'{v:.3f}') for k,v in saved.items())}")
+            ans = input("使用上次参数? (Y/n): ").strip().lower()
+            if ans in ('', 'y', 'yes'):
+                print("  → 使用上次参数")
+            else:
+                saved.clear()
+        except Exception:
+            saved.clear()
+
     tuner = AutoTuner(port, baud)
     tuner.temp_key = 'temp_cf' if ch == 1 else 'temp_resin'
     tuner.target_key = 'target_cf' if ch == 1 else 'target_resin'
@@ -296,18 +339,22 @@ def main():
 
     def cleanup(*_):
         print("\n[结束] 关闭风扇/加热...")
+        with open(save_file, 'w') as f:
+            json.dump(current, f, indent=2)
+        print(f"  ✓ 参数已保存到 {save_file}")
         tuner.stop_heat(ch)
         tuner.stop()
         sys.exit(0)
     signal.signal(signal.SIGINT, cleanup)
 
-    current = dict(ORIG_CF if ch == 1 else ORIG_RESIN)
+    current = dict(saved) if saved else dict(ORIG_CF if ch == 1 else ORIG_RESIN)
     iteration = 1
     ch_name = CH_NAMES[ch]
 
     print(f"\n{'='*60}")
     print(f"  PID 自动调优 — {ch_name}  目标 {target}°C")
-    print(f"  原始参数: {dict((k,f'{v:.2f}') for k,v in current.items())}")
+    src = "上次保存" if saved else "原始"
+    print(f"  起始参数 ({src}): {dict((k,f'{v:.2f}') for k,v in current.items())}")
     print(f"{'='*60}")
 
     tuner.fan(ch, True)
@@ -325,7 +372,9 @@ def main():
 
         ts = datetime.now().strftime('%Y%m%d_%H%M%S')
         log_file = f"pid_logs/iter{iteration}_{ch_name}_{ts}.csv"
-        tuner.wait_stable(target, tol=2.0, min_secs=20)
+        status = tuner.wait_stable(ch, target)
+        if status == 'overshoot':
+            print("  → 超调退出，本轮仍分析数据并调整参数")
         tuner.stop_heat(ch)
         time.sleep(3)
 
@@ -346,7 +395,7 @@ def main():
             print(f"    可以将这些值填入 pid_ctrl.c 的全局参数中永久生效")
             break
 
-        new_p, changes = tuner.suggest(current, result, target)
+        new_p, changes = tuner.suggest(current, result, target, status)
         print(f"\n  调整:")
         for c in changes:
             print(f"    • {c}")
@@ -357,8 +406,13 @@ def main():
         if iteration > 15:
             print("[结束] 达到最大迭代次数"); break
 
-        print(f"\n  冷却中...")
-        tuner.wait_cool(45)
+        cool_target = max(50, target - 80)
+        print(f"\n  冷却至 {cool_target:.0f}°C...")
+        tuner.wait_cool(cool_target)
+
+    with open(save_file, 'w') as f:
+        json.dump(current, f, indent=2)
+    print(f"  ✓ 参数已保存到 {save_file}")
 
     tuner.fan(ch, False)
     tuner.stop()
