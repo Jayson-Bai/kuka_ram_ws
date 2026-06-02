@@ -19,3 +19,7 @@
 .idea/
 *~
 *.swp
+
+# Local requirement handoff notes
+/docs/firmware_feedback_requirements.md
+/docs/需求确认.md

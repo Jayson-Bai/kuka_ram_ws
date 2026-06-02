@@ -33,6 +33,10 @@ add_executable(system_manager_node
   src/system_manager_node.cpp
 )
 
+add_executable(extruder_latency_monitor_node
+  src/extruder_latency_monitor_node.cpp
+)
+
 ament_target_dependencies(
   center_node
   rclcpp
@@ -51,7 +55,14 @@ ament_target_dependencies(
   std_msgs
 )
 
-install(TARGETS center_node system_manager_node DESTINATION lib/${PROJECT_NAME})
+ament_target_dependencies(
+  extruder_latency_monitor_node
+  rclcpp
+  my_project_interfaces
+  std_msgs
+)
+
+install(TARGETS center_node system_manager_node extruder_latency_monitor_node DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)

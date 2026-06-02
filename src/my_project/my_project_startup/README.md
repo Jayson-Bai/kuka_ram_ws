@@ -68,6 +68,15 @@ python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz --
 - `traj_queue_limit`：UI 侧轨迹队列上限，默认 `5000`
 - `event_queue_limit`：UI 侧事件队列上限，默认 `2000`
 
+### extruder_latency_monitor_node （挤出延迟监控）
+- `latency_publish_period_ms`：延迟状态发布周期（毫秒），默认 `200`
+- `latency_history_limit`：保存的 RSI 心跳序号数量，默认 `5000`
+- `rsi_period_ms`：RSI 控制周期（毫秒），默认 `4.0`
+
+发布话题：
+- `/extruder/latency_status`：结构化延迟状态，类型 `my_project_interfaces/ExtruderLatencyStatus`
+- `/extruder/latency_text`：可读文本摘要，类型 `std_msgs/String`
+
 ## 常用启动参数
 
 使用 `--show-args` 查看完整参数与中文说明：

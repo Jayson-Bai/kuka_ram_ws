@@ -24,6 +24,9 @@ def generate_launch_description():
     heartbeat_timeout_s = LaunchConfiguration("heartbeat_timeout_s")
     traj_queue_limit = LaunchConfiguration("traj_queue_limit")
     event_queue_limit = LaunchConfiguration("event_queue_limit")
+    latency_publish_period_ms = LaunchConfiguration("latency_publish_period_ms")
+    latency_history_limit = LaunchConfiguration("latency_history_limit")
+    rsi_period_ms = LaunchConfiguration("rsi_period_ms")
 
     # RSI node params
     sen_type = LaunchConfiguration("sen_type")
@@ -96,6 +99,18 @@ def generate_launch_description():
             "heartbeat_timeout_s": heartbeat_timeout_s,
             "traj_queue_limit": traj_queue_limit,
             "event_queue_limit": event_queue_limit,
+        }],
+    )
+
+    extruder_latency_monitor_node = Node(
+        package="control_center",
+        executable="extruder_latency_monitor_node",
+        name="extruder_latency_monitor_node",
+        output="screen",
+        parameters=[{
+            "latency_publish_period_ms": latency_publish_period_ms,
+            "latency_history_limit": latency_history_limit,
+            "rsi_period_ms": rsi_period_ms,
         }],
     )
 
@@ -192,6 +207,21 @@ def generate_launch_description():
             description="UI 侧事件队列上限。",
         ),
         DeclareLaunchArgument(
+            "latency_publish_period_ms",
+            default_value="200",
+            description="挤出延迟监控状态发布周期（毫秒）。",
+        ),
+        DeclareLaunchArgument(
+            "latency_history_limit",
+            default_value="5000",
+            description="挤出延迟监控保存的 RSI 心跳序号数量。",
+        ),
+        DeclareLaunchArgument(
+            "rsi_period_ms",
+            default_value="4.0",
+            description="RSI 控制周期（毫秒），用于 seq_lag 换算。",
+        ),
+        DeclareLaunchArgument(
             "sen_type",
             default_value="PythonDemo",
             description="RSI XML 发送类型（需与 KUKA 端配置一致）。",
@@ -239,5 +269,6 @@ def generate_launch_description():
         rsi_node,
         uart_node,
         system_manager_node,
+        extruder_latency_monitor_node,
         center_delayed,
     ])

@@ -1,0 +1,349 @@
+// =============================================================
+// 描述：
+// 监控机械臂 RSI 心跳与固件挤出 EACK/STAT 的相对延迟。
+// 该节点只订阅和发布监控信息，不参与控制闭环。
+// =============================================================
+
+#include <rclcpp/rclcpp.hpp>
+
+#include <my_project_interfaces/msg/extruder_latency_status.hpp>
+#include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/rsi_heart_beat.hpp>
+
+#include <std_msgs/msg/string.hpp>
+
+#include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <cstdint>
+#include <deque>
+#include <limits>
+#include <mutex>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <unordered_map>
+
+using my_project_interfaces::msg::ExtruderLatencyStatus;
+using my_project_interfaces::msg::PrintHeadStatus;
+using my_project_interfaces::msg::RsiHeartBeat;
+
+class ExtruderLatencyMonitorNode : public rclcpp::Node
+{
+public:
+    ExtruderLatencyMonitorNode() : Node("extruder_latency_monitor_node")
+    {
+        rsi_period_ms_ = declare_parameter<double>("rsi_period_ms", 4.0);
+        publish_period_ms_ = declare_parameter<int>("latency_publish_period_ms", 200);
+        history_limit_ = declare_parameter<int>("latency_history_limit", 5000);
+
+        status_pub_ = create_publisher<ExtruderLatencyStatus>("/extruder/latency_status", 10);
+        text_pub_ = create_publisher<std_msgs::msg::String>("/extruder/latency_text", 10);
+
+        hb_sub_ = create_subscription<RsiHeartBeat>(
+            "/rsi/heartbeat",
+            rclcpp::QoS(2000).reliable(),
+            [this](RsiHeartBeat::SharedPtr msg) {
+                on_heartbeat(*msg);
+            });
+
+        uart_raw_sub_ = create_subscription<std_msgs::msg::String>(
+            "/uart/raw",
+            rclcpp::QoS(2000).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg) {
+                on_uart_raw(msg->data);
+            });
+
+        printhead_sub_ = create_subscription<PrintHeadStatus>(
+            "/printhead/status",
+            rclcpp::QoS(200).reliable(),
+            [this](PrintHeadStatus::SharedPtr msg) {
+                on_printhead_status(*msg);
+            });
+
+        timer_ = create_wall_timer(
+            std::chrono::milliseconds(publish_period_ms_),
+            [this]() {
+                publish_status();
+            });
+
+        RCLCPP_INFO(get_logger(), "extruder_latency_monitor_node 已启动");
+    }
+
+private:
+    struct AckInfo
+    {
+        uint32_t seq{0};
+        int32_t tool_id{0};
+        double extrude_abs{0.0};
+        uint64_t mcu_us{0};
+        double delay_ms{std::numeric_limits<double>::quiet_NaN()};
+    };
+
+    struct StatInfo
+    {
+        uint32_t last_e_seq{0};
+        int32_t last_e_tool{0};
+        double last_e_abs{0.0};
+        uint64_t last_e_us{0};
+        bool valid{false};
+    };
+
+    void on_heartbeat(const RsiHeartBeat& hb)
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        current_arm_seq_ = hb.seq_used;
+        have_arm_seq_ = true;
+        hb_times_[hb.seq_used] = rclcpp::Time(hb.stamp);
+        hb_order_.push_back(hb.seq_used);
+        trim_history();
+    }
+
+    void on_uart_raw(const std::string& line)
+    {
+        if (line.rfind("EACK ", 0) == 0) {
+            handle_eack(line);
+        } else if (line.rfind("EWARN ", 0) == 0) {
+            handle_ewarn(line);
+        }
+    }
+
+    void on_printhead_status(const PrintHeadStatus& status)
+    {
+        if (status.raw.rfind("STAT", 0) != 0) {
+            return;
+        }
+        handle_stat(status.raw);
+    }
+
+    void handle_eack(const std::string& line)
+    {
+        std::istringstream ss(line);
+        std::string tag;
+        AckInfo ack;
+        ss >> tag >> ack.seq >> ack.tool_id >> ack.extrude_abs;
+        if (!ss) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                                 "EACK 解析失败：%s", line.c_str());
+            return;
+        }
+        ss >> ack.mcu_us;
+
+        const auto ack_receive_time = now();
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            auto it = hb_times_.find(ack.seq);
+            if (it != hb_times_.end()) {
+                ack.delay_ms = (ack_receive_time - it->second).seconds() * 1000.0;
+                update_delay_stats(ack.delay_ms);
+            }
+            last_ack_ = ack;
+            ++eack_count_;
+            last_raw_ = line;
+        }
+
+        publish_status();
+    }
+
+    void handle_ewarn(const std::string& line)
+    {
+        std::lock_guard<std::mutex> lk(mutex_);
+        last_warn_ = line;
+        last_raw_ = line;
+        if (line.find("old_seq=") != std::string::npos) {
+            ++old_seq_warn_count_;
+        }
+        if (line.find("gap ") != std::string::npos ||
+            line.find("gap=") != std::string::npos) {
+            ++gap_warn_count_;
+        }
+    }
+
+    void handle_stat(const std::string& line)
+    {
+        StatInfo next = last_stat_;
+        next.valid = true;
+
+        std::istringstream ss(line);
+        std::string tag;
+        std::string kv;
+        ss >> tag;
+        while (ss >> kv) {
+            auto eq = kv.find('=');
+            if (eq == std::string::npos) {
+                continue;
+            }
+            const auto key = kv.substr(0, eq);
+            const auto value = kv.substr(eq + 1);
+            try {
+                if (key == "last_e_seq") {
+                    next.last_e_seq = static_cast<uint32_t>(std::stoul(value));
+                } else if (key == "last_e_tool") {
+                    next.last_e_tool = std::stoi(value);
+                } else if (key == "last_e_abs") {
+                    next.last_e_abs = std::stod(value);
+                } else if (key == "last_e_us") {
+                    next.last_e_us = static_cast<uint64_t>(std::stoull(value));
+                }
+            } catch (const std::exception&) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                                     "STAT 延迟字段解析失败：%s", kv.c_str());
+            }
+        }
+
+        std::lock_guard<std::mutex> lk(mutex_);
+        last_stat_ = next;
+        last_raw_ = line;
+    }
+
+    void update_delay_stats(double delay_ms)
+    {
+        if (!std::isfinite(delay_ms)) {
+            return;
+        }
+        if (delay_count_ == 0) {
+            delay_min_ms_ = delay_ms;
+            delay_max_ms_ = delay_ms;
+        } else {
+            delay_min_ms_ = std::min(delay_min_ms_, delay_ms);
+            delay_max_ms_ = std::max(delay_max_ms_, delay_ms);
+        }
+        ++delay_count_;
+        delay_sum_ms_ += delay_ms;
+        delay_sum_sq_ms_ += delay_ms * delay_ms;
+    }
+
+    void trim_history()
+    {
+        const auto limit = static_cast<size_t>(std::max(1, history_limit_));
+        while (hb_order_.size() > limit) {
+            const auto seq = hb_order_.front();
+            hb_order_.pop_front();
+            hb_times_.erase(seq);
+        }
+    }
+
+    ExtruderLatencyStatus make_status_locked()
+    {
+        ExtruderLatencyStatus out;
+        out.stamp = now();
+        out.arm_seq = current_arm_seq_;
+        out.has_eack = last_ack_.has_value();
+        out.has_stat = last_stat_.valid;
+        out.last_eack_seq = last_ack_ ? last_ack_->seq : 0;
+        out.stat_last_e_seq = last_stat_.valid ? last_stat_.last_e_seq : 0;
+
+        uint32_t compare_seq = 0;
+        if (last_stat_.valid) {
+            compare_seq = last_stat_.last_e_seq;
+        } else if (last_ack_) {
+            compare_seq = last_ack_->seq;
+        }
+
+        if (have_arm_seq_ && compare_seq > 0) {
+            out.seq_lag = static_cast<int64_t>(current_arm_seq_) - static_cast<int64_t>(compare_seq);
+            out.cycle_lag_ms = static_cast<double>(out.seq_lag) * rsi_period_ms_;
+        }
+
+        if (last_ack_) {
+            out.ack_delay_ms = last_ack_->delay_ms;
+            out.last_tool_id = last_ack_->tool_id;
+            out.last_extrude_abs = last_ack_->extrude_abs;
+            out.last_mcu_us = last_ack_->mcu_us;
+        }
+        if (last_stat_.valid) {
+            out.last_tool_id = last_stat_.last_e_tool;
+            out.last_extrude_abs = last_stat_.last_e_abs;
+            out.last_mcu_us = last_stat_.last_e_us;
+        }
+
+        out.ack_delay_min_ms = delay_count_ > 0 ? delay_min_ms_ : 0.0;
+        out.ack_delay_avg_ms = delay_count_ > 0 ? delay_sum_ms_ / static_cast<double>(delay_count_) : 0.0;
+        out.ack_delay_max_ms = delay_count_ > 0 ? delay_max_ms_ : 0.0;
+        if (delay_count_ > 0) {
+            const double avg = out.ack_delay_avg_ms;
+            const double variance = std::max(
+                0.0,
+                delay_sum_sq_ms_ / static_cast<double>(delay_count_) - avg * avg);
+            out.ack_delay_jitter_ms = std::sqrt(variance);
+        }
+
+        out.eack_count = eack_count_;
+        out.old_seq_warn_count = old_seq_warn_count_;
+        out.gap_warn_count = gap_warn_count_;
+        out.last_warn = last_warn_;
+        out.last_raw = last_raw_;
+        return out;
+    }
+
+    void publish_status()
+    {
+        ExtruderLatencyStatus status;
+        {
+            std::lock_guard<std::mutex> lk(mutex_);
+            status = make_status_locked();
+        }
+
+        status_pub_->publish(status);
+
+        std_msgs::msg::String text;
+        std::ostringstream oss;
+        oss << "arm_seq=" << status.arm_seq
+            << " last_eack_seq=" << status.last_eack_seq
+            << " stat_last_e_seq=" << status.stat_last_e_seq
+            << " seq_lag=" << status.seq_lag
+            << " cycle_lag_ms=" << status.cycle_lag_ms
+            << " ack_delay_ms=" << status.ack_delay_ms
+            << " ack_avg_ms=" << status.ack_delay_avg_ms
+            << " ack_jitter_ms=" << status.ack_delay_jitter_ms
+            << " eack_count=" << status.eack_count
+            << " warn_old=" << status.old_seq_warn_count
+            << " warn_gap=" << status.gap_warn_count;
+        if (!status.last_warn.empty()) {
+            oss << " last_warn=\"" << status.last_warn << "\"";
+        }
+        text.data = oss.str();
+        text_pub_->publish(text);
+    }
+
+    std::mutex mutex_;
+    std::unordered_map<uint32_t, rclcpp::Time> hb_times_;
+    std::deque<uint32_t> hb_order_;
+
+    uint32_t current_arm_seq_{0};
+    bool have_arm_seq_{false};
+    std::optional<AckInfo> last_ack_;
+    StatInfo last_stat_;
+
+    uint64_t eack_count_{0};
+    uint64_t old_seq_warn_count_{0};
+    uint64_t gap_warn_count_{0};
+
+    uint64_t delay_count_{0};
+    double delay_sum_ms_{0.0};
+    double delay_sum_sq_ms_{0.0};
+    double delay_min_ms_{0.0};
+    double delay_max_ms_{0.0};
+
+    std::string last_warn_;
+    std::string last_raw_;
+
+    double rsi_period_ms_{4.0};
+    int publish_period_ms_{200};
+    int history_limit_{5000};
+
+    rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr uart_raw_sub_;
+    rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_sub_;
+    rclcpp::Publisher<ExtruderLatencyStatus>::SharedPtr status_pub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr text_pub_;
+    rclcpp::TimerBase::SharedPtr timer_;
+};
+
+int main(int argc, char** argv)
+{
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<ExtruderLatencyMonitorNode>());
+    rclcpp::shutdown();
+    return 0;
+}

@@ -9,7 +9,7 @@ import signal
 import json
 import threading
 
-from my_project_interfaces.msg import UiStatus
+from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus
 
 from std_msgs.msg import String as StringMsg
 import re
@@ -43,10 +43,13 @@ LAUNCH_PARAMS = [
     ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
+    ("latency_publish_period_ms", "200", "延迟状态发布周期（ms）", "延迟监控"),
+    ("latency_history_limit", "5000", "RSI 心跳缓存数量", "延迟监控"),
+    ("rsi_period_ms", "4.0", "RSI 控制周期（ms）", "延迟监控"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
-_LAUNCH_GROUPS_ORDER = ["中心节点", "RSI 节点", "UART 节点", "系统管理器"]
+_LAUNCH_GROUPS_ORDER = ["中心节点", "RSI 节点", "UART 节点", "系统管理器", "延迟监控"]
 
 
 class _LaunchSettingsDialog(QtWidgets.QDialog):
@@ -86,6 +89,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
             "RSI 节点": "#b15e00",
             "UART 节点": "#1b6e3c",
             "系统管理器": "#7b1fa2",
+            "延迟监控": "#0f766e",
         }
 
         for group_name in _LAUNCH_GROUPS_ORDER:
@@ -229,6 +233,29 @@ class _AutoScaleLabel(QtWidgets.QLabel):
 _OFFSET_CONFIG_DIR = os.path.expanduser("~/.config/my_project")
 _OFFSET_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "tool_offset.json")
 _OFFSET_DEFAULTS = {"tool_offset_x": 0.64, "tool_offset_y": -1.29, "tool_offset_z": 0.17}
+_NPZ_OFFSET_TOLERANCE_MM = 0.005
+_NPZ_RELATED_LAUNCH_PARAMS = (
+    "npz_path",
+    "npz_preload_chunks",
+    "queue_low",
+    "queue_high",
+    "traj_prefill",
+    "traj_low",
+    "traj_high",
+    "xyzabc_decimals",
+    "e_decimals",
+)
+
+_PID_PARAM_KEYS = ["kp", "ki", "kd", "max_output", "min_output", "max_integral", "min_integral"]
+_PID_PARAM_LABELS = {
+    "kp": "Kp", "ki": "Ki", "kd": "Kd",
+    "max_output": "max_output", "min_output": "min_output",
+    "max_integral": "max_integral", "min_integral": "min_integral",
+}
+_PID_DEFAULTS = {
+    "cf": {"kp": 2.0, "ki": 0.85, "kd": 40.0, "max_output": 100.0, "min_output": 82.0, "max_integral": 95.0, "min_integral": 0.0},
+    "resin": {"kp": 1.782, "ki": 0.6, "kd": 150.0, "max_output": 100.0, "min_output": 63.18, "max_integral": 105.3, "min_integral": 0.0},
+}
 
 
 def _load_offset_config():
@@ -248,6 +275,101 @@ def _save_offset_config(x, y, z):
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
     with open(_OFFSET_CONFIG_PATH, "w") as f:
         json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z}, f, indent=2)
+
+
+def _format_tool_offset(offset):
+    return f"({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
+
+
+def _resolve_npz_launch_path_from_dir(npz_dir):
+    root = Path(npz_dir)
+    if not root.is_dir():
+        return None
+
+    manifests = sorted(root.glob("*_manifest.json"))
+    if manifests:
+        return str(manifests[0])
+
+    manifests = sorted(root.rglob("*_manifest.json"))
+    if manifests:
+        return str(manifests[0])
+
+    single_files = sorted(
+        p for p in root.glob("*.npz")
+        if not re.search(r"_part\d+$", p.stem)
+    )
+    if single_files:
+        return str(single_files[0])
+
+    part_files = sorted(root.glob("*_part*.npz"))
+    if part_files:
+        stem = re.sub(r"_part\d+$", "", part_files[0].stem)
+        return str(part_files[0].with_name(stem + ".npz"))
+
+    return None
+
+
+def _offset_sidecar_candidates(npz_source):
+    p = Path(npz_source)
+    candidates = []
+
+    if p.is_dir():
+        candidates.append(p.parent / f"{p.name}.offset.json")
+        return candidates
+
+    if p.name.endswith("_manifest.json"):
+        base = p.name[:-len("_manifest.json")]
+        candidates.extend([
+            p.parent.parent / f"{base}.offset.json",
+            p.parent / f"{base}.offset.json",
+        ])
+        return candidates
+
+    if p.suffix == ".npz":
+        stem = re.sub(r"_part\d+$", "", p.stem)
+        candidates.extend([
+            p.with_name(stem + ".offset.json"),
+            p.parent.parent / f"{stem}.offset.json",
+        ])
+        return candidates
+
+    candidates.append(p.with_suffix(".offset.json"))
+    return candidates
+
+
+def _read_npz_tool_offset(npz_source):
+    for offset_file in _offset_sidecar_candidates(npz_source):
+        if not offset_file.is_file():
+            continue
+        with open(offset_file, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        saved_offset = data.get("tool_offset")
+        if not saved_offset or len(saved_offset) != 3:
+            return None, str(offset_file)
+        return tuple(float(v) for v in saved_offset), str(offset_file)
+    return None, None
+
+
+class _PidPopup(QtWidgets.QFrame):
+    """Floating popup for PID parameter editing."""
+    popup_hidden = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent, QtCore.Qt.Popup | QtCore.Qt.FramelessWindowHint)
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Raised)
+        self.setStyleSheet(
+            "_PidPopup {"
+            "  background: #ffffff;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 6px;"
+            "  padding: 8px;"
+            "}"
+        )
+
+    def hideEvent(self, event):
+        super().hideEvent(event)
+        self.popup_hidden.emit()
 
 
 class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
@@ -398,6 +520,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
 class _UiStatusWidget(QtWidgets.QWidget):
     status_received = QtCore.pyqtSignal(object)
+    latency_received = QtCore.pyqtSignal(object)
     scale_submit = QtCore.pyqtSignal(float)
     command_submit = QtCore.pyqtSignal(str)
     uart_command_submit = QtCore.pyqtSignal(str)
@@ -411,8 +534,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         super().__init__()
         self._extrude_scale_current = 1.0
         self._last_npz_dir = None
+        self._selected_npz_dir = None
+        self._selected_npz_launch_path = None
         self._build_ui()
         self.status_received.connect(self._update_ui)
+        self.latency_received.connect(self._update_latency)
         self.rsi_xml_received.connect(self._on_rsi_xml)
         self.uart_log_received.connect(self._on_uart_log)
         self.export_progress_val.connect(self._on_export_progress_val)
@@ -822,7 +948,94 @@ class _UiStatusWidget(QtWidgets.QWidget):
             temp_row.addWidget(temp_input, 1)
             temp_row.addWidget(btn_temp_apply)
             ctrl_layout.addLayout(temp_row)
-            
+
+            # ---- PID 参数浮动弹出面板 ----
+            pid_toggle = QtWidgets.QPushButton("▶ PID 参数")
+            pid_toggle.setObjectName(f"btnPidToggle_{head_id}")
+            pid_toggle.setMinimumHeight(28)
+            pid_toggle.setCursor(QtCore.Qt.PointingHandCursor)
+            ctrl_layout.addWidget(pid_toggle)
+
+            pid_container = _PidPopup()
+            pid_container_layout = QtWidgets.QVBoxLayout(pid_container)
+            pid_container_layout.setContentsMargins(10, 10, 10, 10)
+            pid_container_layout.setSpacing(6)
+
+            pid_form = QtWidgets.QFormLayout()
+            pid_form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+            pid_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
+            pid_form.setHorizontalSpacing(12)
+            pid_form.setVerticalSpacing(6)
+
+            pid_inputs = {}
+            pid_defaults = _PID_DEFAULTS[head_id]
+            for param_key in _PID_PARAM_KEYS:
+                lbl = QtWidgets.QLabel(_PID_PARAM_LABELS[param_key])
+                lbl.setStyleSheet("color: #666666;")
+                inp = QtWidgets.QLineEdit(f"{pid_defaults[param_key]:.2f}")
+                inp.setMinimumWidth(100)
+                inp.setStyleSheet(
+                    "border: 1px solid #d0d0d0; border-radius: 4px;"
+                    " padding: 4px 6px; background: #ffffff;"
+                )
+                pid_validator = QtGui.QDoubleValidator(-1e6, 1e6, 4, inp)
+                pid_validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+                inp.setValidator(pid_validator)
+                pid_form.addRow(lbl, inp)
+                pid_inputs[param_key] = inp
+
+            pid_container_layout.addLayout(pid_form)
+
+            pid_btn_row = QtWidgets.QHBoxLayout()
+            pid_btn_row.setSpacing(8)
+            btn_pid_apply = QtWidgets.QPushButton("应用")
+            btn_pid_apply.setObjectName(f"btnTempApply_pid_{head_id}")
+            btn_pid_apply.setMinimumHeight(24)
+            btn_pid_apply.setMaximumHeight(24)
+            btn_pid_apply.setCursor(QtCore.Qt.PointingHandCursor)
+            btn_pid_apply.setStyleSheet(
+                "font-weight: 600; font-size: 12px;"
+                " border: 1px solid #1a73e8; border-radius: 5px;"
+                " background: #ffffff; color: #1a73e8; padding: 4px 14px;"
+            )
+            btn_pid_restore = QtWidgets.QPushButton("恢复默认")
+            btn_pid_restore.setObjectName(f"btnPidRestore_{head_id}")
+            btn_pid_restore.setMinimumHeight(24)
+            btn_pid_restore.setMaximumHeight(24)
+            btn_pid_restore.setCursor(QtCore.Qt.PointingHandCursor)
+            btn_pid_restore.setStyleSheet(
+                "font-weight: 600; font-size: 12px;"
+                " border: 1px solid #c0c0c0; border-radius: 5px;"
+                " background: #ffffff; color: #666666; padding: 4px 14px;"
+            )
+            pid_status = QtWidgets.QLabel("-")
+            pid_status.setStyleSheet("color: #666666;")
+            pid_btn_row.addWidget(btn_pid_apply)
+            pid_btn_row.addWidget(btn_pid_restore)
+            pid_btn_row.addWidget(pid_status, 1)
+            pid_container_layout.addLayout(pid_btn_row)
+
+            def _make_pid_show(container, btn):
+                def _show():
+                    pos = btn.mapToGlobal(QtCore.QPoint(0, btn.height()))
+                    container.move(pos)
+                    container.adjustSize()
+                    container.show()
+                    btn.setText("▼ PID 参数")
+                return _show
+            pid_toggle.clicked.connect(_make_pid_show(pid_container, pid_toggle))
+
+            def _make_pid_hide(btn):
+                def _hide():
+                    btn.setText("▶ PID 参数")
+                return _hide
+            pid_container.popup_hidden.connect(_make_pid_hide(pid_toggle))
+
+            setattr(self, f"_pid_inputs_{head_id}", pid_inputs)
+            setattr(self, f"_pid_status_{head_id}", pid_status)
+            setattr(self, f"_btn_pid_apply_{head_id}", btn_pid_apply)
+            setattr(self, f"_btn_pid_restore_{head_id}", btn_pid_restore)
+
             master_layout.addWidget(ctrl_box)
             head_panels_row.addWidget(master_panel)
             
@@ -895,6 +1108,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
         btn_row.addWidget(self._btn_resume)
         btn_row.addWidget(self._btn_stop)
         control_layout.addLayout(btn_row)
+
+        latency_grid = QtWidgets.QGridLayout()
+        latency_grid.setHorizontalSpacing(10)
+        latency_grid.setVerticalSpacing(4)
+        self._latency_labels = {}
+        latency_rows = [
+            ("arm_seq", "机械臂 Seq"),
+            ("eack_seq", "挤出确认 Seq"),
+            ("seq_lag", "Seq 差"),
+            ("cycle_lag", "周期滞后"),
+            ("ack_delay", "ACK 延迟"),
+            ("ack_stats", "ACK 统计"),
+        ]
+        for idx, (key, title_text) in enumerate(latency_rows):
+            row = idx // 2
+            col = (idx % 2) * 2
+            title_label = QtWidgets.QLabel(title_text)
+            title_label.setObjectName("fieldLabel")
+            value_label = QtWidgets.QLabel("-")
+            value_label.setObjectName("valueLabel")
+            value_label.setMinimumWidth(value_min_width * 3)
+            latency_grid.addWidget(title_label, row, col)
+            latency_grid.addWidget(value_label, row, col + 1)
+            self._latency_labels[key] = value_label
+        self._latency_warn = QtWidgets.QLabel("-")
+        self._latency_warn.setObjectName("fieldLabel")
+        self._latency_warn.setWordWrap(True)
+        control_layout.addLayout(latency_grid)
+        control_layout.addWidget(self._latency_warn)
 
 
 
@@ -970,7 +1212,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         gcode_lbl.setObjectName("fieldLabel")
         gcode_lbl.setMinimumWidth(50)
         self._gcode_path_input = QtWidgets.QLineEdit()
-        self._gcode_path_input.setPlaceholderText("选择 .gcode 文件...")
+        self._gcode_path_input.setPlaceholderText("可选择 GCode 文件用于导出或自动匹配 NPZ")
         self._btn_browse_gcode = QtWidgets.QPushButton("…")
         self._btn_browse_gcode.setFixedWidth(32)
         self._btn_browse_gcode.setFixedHeight(28)
@@ -1006,7 +1248,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("default_feed_mm_s", "10.0", "默认进给速度（mm/s）"),
             ("corner_angle_deg", "10.0", "拐角角度阈值（°）"),
             ("corner_retreat_ratio", "0.2", "拐角回退比例"),
-            ("density", "0", "点密度倍率"),
+            ("density", "5", "点密度倍率"),
             ("degree", "3", "B 样条阶数"),
             ("max_fit_points_per_segment", "20000", "每段最大拟合点数"),
             ("export_sleep_ms", "0", "导出节流休眠（ms）"),
@@ -1062,6 +1304,28 @@ class _UiStatusWidget(QtWidgets.QWidget):
         view_row.addWidget(self._btn_view_layers)
         export_layout.addLayout(view_row)
 
+        npz_dir_subtitle = QtWidgets.QLabel("选择已导出的NPZ文件")
+        npz_dir_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
+        export_layout.addWidget(npz_dir_subtitle)
+
+        npz_dir_row = QtWidgets.QHBoxLayout()
+        npz_dir_row.setSpacing(4)
+        self._selected_npz_dir_input = QtWidgets.QLineEdit()
+        self._selected_npz_dir_input.setReadOnly(True)
+        self._selected_npz_dir_input.setPlaceholderText("可选择已导出的NPZ文件用于启动")
+        self._btn_select_npz_dir = QtWidgets.QPushButton("选择")
+        self._btn_select_npz_dir.setFixedWidth(48)
+        self._btn_select_npz_dir.setFixedHeight(28)
+        self._btn_select_npz_dir.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_clear_npz_dir = QtWidgets.QPushButton("清除")
+        self._btn_clear_npz_dir.setFixedWidth(48)
+        self._btn_clear_npz_dir.setFixedHeight(28)
+        self._btn_clear_npz_dir.setCursor(QtCore.Qt.PointingHandCursor)
+        npz_dir_row.addWidget(self._selected_npz_dir_input, 1)
+        npz_dir_row.addWidget(self._btn_select_npz_dir)
+        npz_dir_row.addWidget(self._btn_clear_npz_dir)
+        export_layout.addLayout(npz_dir_row)
+
         self._export_progress = QtWidgets.QProgressBar()
         self._export_progress.setMinimumHeight(18)
         self._export_progress.setRange(0, 0)  # indeterminate
@@ -1080,6 +1344,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.export_finished.connect(self._on_export_finished)
         self.export_progress.connect(self._on_export_progress)
         self._btn_view_layers.clicked.connect(self._on_view_layers)
+        self._btn_select_npz_dir.clicked.connect(self._on_select_npz_dir)
+        self._btn_clear_npz_dir.clicked.connect(self._on_clear_npz_dir)
 
 
         # ======== Launch Control 区域 ========
@@ -1404,6 +1670,33 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  background: #f0f0f0;"
             "  border-color: #999999;"
             "}"
+            "QPushButton[objectName^='btnPidToggle'] {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #d0d0d0;"
+            "  border-radius: 5px;"
+            "  background: #fafafa;"
+            "  color: #555555;"
+            "  padding: 4px 12px;"
+            "  text-align: left;"
+            "}"
+            "QPushButton[objectName^='btnPidToggle']:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton[objectName^='btnPidRestore'] {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #666666;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton[objectName^='btnPidRestore']:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
             "QPushButton#btnExportNpz {"
             "  font-weight: 600;"
             "  font-size: 13px;"
@@ -1441,6 +1734,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._temp_input_resin.returnPressed.connect(lambda: self._on_temp_apply("resin"))
         self._btn_tool_cf.clicked.connect(lambda: self._on_tool_switch("cf"))
         self._btn_tool_resin.clicked.connect(lambda: self._on_tool_switch("resin"))
+
+        # PID control connections
+        self._btn_pid_apply_cf.clicked.connect(lambda: self._on_pid_apply("cf"))
+        self._btn_pid_apply_resin.clicked.connect(lambda: self._on_pid_apply("resin"))
+        self._btn_pid_restore_cf.clicked.connect(lambda: self._on_pid_restore("cf"))
+        self._btn_pid_restore_resin.clicked.connect(lambda: self._on_pid_restore("resin"))
 
     def _set_value(self, key, text, color=None):
         label = self._labels.get(key)
@@ -1497,6 +1796,44 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def current_extrude_scale(self):
         return self._extrude_scale_current
+
+    def _update_latency(self, msg: ExtruderLatencyStatus):
+        labels = getattr(self, "_latency_labels", {})
+        if not labels:
+            return
+
+        def set_label(key, text, color="#2b2b2b"):
+            label = labels.get(key)
+            if label is not None:
+                label.setText(text)
+                label.setStyleSheet(f"color: {color};")
+
+        eack_text = str(msg.last_eack_seq) if msg.has_eack else "-"
+        if msg.has_stat:
+            eack_text = f"{eack_text} / STAT {msg.stat_last_e_seq}"
+        lag_color = "#1b6e3c" if abs(msg.seq_lag) <= 1 else "#b15e00"
+        if abs(msg.seq_lag) >= 5:
+            lag_color = "#b42318"
+
+        set_label("arm_seq", str(msg.arm_seq))
+        set_label("eack_seq", eack_text)
+        set_label("seq_lag", str(msg.seq_lag), lag_color)
+        set_label("cycle_lag", f"{msg.cycle_lag_ms:.1f} ms", lag_color)
+        if msg.has_eack and msg.ack_delay_ms == msg.ack_delay_ms:
+            set_label("ack_delay", f"{msg.ack_delay_ms:.2f} ms")
+        else:
+            set_label("ack_delay", "-", "#b42318")
+        set_label(
+            "ack_stats",
+            f"avg {msg.ack_delay_avg_ms:.2f} / jitter {msg.ack_delay_jitter_ms:.2f} ms",
+        )
+
+        warn_text = msg.last_warn or "无 EWARN"
+        warn_color = "#b42318" if msg.last_warn else "#666666"
+        self._latency_warn.setText(
+            f"EACK: {msg.eack_count}  old: {msg.old_seq_warn_count}  gap: {msg.gap_warn_count}  {warn_text}"
+        )
+        self._latency_warn.setStyleSheet(f"color: {warn_color};")
 
     def _update_ui(self, msg: UiStatus):
         state_str = msg.state or "-"
@@ -1679,6 +2016,38 @@ class _UiStatusWidget(QtWidgets.QWidget):
         cmd = f"EV 0 {event_type} {tool_id}\n"
         self.uart_command_submit.emit(cmd)
 
+    def _on_pid_apply(self, head_id):
+        pid_inputs = getattr(self, f"_pid_inputs_{head_id}")
+        pid_status = getattr(self, f"_pid_status_{head_id}")
+        values = {}
+        for key in _PID_PARAM_KEYS:
+            text = pid_inputs[key].text().strip()
+            if not text:
+                pid_status.setText("参数不能为空。")
+                pid_status.setStyleSheet("color: #b42318;")
+                return
+            try:
+                values[key] = float(text)
+            except ValueError:
+                pid_status.setText(f"无效参数: {_PID_PARAM_LABELS[key]}")
+                pid_status.setStyleSheet("color: #b42318;")
+                return
+        cmd = (f"EV 0 pid_set_{head_id} {values['kp']} {values['ki']} {values['kd']} "
+               f"{values['max_output']} {values['min_output']} "
+               f"{values['max_integral']} {values['min_integral']}\n")
+        self.uart_command_submit.emit(cmd)
+        pid_status.setText("已发送。")
+        pid_status.setStyleSheet("color: #1b6e3c;")
+
+    def _on_pid_restore(self, head_id):
+        pid_inputs = getattr(self, f"_pid_inputs_{head_id}")
+        pid_status = getattr(self, f"_pid_status_{head_id}")
+        defaults = _PID_DEFAULTS[head_id]
+        for key in _PID_PARAM_KEYS:
+            pid_inputs[key].setText(f"{defaults[key]:.2f}")
+        pid_status.setText("已恢复默认值。")
+        pid_status.setStyleSheet("color: #1a73e8;")
+
     # ---- Offset persistence ----
 
     def _on_offset_changed(self, _value=None):
@@ -1833,6 +2202,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             npz_path = self._npz_out_input.text().strip()
             if npz_path:
                 self._last_npz_dir = os.path.splitext(npz_path)[0]
+                self._selected_npz_dir = self._last_npz_dir
+                self._selected_npz_launch_path = _resolve_npz_launch_path_from_dir(self._last_npz_dir)
+                self._selected_npz_dir_input.setText(self._last_npz_dir)
                 self._btn_view_layers.setEnabled(True)
         else:
             self._export_status.setText(f"导出失败: {message}")
@@ -1845,6 +2217,128 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         dlg = _LayerViewerDialog(self._last_npz_dir, self)
         dlg.exec_()
+
+    def _npz_launch_relation_text(self):
+        return (
+            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 manifest/npz 传给它。\n"
+            "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 只影响加载、预取和队列阈值，"
+            "不会改变 NPZ 文件内容。"
+        )
+
+    def _changed_npz_related_launch_params(self):
+        changed = []
+        launch_params = getattr(self, "_launch_params", {})
+        for name in _NPZ_RELATED_LAUNCH_PARAMS:
+            if name == "npz_path":
+                continue
+            default = _LAUNCH_DEFAULTS.get(name, "")
+            current = launch_params.get(name, default)
+            if str(current) != str(default):
+                changed.append((name, current, default))
+        return changed
+
+    def _npz_dir_selection_warnings(self, saved_offset):
+        current_offset = self.get_tool_offset()
+        warnings = []
+
+        if saved_offset is None:
+            warnings.append("未找到或无法读取工具偏移 sidecar（*.offset.json），无法确认该 NPZ 是否使用了当前界面偏移值。")
+        else:
+            mismatch = any(
+                abs(a - b) > _NPZ_OFFSET_TOLERANCE_MM
+                for a, b in zip(saved_offset, current_offset)
+            )
+            if mismatch:
+                warnings.append("NPZ 中的工具偏移与当前界面设置不一致。")
+
+        changed_launch_params = self._changed_npz_related_launch_params()
+        if changed_launch_params:
+            details = ", ".join(
+                f"{name}={current}（默认 {default}）"
+                for name, current, default in changed_launch_params
+            )
+            warnings.append(f"NPZ 相关启动参数已修改: {details}")
+
+        return warnings
+
+    def _confirm_npz_dir_selection(self, npz_dir, launch_path, saved_offset, offset_file, warnings):
+        current_offset = self.get_tool_offset()
+        detail = [
+            f"NPZ 文件夹: {npz_dir}",
+            f"启动将使用: {launch_path}",
+            f"当前界面工具偏移: {_format_tool_offset(current_offset)}",
+        ]
+
+        if saved_offset is None:
+            detail.append("NPZ 保存的工具偏移: 未知")
+        else:
+            detail.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+            if offset_file:
+                detail.append(f"偏移文件: {offset_file}")
+
+        detail.append("")
+        detail.append("检测到以下相关参数变化/风险:")
+        detail.extend(f"- {item}" for item in warnings)
+        detail.append("")
+        detail.append(self._npz_launch_relation_text())
+        detail.append("")
+        detail.append("是否将该文件夹作为本次启动使用的 NPZ 数据？")
+
+        box = QtWidgets.QMessageBox(self)
+        box.setIcon(QtWidgets.QMessageBox.Warning)
+        box.setWindowTitle("NPZ 相关参数警告")
+        box.setText("\n".join(detail))
+        box.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+        box.setDefaultButton(QtWidgets.QMessageBox.No)
+        return box.exec_() == QtWidgets.QMessageBox.Yes
+
+    def _on_select_npz_dir(self):
+        start_dir = self._selected_npz_dir or os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        npz_dir = QtWidgets.QFileDialog.getExistingDirectory(
+            self,
+            "选择已导出的 NPZ 文件夹",
+            start_dir,
+        )
+        if not npz_dir:
+            return
+
+        launch_path = _resolve_npz_launch_path_from_dir(npz_dir)
+        if not launch_path:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "NPZ 文件夹无效",
+                "所选文件夹中未找到 *_manifest.json 或可识别的 .npz 文件。",
+                QtWidgets.QMessageBox.Ok,
+            )
+            return
+
+        try:
+            saved_offset, offset_file = _read_npz_tool_offset(launch_path)
+        except Exception as exc:
+            saved_offset, offset_file = None, None
+            self._export_status.setText(f"读取 NPZ 偏移信息失败: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
+
+        warnings = self._npz_dir_selection_warnings(saved_offset)
+        if warnings and not self._confirm_npz_dir_selection(
+            npz_dir, launch_path, saved_offset, offset_file, warnings
+        ):
+            return
+
+        self._selected_npz_dir = npz_dir
+        self._selected_npz_launch_path = launch_path
+        self._last_npz_dir = npz_dir
+        self._selected_npz_dir_input.setText(npz_dir)
+        self._btn_view_layers.setEnabled(os.path.isdir(npz_dir))
+        self._export_status.setText(f"已选择 NPZ 文件夹: {npz_dir}")
+        self._export_status.setStyleSheet("color: #1b6e3c;")
+
+    def _on_clear_npz_dir(self):
+        self._selected_npz_dir = None
+        self._selected_npz_launch_path = None
+        self._selected_npz_dir_input.clear()
+        self._export_status.setText("已清除手动选择的 NPZ 文件夹；启动时将按 GCode 自动匹配。")
+        self._export_status.setStyleSheet("color: #1a73e8;")
 
     _STATE_COLORS = {
         "RUNNING": "#1b6e3c",
@@ -1918,12 +2412,12 @@ class MyProjectUiPlugin(Plugin):
 
         # Launch state
         self._launch_params = dict(_LAUNCH_DEFAULTS)
-        self._launch_params["gcode_path"] = "/home/jayson/kuka_ram_ws/data/input_gcode/test.gcode"
+        self._launch_params["gcode_path"] = ""
+        self._widget._launch_params = self._launch_params
         self._launch_process = None
         self._pending_launch = False
         
-        # Initialize text inputs in widget from launch state
-        self._widget._gcode_path_input.setText(self._launch_params["gcode_path"])
+        # GCode path starts empty; user can choose one when exporting or auto-matching NPZ.
         
         # Sync changes from main UI to launch params
         self._widget._gcode_path_input.textChanged.connect(self._on_gcode_path_changed_sync)
@@ -1938,6 +2432,9 @@ class MyProjectUiPlugin(Plugin):
 
         self._node.create_subscription(
             UiStatus, "/ui/status", self._on_status, 10
+        )
+        self._node.create_subscription(
+            ExtruderLatencyStatus, "/extruder/latency_status", self._on_latency_status, 10
         )
         self._node.create_subscription(
             StringMsg, "/rsi/sent_xml", self._on_rsi_xml, 10
@@ -1956,6 +2453,9 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_status(self, msg: UiStatus):
         self._widget.status_received.emit(msg)
+
+    def _on_latency_status(self, msg: ExtruderLatencyStatus):
+        self._widget.latency_received.emit(msg)
 
     def _on_rsi_xml(self, msg: StringMsg):
         self._widget.rsi_xml_received.emit(msg.data)
@@ -2017,7 +2517,7 @@ class MyProjectUiPlugin(Plugin):
             return
         self._pending_launch = False
         if success:
-            self._do_launch()
+            self._on_launch()
         else:
             self._widget._btn_launch.setEnabled(True)
             self._widget._launch_status.setText("启动中止: GCode 导出失败。")
@@ -2025,64 +2525,101 @@ class MyProjectUiPlugin(Plugin):
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
 
-    def _check_npz_exists(self, gcode_path):
+    def _auto_npz_launch_path(self, gcode_path):
         if not gcode_path:
-            return False
+            return None
         base = os.path.splitext(os.path.basename(gcode_path))[0]
         data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
-        
-        # Check standard single NPZ file
+
+        npz_dir = os.path.join(data_root, base)
+        launch_path = _resolve_npz_launch_path_from_dir(npz_dir)
+        if launch_path:
+            return launch_path
+
         npz_file = os.path.join(data_root, base + ".npz")
         if os.path.isfile(npz_file):
-            return True
-            
-        # Check multi-part NPZ files (e.g. switch_test_part0000.npz)
+            return npz_file
+
         npz_part = os.path.join(data_root, base + "_part0000.npz")
         if os.path.isfile(npz_part):
-            return True
-            
-        # Check directory case
-        npz_dir = os.path.join(data_root, base)
-        if os.path.isdir(npz_dir):
-            try:
-                if os.listdir(npz_dir):
-                    return True
-            except Exception:
-                pass
-                
-        return False
+            return npz_file
 
-    def _check_npz_and_offset_match(self, gcode_path):
-        if not gcode_path:
-            return False, "missing"
-            
-        if not self._check_npz_exists(gcode_path):
-            return False, "missing"
-            
-        base = os.path.splitext(os.path.basename(gcode_path))[0]
-        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
-        offset_file = os.path.join(data_root, base + ".offset.json")
-        
-        if not os.path.isfile(offset_file):
-            return False, "mismatch"
-            
+        return None
+
+    def _current_npz_launch_path(self):
+        selected = getattr(self._widget, "_selected_npz_launch_path", None)
+        if selected:
+            return selected, "selected"
+
+        gcode_path = self._launch_params.get("gcode_path", "").strip()
+        return self._auto_npz_launch_path(gcode_path), "auto"
+
+    def _check_npz_and_offset_match(self, npz_launch_path):
+        if not npz_launch_path:
+            return False, "missing", None, None
+
+        p = Path(npz_launch_path)
+        is_manifest = p.name.endswith("_manifest.json")
+        if is_manifest and not p.is_file():
+            return False, "missing", None, None
+        if p.suffix == ".npz" and not p.is_file():
+            part_probe = p.with_name(p.stem + "_part0000.npz")
+            if not part_probe.is_file():
+                return False, "missing", None, None
+
         try:
-            with open(offset_file, "r") as f:
-                data = json.load(f)
-            saved_offset = data.get("tool_offset")
-            if not saved_offset or len(saved_offset) != 3:
-                return False, "mismatch"
-                
-            cur_offset = self._widget.get_tool_offset() # (x, y, z)
-            
-            # Compare up to 0.005 mm tolerance (since spin boxes are 2 decimal places)
-            for val_saved, val_cur in zip(saved_offset, cur_offset):
-                if abs(val_saved - val_cur) > 0.005:
-                    return False, "mismatch"
-            
-            return True, "ok"
+            saved_offset, offset_file = _read_npz_tool_offset(npz_launch_path)
         except Exception:
-            return False, "mismatch"
+            return False, "mismatch", None, None
+
+        if saved_offset is None:
+            return False, "no_offset", None, offset_file
+
+        cur_offset = self._widget.get_tool_offset()
+        for val_saved, val_cur in zip(saved_offset, cur_offset):
+            if abs(val_saved - val_cur) > _NPZ_OFFSET_TOLERANCE_MM:
+                return False, "mismatch", saved_offset, offset_file
+
+        return True, "ok", saved_offset, offset_file
+
+    def _launch_npz_notice(self, npz_launch_path, source, saved_offset, offset_file, status):
+        cur_offset = self._widget.get_tool_offset()
+        source_text = "手动选择的 NPZ 文件夹" if source == "selected" else "按 GCode 自动匹配的 NPZ"
+        lines = [
+            f"NPZ 来源: {source_text}",
+            f"启动 npz_path: {npz_launch_path}",
+            f"当前界面工具偏移: {_format_tool_offset(cur_offset)}",
+        ]
+        if saved_offset is not None:
+            lines.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+        if offset_file:
+            lines.append(f"偏移文件: {offset_file}")
+
+        if status == "ok":
+            lines.append("工具偏移校验通过。")
+        elif status == "no_offset":
+            lines.append("警告: 未找到或无法读取工具偏移 sidecar，无法确认偏移是否一致。")
+        elif status == "mismatch":
+            lines.append("警告: NPZ 中的工具偏移与当前界面设置不一致。")
+
+        related_values = []
+        for name in _NPZ_RELATED_LAUNCH_PARAMS:
+            if name == "npz_path":
+                related_values.append(f"npz_path={npz_launch_path}")
+            else:
+                value = self._launch_params.get(name, _LAUNCH_DEFAULTS.get(name, ""))
+                related_values.append(f"{name}={value}")
+
+        lines.extend([
+            "",
+            "启动设置中与 NPZ 直接相关的是 npz_path。",
+            "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 会影响 NPZ 加载、预取和队列阈值；xyzabc_decimals/e_decimals 会影响轨迹数值发布精度。",
+            "这些参数不会改写 NPZ 文件内容。",
+            "当前相关启动参数: " + ", ".join(related_values),
+            "",
+            "是否继续启动？",
+        ])
+        return "\n".join(lines)
 
     def _on_launch(self):
         if (
@@ -2091,57 +2628,72 @@ class MyProjectUiPlugin(Plugin):
         ):
             return
 
-        gcode_path = self._launch_params.get("gcode_path", "").strip()
-        if not gcode_path or not os.path.isfile(gcode_path):
-            self._widget._launch_status.setText("启动失败: GCode 文件未找到。")
+        npz_launch_path, source = self._current_npz_launch_path()
+        if not npz_launch_path:
+            gcode_path = self._launch_params.get("gcode_path", "").strip()
+            if not gcode_path or not os.path.isfile(gcode_path):
+                self._widget._launch_status.setText("启动失败: 未选择有效 GCode 或 NPZ 文件夹。")
+            else:
+                self._widget._launch_status.setText("启动失败: 未找到与此 GCode 匹配的 NPZ。")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+            QtWidgets.QMessageBox.warning(
+                self._widget,
+                "NPZ 文件缺失",
+                "未找到可用于启动的 NPZ 数据。请先导出 NPZ，或选择已导出的 NPZ 文件夹。",
+                QtWidgets.QMessageBox.Ok,
+            )
+            return
+
+        ok, status, saved_offset, offset_file = self._check_npz_and_offset_match(npz_launch_path)
+        if status == "missing":
+            QtWidgets.QMessageBox.warning(
+                self._widget,
+                "NPZ 文件缺失",
+                f"启动路径无效或文件不存在:\n{npz_launch_path}",
+                QtWidgets.QMessageBox.Ok,
+            )
+            self._widget._launch_status.setText("启动已取消: NPZ missing。")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
             return
 
-        # Enforce check for matching NPZ files/folders and offsets
-        exists, status = self._check_npz_and_offset_match(gcode_path)
-        if not exists:
-            if status == "missing":
-                msg = (
-                    "未找到与此 GCode 匹配的 NPZ 文件。\n\n"
-                    "请先点击“导出 NPZ”按钮生成轨迹数据。"
-                )
-                title = "NPZ 文件缺失"
-            else:  # mismatch
-                msg = (
-                    "当前工具偏移值与已保存的 NPZ 轨迹中的偏移值不匹配。\n\n"
-                    "请先点击“导出 NPZ”按钮使用新偏移重新生成轨迹。"
-                )
-                title = "偏移量不匹配"
-
-            QtWidgets.QMessageBox.warning(
-                self._widget,
-                title,
-                msg,
-                QtWidgets.QMessageBox.Ok
-            )
+        title = "确认启动" if ok else "NPZ 校验警告"
+        default_button = QtWidgets.QMessageBox.Yes if ok else QtWidgets.QMessageBox.No
+        reply = QtWidgets.QMessageBox.question(
+            self._widget,
+            title,
+            self._launch_npz_notice(npz_launch_path, source, saved_offset, offset_file, status),
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            default_button,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
             self._widget._launch_status.setText(f"启动已取消: NPZ {status}。")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
             return
 
-        # Directly launch since NPZ is verified to exist and offsets match
-        self._do_launch()
+        self._do_launch(npz_launch_path)
 
-    def _do_launch(self):
-        cmd = ["ros2", "launch", "my_project_startup", "startup.launch.py"]
+    def _do_launch(self, npz_launch_path=None):
+        if npz_launch_path is None:
+            npz_launch_path, _source = self._current_npz_launch_path()
+        cmd = [
+            "ros2",
+            "launch",
+            "my_project_startup",
+            "startup.launch.py",
+            f"npz_path:={npz_launch_path}",
+        ]
         for name, value in self._launch_params.items():
             if name == "gcode_path":
-                base = os.path.splitext(os.path.basename(value))[0]
-                data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
-                npz_val = os.path.join(data_root, base + ".npz")
-                cmd.append(f"npz_path:={npz_val}")
-            else:
-                default = _LAUNCH_DEFAULTS.get(name, "")
-                if value != default:
-                    cmd.append(f"{name}:={value}")
+                continue
+            default = _LAUNCH_DEFAULTS.get(name, "")
+            if value != default:
+                cmd.append(f"{name}:={value}")
         try:
             self._launch_process = subprocess.Popen(
                 cmd,
