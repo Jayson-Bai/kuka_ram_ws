@@ -45,7 +45,16 @@ LAUNCH_PARAMS = [
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
     ("latency_publish_period_ms", "200", "延迟状态发布周期（ms）", "延迟监控"),
     ("latency_history_limit", "5000", "RSI 心跳缓存数量", "延迟监控"),
+    ("latency_stats_window_limit", "5000", "延迟统计窗口样本数", "延迟监控"),
     ("rsi_period_ms", "4.0", "RSI 控制周期（ms）", "延迟监控"),
+    ("robot_match_cache_back", "8000", "机械臂匹配缓存后向序号", "延迟监控"),
+    ("robot_match_cache_forward", "1000", "机械臂匹配缓存前向序号", "延迟监控"),
+    ("robot_match_search_back", "5000", "机械臂匹配搜索后向序号", "延迟监控"),
+    ("robot_match_search_forward", "300", "机械臂匹配搜索前向序号", "延迟监控"),
+    ("robot_match_max_error_mm", "1.0", "机械臂匹配最大空间误差（mm）", "延迟监控"),
+    ("robot_match_uncertainty_min_band_mm", "0.10", "匹配不确定度最小误差带（mm）", "延迟监控"),
+    ("robot_match_uncertainty_spacing_multiplier", "3.0", "匹配不确定度轨迹间距倍率", "延迟监控"),
+    ("robot_match_nozzle_lever_mm", "100.0", "默认 TCP 姿态等效臂长（mm）", "延迟监控"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
@@ -57,6 +66,7 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
 
     def __init__(self, current_params, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
         self.setWindowTitle("启动参数设置")
         self.setMinimumSize(620, 520)
         self._inputs = {}
@@ -67,9 +77,15 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(10)
 
+        title_row = QtWidgets.QHBoxLayout()
         title = QtWidgets.QLabel("启动参数配置")
         title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
-        main_layout.addWidget(title)
+        title_row.addWidget(title, 1)
+        close_btn = QtWidgets.QPushButton("关闭")
+        close_btn.setFixedWidth(54)
+        close_btn.clicked.connect(self.reject)
+        title_row.addWidget(close_btn)
+        main_layout.addLayout(title_row)
 
         scroll = QtWidgets.QScrollArea()
         scroll.setWidgetResizable(True)
@@ -350,26 +366,106 @@ def _read_npz_tool_offset(npz_source):
     return None, None
 
 
-class _PidPopup(QtWidgets.QFrame):
-    """Floating popup for PID parameter editing."""
-    popup_hidden = QtCore.pyqtSignal()
+class _PanelDialog(QtWidgets.QDialog):
+    """Project-styled popup dialog with an in-window title."""
 
-    def __init__(self, parent=None):
-        super().__init__(parent, QtCore.Qt.Popup | QtCore.Qt.FramelessWindowHint)
-        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
-        self.setFrameShadow(QtWidgets.QFrame.Raised)
+    def __init__(self, title, parent=None, minimum_width=360):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setModal(False)
+        self.setMinimumWidth(minimum_width)
         self.setStyleSheet(
-            "_PidPopup {"
-            "  background: #ffffff;"
-            "  border: 1px solid #c0c0c0;"
-            "  border-radius: 6px;"
-            "  padding: 8px;"
-            "}"
+            "QDialog { background: #ffffff; border: 1px solid #c0c0c0; border-radius: 6px; }"
         )
+        self._layout = QtWidgets.QVBoxLayout(self)
+        self._layout.setContentsMargins(12, 10, 12, 12)
+        self._layout.setSpacing(8)
 
-    def hideEvent(self, event):
-        super().hideEvent(event)
-        self.popup_hidden.emit()
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(8)
+        title_label = QtWidgets.QLabel(title)
+        title_label.setStyleSheet("font-weight: 700; color: #2b2b2b; font-size: 14px;")
+        self._close_btn = QtWidgets.QPushButton("关闭")
+        self._close_btn.setFixedWidth(54)
+        self._close_btn.setCursor(QtCore.Qt.PointingHandCursor)
+        self._close_btn.clicked.connect(self.close)
+        header.addWidget(title_label, 1)
+        header.addWidget(self._close_btn)
+        self._layout.addLayout(header)
+
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        self._layout.addWidget(line)
+
+    def body_layout(self):
+        return self._layout
+
+
+class _DecisionDialog(QtWidgets.QDialog):
+    def __init__(self, title, message, buttons, default_button, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setModal(True)
+        self._result = None
+        self.setMinimumWidth(460)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(14, 12, 14, 14)
+        layout.setSpacing(10)
+
+        title_label = QtWidgets.QLabel(title)
+        title_label.setStyleSheet("font-weight: 700; color: #2b2b2b; font-size: 15px;")
+        layout.addWidget(title_label)
+
+        body = QtWidgets.QLabel(message)
+        body.setWordWrap(True)
+        body.setTextInteractionFlags(QtCore.Qt.TextSelectableByMouse)
+        body.setStyleSheet("color: #444444; font-size: 12px;")
+        layout.addWidget(body)
+
+        row = QtWidgets.QHBoxLayout()
+        row.addStretch(1)
+        for result, text in buttons:
+            btn = QtWidgets.QPushButton(text)
+            btn.setMinimumWidth(72)
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
+            if result == default_button:
+                btn.setDefault(True)
+            btn.clicked.connect(lambda checked=False, r=result: self._finish(r))
+            row.addWidget(btn)
+        layout.addLayout(row)
+
+    def _finish(self, result):
+        self._result = result
+        self.accept()
+
+    def result_value(self):
+        return self._result
+
+
+def _show_warning(parent, title, message):
+    dialog = _DecisionDialog(
+        title,
+        message,
+        [(QtWidgets.QMessageBox.Ok, "确定")],
+        QtWidgets.QMessageBox.Ok,
+        parent,
+    )
+    dialog.exec_()
+    return QtWidgets.QMessageBox.Ok
+
+
+def _ask_yes_no(parent, title, message, default=QtWidgets.QMessageBox.No):
+    dialog = _DecisionDialog(
+        title,
+        message,
+        [(QtWidgets.QMessageBox.Yes, "是"), (QtWidgets.QMessageBox.No, "否")],
+        default,
+        parent,
+    )
+    dialog.exec_()
+    return dialog.result_value() or default
 
 
 class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
@@ -393,6 +489,7 @@ class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
 class _LayerViewerDialog(QtWidgets.QDialog):
     def __init__(self, npz_dir: str, parent=None):
         super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
         self._npz_dir = npz_dir
         self._images: list[Path] = []
         self._index = 0
@@ -422,6 +519,16 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
+
+        title_row = QtWidgets.QHBoxLayout()
+        title_label = QtWidgets.QLabel(f"层预览 - {Path(self._npz_dir).name}")
+        title_label.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
+        btn_close_top = QtWidgets.QPushButton("关闭")
+        btn_close_top.setFixedWidth(54)
+        btn_close_top.clicked.connect(self.close)
+        title_row.addWidget(title_label, 1)
+        title_row.addWidget(btn_close_top)
+        layout.addLayout(title_row)
 
         # Top bar: prev / label / next
         top_bar = QtWidgets.QHBoxLayout()
@@ -949,17 +1056,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
             temp_row.addWidget(btn_temp_apply)
             ctrl_layout.addLayout(temp_row)
 
-            # ---- PID 参数浮动弹出面板 ----
-            pid_toggle = QtWidgets.QPushButton("▶ PID 参数")
+            # ---- PID 参数弹窗 ----
+            pid_toggle = QtWidgets.QPushButton("PID 参数")
             pid_toggle.setObjectName(f"btnPidToggle_{head_id}")
             pid_toggle.setMinimumHeight(28)
             pid_toggle.setCursor(QtCore.Qt.PointingHandCursor)
             ctrl_layout.addWidget(pid_toggle)
 
-            pid_container = _PidPopup()
-            pid_container_layout = QtWidgets.QVBoxLayout(pid_container)
-            pid_container_layout.setContentsMargins(10, 10, 10, 10)
-            pid_container_layout.setSpacing(6)
+            pid_container = _PanelDialog(f"{head_name} PID 参数", self, 420)
+            pid_container_layout = pid_container.body_layout()
 
             pid_form = QtWidgets.QFormLayout()
             pid_form.setLabelAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -1015,21 +1120,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             pid_btn_row.addWidget(pid_status, 1)
             pid_container_layout.addLayout(pid_btn_row)
 
-            def _make_pid_show(container, btn):
+            def _make_pid_show(container):
                 def _show():
-                    pos = btn.mapToGlobal(QtCore.QPoint(0, btn.height()))
-                    container.move(pos)
                     container.adjustSize()
                     container.show()
-                    btn.setText("▼ PID 参数")
+                    container.raise_()
+                    container.activateWindow()
                 return _show
-            pid_toggle.clicked.connect(_make_pid_show(pid_container, pid_toggle))
-
-            def _make_pid_hide(btn):
-                def _hide():
-                    btn.setText("▶ PID 参数")
-                return _hide
-            pid_container.popup_hidden.connect(_make_pid_hide(pid_toggle))
+            pid_toggle.clicked.connect(_make_pid_show(pid_container))
 
             setattr(self, f"_pid_inputs_{head_id}", pid_inputs)
             setattr(self, f"_pid_status_{head_id}", pid_status)
@@ -1109,36 +1207,79 @@ class _UiStatusWidget(QtWidgets.QWidget):
         btn_row.addWidget(self._btn_stop)
         control_layout.addLayout(btn_row)
 
-        latency_grid = QtWidgets.QGridLayout()
-        latency_grid.setHorizontalSpacing(10)
-        latency_grid.setVerticalSpacing(4)
-        self._latency_labels = {}
-        latency_rows = [
-            ("arm_seq", "机械臂 Seq"),
-            ("eack_seq", "挤出确认 Seq"),
-            ("seq_lag", "Seq 差"),
-            ("cycle_lag", "周期滞后"),
-            ("ack_delay", "ACK 延迟"),
-            ("ack_stats", "ACK 统计"),
-        ]
-        for idx, (key, title_text) in enumerate(latency_rows):
-            row = idx // 2
-            col = (idx % 2) * 2
+        latency_box = QtWidgets.QGroupBox("延迟匹配")
+        latency_box.setObjectName("groupLatency")
+        latency_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        latency_layout = QtWidgets.QVBoxLayout(latency_box)
+        latency_layout.setSpacing(8)
+
+        latency_row = QtWidgets.QHBoxLayout()
+        latency_row.setSpacing(8)
+        self._latency_link_labels = {}
+        for key, title_text in (
+            ("linux_mcu", "Linux -> MCU"),
+            ("linux_robot", "Linux -> 机械臂"),
+            ("mcu_robot", "MCU -> 机械臂"),
+        ):
+            panel = QtWidgets.QFrame()
+            panel.setObjectName("latencyPanel")
+            panel_layout = QtWidgets.QVBoxLayout(panel)
+            panel_layout.setContentsMargins(6, 4, 6, 4)
+            panel_layout.setSpacing(2)
+
             title_label = QtWidgets.QLabel(title_text)
             title_label.setObjectName("fieldLabel")
             value_label = QtWidgets.QLabel("-")
             value_label.setObjectName("valueLabel")
-            value_label.setMinimumWidth(value_min_width * 3)
-            latency_grid.addWidget(title_label, row, col)
-            latency_grid.addWidget(value_label, row, col + 1)
-            self._latency_labels[key] = value_label
-        self._latency_warn = QtWidgets.QLabel("-")
-        self._latency_warn.setObjectName("fieldLabel")
-        self._latency_warn.setWordWrap(True)
-        control_layout.addLayout(latency_grid)
-        control_layout.addWidget(self._latency_warn)
+            value_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+            p95_label = QtWidgets.QLabel("P95 -")
+            p95_label.setObjectName("fieldLabel")
 
+            panel_layout.addWidget(title_label)
+            panel_layout.addWidget(value_label)
+            panel_layout.addWidget(p95_label)
+            latency_row.addWidget(panel, 1)
+            self._latency_link_labels[key] = (value_label, p95_label)
+        latency_layout.addLayout(latency_row)
 
+        self._latency_summary = QtWidgets.QLabel("挤出相对机械臂：-")
+        self._latency_summary.setObjectName("fieldLabel")
+        self._latency_summary.setWordWrap(True)
+        latency_layout.addWidget(self._latency_summary)
+
+        self._latency_diag_toggle = QtWidgets.QPushButton("详细延迟")
+        self._latency_diag_toggle.setCursor(QtCore.Qt.PointingHandCursor)
+        self._latency_diag_toggle.clicked.connect(self._show_latency_detail)
+        latency_layout.addWidget(self._latency_diag_toggle)
+
+        self._latency_diag_widget = _PanelDialog("详细延迟", self, 440)
+        diag_grid = QtWidgets.QGridLayout()
+        diag_grid.setContentsMargins(0, 0, 0, 0)
+        diag_grid.setHorizontalSpacing(8)
+        diag_grid.setVerticalSpacing(3)
+        self._latency_diag_labels = {}
+        latency_diag_rows = [
+            ("linux_mcu_p99", "Linux-MCU P99"),
+            ("linux_robot_p99", "Linux-机械臂 P99"),
+            ("mcu_robot_avg", "MCU-机械臂平均"),
+            ("mcu_robot_p99", "MCU-机械臂 P99 |偏移|"),
+            ("robot_seq", "机械臂估计 Seq"),
+            ("seqs", "Seq"),
+            ("match_error", "匹配误差"),
+            ("uncertainty", "不确定度"),
+            ("warn", "告警"),
+        ]
+        for idx, (key, title_text) in enumerate(latency_diag_rows):
+            title_label = QtWidgets.QLabel(title_text)
+            title_label.setObjectName("fieldLabel")
+            value_label = QtWidgets.QLabel("-")
+            value_label.setObjectName("fieldLabel")
+            value_label.setWordWrap(True)
+            row = idx
+            diag_grid.addWidget(title_label, row, 0)
+            diag_grid.addWidget(value_label, row, 1)
+            self._latency_diag_labels[key] = value_label
+        self._latency_diag_widget.body_layout().addLayout(diag_grid)
 
         # Wait to add control_box until after launch_box
 
@@ -1227,17 +1368,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._npz_out_input = QtWidgets.QLineEdit()
         self._npz_out_input.setPlaceholderText("根据 GCode 文件名自动生成")
 
-        # Planner settings (collapsible)
-        planner_toggle = QtWidgets.QPushButton("▶ 规划器设置")
+        # Planner settings popup
+        planner_toggle = QtWidgets.QPushButton("规划器设置")
         planner_toggle.setObjectName("btnPlannerToggle")
         planner_toggle.setMinimumHeight(28)
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
-        planner_toggle.setCheckable(True)
         export_layout.addWidget(planner_toggle)
 
-        planner_container = QtWidgets.QWidget()
-        planner_container.setVisible(False)
-        planner_form = QtWidgets.QFormLayout(planner_container)
+        planner_container = _PanelDialog("规划器设置", self, 460)
+        planner_form = QtWidgets.QFormLayout()
         planner_form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         planner_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         planner_form.setHorizontalSpacing(8)
@@ -1273,15 +1412,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 planner_form.addRow(lbl, inp)
             self._planner_inputs[param_name] = inp
 
-        export_layout.addWidget(planner_container)
+        planner_container.body_layout().addLayout(planner_form)
         self._planner_container = planner_container
 
-        def _toggle_planner(checked):
-            planner_container.setVisible(checked)
-            planner_toggle.setText(
-                "▼ 规划器设置" if checked else "▶ 规划器设置"
-            )
-        planner_toggle.toggled.connect(_toggle_planner)
+        def _show_planner_settings():
+            planner_container.adjustSize()
+            planner_container.show()
+            planner_container.raise_()
+            planner_container.activateWindow()
+        planner_toggle.clicked.connect(_show_planner_settings)
 
         # Export button + progress
         export_btn_row = QtWidgets.QHBoxLayout()
@@ -1395,6 +1534,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col2_layout.addWidget(export_box)
         col2_layout.addWidget(launch_box)
         col2_layout.addWidget(control_box)
+        col2_layout.addWidget(latency_box)
         col2_layout.addStretch(1)
 
         col0_layout.addStretch(1)
@@ -1508,6 +1648,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  color: #2b2b2b;"
             "}"
             "QGroupBox#groupControl::title { color: #1a73e8; }"
+            "QGroupBox#groupLatency::title { color: #0f766e; }"
             "QGroupBox#groupPrintheadControl::title { color: #1a73e8; }"
             "QGroupBox#groupCtrlcf::title { color: #000000; }"
             "QGroupBox#groupCtrlresin::title { color: #444444; }"
@@ -1797,43 +1938,124 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def current_extrude_scale(self):
         return self._extrude_scale_current
 
+
+    def _show_latency_detail(self):
+        self._latency_diag_widget.adjustSize()
+        self._latency_diag_widget.show()
+        self._latency_diag_widget.raise_()
+        self._latency_diag_widget.activateWindow()
+
     def _update_latency(self, msg: ExtruderLatencyStatus):
-        labels = getattr(self, "_latency_labels", {})
-        if not labels:
+        link_labels = getattr(self, "_latency_link_labels", {})
+        diag_labels = getattr(self, "_latency_diag_labels", {})
+        if not link_labels:
             return
 
-        def set_label(key, text, color="#2b2b2b"):
-            label = labels.get(key)
+        def finite(value):
+            return value == value
+
+        def fmt_ms(value):
+            if not finite(value):
+                return "-"
+            return f"{value:.0f} ms"
+
+        def fmt_signed_ms(value):
+            if not finite(value):
+                return "-"
+            return f"{value:.0f} ms"
+
+        def fmt_unc(value, uncertainty):
+            if not finite(value):
+                return "-"
+            if finite(uncertainty) and uncertainty > 0.0:
+                return f"{value:.0f} ms ±{uncertainty:.0f} ms"
+            return f"{value:.0f} ms"
+
+        def set_link(key, current_text, p95_text, color="#2b2b2b"):
+            labels = link_labels.get(key)
+            if not labels:
+                return
+            value_label, p95_label = labels
+            value_label.setText(current_text)
+            value_label.setStyleSheet(f"color: {color};")
+            p95_label.setText(p95_text)
+
+        has_eack = bool(msg.has_eack)
+        has_robot = bool(msg.has_robot_match)
+        robot_unc = msg.robot_match_uncertainty_ms if has_robot else float("nan")
+
+        set_link(
+            "linux_mcu",
+            fmt_ms(msg.linux_mcu_delay_ms) if has_eack else "-",
+            f"P95 {fmt_ms(msg.linux_mcu_p95_ms)}" if has_eack else "P95 -",
+        )
+        set_link(
+            "linux_robot",
+            fmt_unc(msg.linux_robot_delay_ms, robot_unc) if has_robot else "-",
+            f"P95 {fmt_ms(msg.linux_robot_p95_ms)}" if has_robot else "P95 -",
+        )
+        mcu_robot_color = "#2b2b2b"
+        if has_robot and has_eack:
+            if msg.mcu_robot_delay_ms < 0:
+                mcu_robot_color = "#1b6e3c"
+            elif msg.mcu_robot_delay_ms > 0:
+                mcu_robot_color = "#b15e00"
+        set_link(
+            "mcu_robot",
+            fmt_unc(msg.mcu_robot_delay_ms, robot_unc) if has_robot and has_eack else "-",
+            f"P95 |偏移| {fmt_ms(msg.mcu_robot_abs_p95_ms)}" if has_robot and has_eack else "P95 |偏移| -",
+            mcu_robot_color,
+        )
+
+        if not has_robot:
+            if finite(msg.robot_match_error_mm):
+                summary = (
+                    "挤出相对机械臂：无法估计，"
+                    f"匹配误差 {msg.robot_match_error_mm:.2f} mm 超过 "
+                    f"{msg.robot_match_max_error_mm:.2f} mm"
+                )
+            else:
+                summary = "挤出相对机械臂：等待机械臂位置匹配"
+        elif not has_eack:
+            summary = "挤出相对机械臂：等待 EACK"
+        else:
+            value = msg.mcu_robot_delay_ms
+            uncertainty = max(0.0, robot_unc if finite(robot_unc) else 0.0)
+            low = value - uncertainty
+            high = value + uncertainty
+            if high < 0:
+                summary = f"挤出相对机械臂：提前，约 {abs(high):.0f} ~ {abs(low):.0f} ms"
+            elif low > 0:
+                summary = f"挤出相对机械臂：滞后，约 {low:.0f} ~ {high:.0f} ms"
+            else:
+                summary = f"挤出与机械臂接近同步，方向不确定，范围 {low:.0f} ~ {high:.0f} ms"
+        self._latency_summary.setText(summary)
+
+        def set_diag(key, text, color="#666666"):
+            label = diag_labels.get(key)
             if label is not None:
                 label.setText(text)
                 label.setStyleSheet(f"color: {color};")
 
-        eack_text = str(msg.last_eack_seq) if msg.has_eack else "-"
-        if msg.has_stat:
-            eack_text = f"{eack_text} / STAT {msg.stat_last_e_seq}"
-        lag_color = "#1b6e3c" if abs(msg.seq_lag) <= 1 else "#b15e00"
-        if abs(msg.seq_lag) >= 5:
-            lag_color = "#b42318"
-
-        set_label("arm_seq", str(msg.arm_seq))
-        set_label("eack_seq", eack_text)
-        set_label("seq_lag", str(msg.seq_lag), lag_color)
-        set_label("cycle_lag", f"{msg.cycle_lag_ms:.1f} ms", lag_color)
-        if msg.has_eack and msg.ack_delay_ms == msg.ack_delay_ms:
-            set_label("ack_delay", f"{msg.ack_delay_ms:.2f} ms")
+        set_diag("linux_mcu_p99", fmt_ms(msg.linux_mcu_p99_ms) if has_eack else "-")
+        set_diag("linux_robot_p99", fmt_ms(msg.linux_robot_p99_ms) if has_robot else "-")
+        set_diag("mcu_robot_avg", fmt_signed_ms(msg.mcu_robot_avg_ms) if has_robot and has_eack else "-")
+        set_diag("mcu_robot_p99", fmt_ms(msg.mcu_robot_abs_p99_ms) if has_robot and has_eack else "-")
+        set_diag("robot_seq", str(msg.actual_robot_seq) if has_robot else "-")
+        set_diag("seqs", f"发送 {msg.arm_seq} / EACK {msg.last_eack_seq if has_eack else '-'}")
+        if finite(msg.robot_match_error_mm):
+            set_diag("match_error", f"{msg.robot_match_error_mm:.2f} / {msg.robot_match_max_error_mm:.2f} mm")
         else:
-            set_label("ack_delay", "-", "#b42318")
-        set_label(
-            "ack_stats",
-            f"avg {msg.ack_delay_avg_ms:.2f} / jitter {msg.ack_delay_jitter_ms:.2f} ms",
-        )
+            set_diag("match_error", "-")
+        set_diag("uncertainty", f"±{msg.robot_match_uncertainty_ms:.0f} ms" if has_robot else "-")
 
         warn_text = msg.last_warn or "无 EWARN"
         warn_color = "#b42318" if msg.last_warn else "#666666"
-        self._latency_warn.setText(
-            f"EACK: {msg.eack_count}  old: {msg.old_seq_warn_count}  gap: {msg.gap_warn_count}  {warn_text}"
+        set_diag(
+            "warn",
+            f"EACK {msg.eack_count} / old {msg.old_seq_warn_count} / gap {msg.gap_warn_count} / {warn_text}",
+            warn_color,
         )
-        self._latency_warn.setStyleSheet(f"color: {warn_color};")
 
     def _update_ui(self, msg: UiStatus):
         state_str = msg.state or "-"
@@ -1979,13 +2201,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.command_submit.emit("RESUME")
 
     def _on_stop(self):
-        reply = QtWidgets.QMessageBox.warning(
+        reply = _ask_yes_no(
             self,
             "确认停止",
             "确定要停止打印吗？\n\n"
             "这将抬升 Z 轴，然后切断所有通信。\n"
             "KUKA 将触发安全停机。",
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.No,
         )
         if reply == QtWidgets.QMessageBox.Yes:
@@ -2284,13 +2505,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         detail.append("")
         detail.append("是否将该文件夹作为本次启动使用的 NPZ 数据？")
 
-        box = QtWidgets.QMessageBox(self)
-        box.setIcon(QtWidgets.QMessageBox.Warning)
-        box.setWindowTitle("NPZ 相关参数警告")
-        box.setText("\n".join(detail))
-        box.setStandardButtons(QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
-        box.setDefaultButton(QtWidgets.QMessageBox.No)
-        return box.exec_() == QtWidgets.QMessageBox.Yes
+        return _ask_yes_no(
+            self,
+            "NPZ 相关参数警告",
+            "\n".join(detail),
+            QtWidgets.QMessageBox.No,
+        ) == QtWidgets.QMessageBox.Yes
 
     def _on_select_npz_dir(self):
         start_dir = self._selected_npz_dir or os.path.expanduser("~/kuka_ram_ws/data/output_npz")
@@ -2304,11 +2524,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         launch_path = _resolve_npz_launch_path_from_dir(npz_dir)
         if not launch_path:
-            QtWidgets.QMessageBox.warning(
+            _show_warning(
                 self,
                 "NPZ 文件夹无效",
                 "所选文件夹中未找到 *_manifest.json 或可识别的 .npz 文件。",
-                QtWidgets.QMessageBox.Ok,
             )
             return
 
@@ -2395,6 +2614,7 @@ class MyProjectUiPlugin(Plugin):
             rclpy.init(args=None)
 
         self._node = context.node
+        self._shutting_down = False
         self._param_client = self._node.create_client(
             SetParameters, "/uart_node/set_parameters"
         )
@@ -2500,7 +2720,16 @@ class MyProjectUiPlugin(Plugin):
         future.add_done_callback(_done)
 
     def _spin_once(self):
-        rclpy.spin_once(self._node, timeout_sec=0.0)
+        if self._shutting_down or not rclpy.ok():
+            if self._spin_timer.isActive():
+                self._spin_timer.stop()
+            return
+        try:
+            rclpy.spin_once(self._node, timeout_sec=0.0)
+        except Exception:
+            if self._spin_timer.isActive():
+                self._spin_timer.stop()
+
 
     # ---- Launch control ----
 
@@ -2638,21 +2867,19 @@ class MyProjectUiPlugin(Plugin):
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
-            QtWidgets.QMessageBox.warning(
+            _show_warning(
                 self._widget,
                 "NPZ 文件缺失",
                 "未找到可用于启动的 NPZ 数据。请先导出 NPZ，或选择已导出的 NPZ 文件夹。",
-                QtWidgets.QMessageBox.Ok,
             )
             return
 
         ok, status, saved_offset, offset_file = self._check_npz_and_offset_match(npz_launch_path)
         if status == "missing":
-            QtWidgets.QMessageBox.warning(
+            _show_warning(
                 self._widget,
                 "NPZ 文件缺失",
                 f"启动路径无效或文件不存在:\n{npz_launch_path}",
-                QtWidgets.QMessageBox.Ok,
             )
             self._widget._launch_status.setText("启动已取消: NPZ missing。")
             self._widget._launch_status.setStyleSheet(
@@ -2662,11 +2889,10 @@ class MyProjectUiPlugin(Plugin):
 
         title = "确认启动" if ok else "NPZ 校验警告"
         default_button = QtWidgets.QMessageBox.Yes if ok else QtWidgets.QMessageBox.No
-        reply = QtWidgets.QMessageBox.question(
+        reply = _ask_yes_no(
             self._widget,
             title,
             self._launch_npz_notice(npz_launch_path, source, saved_offset, offset_file, status),
-            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             default_button,
         )
         if reply != QtWidgets.QMessageBox.Yes:
@@ -2756,6 +2982,7 @@ class MyProjectUiPlugin(Plugin):
                 )
 
     def shutdown_plugin(self):
+        self._shutting_down = True
         if self._launch_check_timer.isActive():
             self._launch_check_timer.stop()
         if self._spin_timer.isActive():

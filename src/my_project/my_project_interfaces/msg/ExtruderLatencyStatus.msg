@@ -13,6 +13,21 @@ float64 ack_delay_min_ms
 float64 ack_delay_avg_ms
 float64 ack_delay_max_ms
 float64 ack_delay_jitter_ms
+float64 linux_mcu_delay_ms
+float64 linux_mcu_p95_ms
+float64 linux_mcu_p99_ms
+bool has_robot_match
+uint32 actual_robot_seq
+float64 robot_match_error_mm
+float64 robot_match_uncertainty_ms
+float64 robot_match_max_error_mm
+float64 linux_robot_delay_ms
+float64 linux_robot_p95_ms
+float64 linux_robot_p99_ms
+float64 mcu_robot_delay_ms
+float64 mcu_robot_avg_ms
+float64 mcu_robot_abs_p95_ms
+float64 mcu_robot_abs_p99_ms
 
 uint64 eack_count
 uint64 old_seq_warn_count

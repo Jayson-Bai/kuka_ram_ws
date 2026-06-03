@@ -109,7 +109,7 @@ ros2 run gcode_planner gcode_planner_npz \
 - 按工具号映射为 `fan_cf` 或 `fan_resin`
 
 重置挤出事件：
-- `G92 E...` -> `extrude_reset`
+- `G92 E...` -> `extrude_reset`（payload 为当前 `tool_id`）
 
 ## B 样条拟合逻辑（详细）
 
@@ -192,7 +192,7 @@ E 在系统内始终以“绝对挤出量（absolute E）”流转。
     - 绝对模式：`target_e = params["E"] 或 state.e`，`delta_e = target_e - state.e`，并更新 `state.e = target_e`。  
     - 相对模式：`delta_e = params.get("E", 0)`，`state.e += delta_e`。  
   - 每条运动生成 `MoveCommand`，记录 `e_val`（当前绝对 E）与 `delta_e`（本段增量）。  
-  - `G92 E...` 生成 `ResetECommand` 事件（后续导出为 `extrude_reset`）。
+  - `G92 E...` 生成 `ResetECommand` 事件（后续导出为 `extrude_reset`，payload 为当前 `tool_id`）。
 
 - 时间参数化/采样阶段（`gcode_planner/polynomial_interpolator.py`）  
   - 对拟合后的曲线进行 4ms 采样。  
@@ -203,7 +203,7 @@ E 在系统内始终以“绝对挤出量（absolute E）”流转。
 
 - npz 导出阶段（`gcode_planner/npz_exporter.py`）  
   - 采样点写入 `CsvRow.e`，最终保存为 npz 字段 `e`（float32）。  
-  - `G92 E...` 会导出 `event_type=extrude_reset` 事件行（`event_flag=1`），用于串口侧状态同步。
+  - `G92 E...` 会导出 `event_type=extrude_reset` 事件行（`event_flag=1`，payload 为当前 `tool_id`），用于串口侧状态同步。
 
 ### 2) E 从 npz 到 UART 的发送链路
 

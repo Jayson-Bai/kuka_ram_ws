@@ -905,7 +905,7 @@ def export_npz(
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
                 _emit_event(_PendingEvent(
                     event_type="extrude_reset",
-                    payload=str(cmd.val),
+                    payload=str(current_tool),
                     src_line=cmd.line,
                     tool_id=current_tool,
                 ), cmd.layer, cmd.subtype, occ)

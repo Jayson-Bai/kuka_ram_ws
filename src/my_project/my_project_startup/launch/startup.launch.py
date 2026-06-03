@@ -26,7 +26,16 @@ def generate_launch_description():
     event_queue_limit = LaunchConfiguration("event_queue_limit")
     latency_publish_period_ms = LaunchConfiguration("latency_publish_period_ms")
     latency_history_limit = LaunchConfiguration("latency_history_limit")
+    latency_stats_window_limit = LaunchConfiguration("latency_stats_window_limit")
     rsi_period_ms = LaunchConfiguration("rsi_period_ms")
+    robot_match_cache_back = LaunchConfiguration("robot_match_cache_back")
+    robot_match_cache_forward = LaunchConfiguration("robot_match_cache_forward")
+    robot_match_search_back = LaunchConfiguration("robot_match_search_back")
+    robot_match_search_forward = LaunchConfiguration("robot_match_search_forward")
+    robot_match_max_error_mm = LaunchConfiguration("robot_match_max_error_mm")
+    robot_match_uncertainty_min_band_mm = LaunchConfiguration("robot_match_uncertainty_min_band_mm")
+    robot_match_uncertainty_spacing_multiplier = LaunchConfiguration("robot_match_uncertainty_spacing_multiplier")
+    robot_match_nozzle_lever_mm = LaunchConfiguration("robot_match_nozzle_lever_mm")
 
     # RSI node params
     sen_type = LaunchConfiguration("sen_type")
@@ -110,7 +119,16 @@ def generate_launch_description():
         parameters=[{
             "latency_publish_period_ms": latency_publish_period_ms,
             "latency_history_limit": latency_history_limit,
+            "latency_stats_window_limit": latency_stats_window_limit,
             "rsi_period_ms": rsi_period_ms,
+            "robot_match_cache_back": robot_match_cache_back,
+            "robot_match_cache_forward": robot_match_cache_forward,
+            "robot_match_search_back": robot_match_search_back,
+            "robot_match_search_forward": robot_match_search_forward,
+            "robot_match_max_error_mm": robot_match_max_error_mm,
+            "robot_match_uncertainty_min_band_mm": robot_match_uncertainty_min_band_mm,
+            "robot_match_uncertainty_spacing_multiplier": robot_match_uncertainty_spacing_multiplier,
+            "robot_match_nozzle_lever_mm": robot_match_nozzle_lever_mm,
         }],
     )
 
@@ -217,9 +235,54 @@ def generate_launch_description():
             description="挤出延迟监控保存的 RSI 心跳序号数量。",
         ),
         DeclareLaunchArgument(
+            "latency_stats_window_limit",
+            default_value="5000",
+            description="延迟 P95/P99 统计窗口样本数。",
+        ),
+        DeclareLaunchArgument(
             "rsi_period_ms",
             default_value="4.0",
             description="RSI 控制周期（毫秒），用于 seq_lag 换算。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_cache_back",
+            default_value="8000",
+            description="机械臂位置匹配保留当前序号之前的轨迹点数量。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_cache_forward",
+            default_value="1000",
+            description="机械臂位置匹配保留当前序号之后的轨迹点数量。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_search_back",
+            default_value="5000",
+            description="机械臂实际位置匹配向后搜索的序号范围。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_search_forward",
+            default_value="300",
+            description="机械臂实际位置匹配向前搜索的序号范围。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_max_error_mm",
+            default_value="1.0",
+            description="机械臂位置匹配允许的最大空间误差（毫米）。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_uncertainty_min_band_mm",
+            default_value="0.10",
+            description="计算匹配不确定度时的最小误差带（毫米）。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_uncertainty_spacing_multiplier",
+            default_value="3.0",
+            description="计算匹配不确定度时的局部轨迹间距倍率。",
+        ),
+        DeclareLaunchArgument(
+            "robot_match_nozzle_lever_mm",
+            default_value="100.0",
+            description="TCP 未实测前用于姿态误差等效换算的默认臂长（毫米）。",
         ),
         DeclareLaunchArgument(
             "sen_type",
