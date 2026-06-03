@@ -20,6 +20,9 @@
 *~
 *.swp
 
+# Local git worktrees
+/.worktrees/
+
 # Local requirement handoff notes
 /docs/firmware_feedback_requirements.md
 /docs/需求确认.md
