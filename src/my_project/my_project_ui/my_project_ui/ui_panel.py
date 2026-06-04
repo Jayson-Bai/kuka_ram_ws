@@ -17,6 +17,8 @@ import re
 from pathlib import Path
 
 
+_DEFAULT_NPZ_PATH = "/home/jayson/kuka_ram_ws/data/output_npz/test.npz"
+
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
     ("center_start_delay_s", "1.0", "中心节点启动延迟（秒）", "中心节点"),
@@ -3510,7 +3512,7 @@ class MyProjectUiPlugin(Plugin):
         return "\n".join(lines)
 
     def _test_mode_bootstrap_npz_path(self):
-        return self._launch_params.get("npz_path") or _LAUNCH_DEFAULTS["npz_path"]
+        return self._launch_params.get("npz_path") or _DEFAULT_NPZ_PATH
 
     def _on_launch(self):
         if (

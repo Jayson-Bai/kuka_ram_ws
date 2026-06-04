@@ -42,6 +42,9 @@ def test_test_mode_launch_can_bootstrap_without_selected_npz():
     assert "if self._widget.active_mode() == _MODE_PAGE_TEST:" in src
     assert "self._do_launch(self._test_mode_bootstrap_npz_path())" in src
     assert "测试模式节点已启动" in src
+    assert "_DEFAULT_NPZ_PATH" in src
+    assert 'return self._launch_params.get("npz_path") or _DEFAULT_NPZ_PATH' in src
+    assert '_LAUNCH_DEFAULTS["npz_path"]' not in src
 
 
 def test_print_mode_excludes_print_test_controls():
