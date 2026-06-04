@@ -30,7 +30,7 @@ LAUNCH_PARAMS = [
     ("traj_low", "500", "轨迹积压低阈值", "中心节点"),
     ("traj_high", "1500", "轨迹积压高阈值", "中心节点"),
     ("xyzabc_decimals", "6", "位姿小数精度", "中心节点"),
-    ("e_decimals", "2", "挤出小数精度", "中心节点"),
+    ("e_decimals", "6", "挤出小数精度", "中心节点"),
     ("kuka_status_raw", "false", "打印 KUKA 原始 XML 长度", "中心节点"),
     ("summary_period_ms", "200", "控制中心发布周期（ms）", "中心节点"),
     ("sen_type", "PythonDemo", "RSI XML SEN 类型", "RSI 节点"),
@@ -735,6 +735,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self._extrude_scale_current = 1.0
+        self._current_tool_id = 0
         self._last_npz_dir = None
         self._print_test_current_correction = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
         self._print_test_seen_correction = False
@@ -2362,6 +2363,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def current_extrude_scale(self):
         return self._extrude_scale_current
 
+    def current_tool_id(self):
+        return self._current_tool_id
+
 
     def _show_latency_detail(self):
         self._latency_diag_widget.adjustSize()
@@ -2490,6 +2494,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         if msg.printhead_status_valid:
             ps = msg.printhead_status
+            self._current_tool_id = int(ps.current_tool)
             self._current_tool_value.setText(self._format_tool(ps.current_tool))
 
             using_color = "#1b6e3c"
@@ -2509,6 +2514,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
             self._print_test_resin_temp = (ps.current_temp_resin, ps.target_temp_resin)
         else:
+            self._current_tool_id = 0
             missing_keys = [
                 "Carbon Fiber State",
                 "Carbon Fiber Fan OK",
@@ -3334,15 +3340,31 @@ class MyProjectUiPlugin(Plugin):
     def _on_current_correction(self, msg: TrajectoryPoint):
         self._widget.current_correction_received.emit(msg)
 
+    def _publish_uart_manual_command(self, cmd: str):
+        msg = StringMsg()
+        msg.data = cmd
+        self._uart_cmd_pub.publish(msg)
+
+    def _send_current_tool_heat_off(self):
+        tool_id = self._widget.current_tool_id()
+        if tool_id == 1:
+            commands = ["EV 0 heat_cf 0\n", "EV 0 heat_resin 0\n"]
+        elif tool_id == 2:
+            commands = ["EV 0 heat_resin 0\n", "EV 0 heat_cf 0\n"]
+        else:
+            commands = ["EV 0 heat_cf 0\n", "EV 0 heat_resin 0\n"]
+        for command in commands:
+            self._publish_uart_manual_command(command)
+
     def _on_command_submit(self, cmd: str):
+        if cmd == "ABORT":
+            self._send_current_tool_heat_off()
         msg = StringMsg()
         msg.data = cmd
         self._cmd_pub.publish(msg)
 
     def _on_uart_command_submit(self, cmd: str):
-        msg = StringMsg()
-        msg.data = cmd
-        self._uart_cmd_pub.publish(msg)
+        self._publish_uart_manual_command(cmd)
 
     def _on_print_test_rsi_command(self, cmd: str):
         msg = StringMsg()
@@ -3611,6 +3633,8 @@ class MyProjectUiPlugin(Plugin):
             return False
 
     def _on_stop_launch(self):
+        self._send_current_tool_heat_off()
+        time.sleep(0.1)
         if (
             self._launch_process is not None
             and self._launch_process.poll() is None
@@ -3654,6 +3678,8 @@ class MyProjectUiPlugin(Plugin):
 
     def shutdown_plugin(self):
         self._shutting_down = True
+        self._send_current_tool_heat_off()
+        time.sleep(0.1)
         if self._launch_check_timer.isActive():
             self._launch_check_timer.stop()
         if self._spin_timer.isActive():

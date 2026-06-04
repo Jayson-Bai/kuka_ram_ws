@@ -191,7 +191,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "e_decimals",
-            default_value="2",
+            default_value="6",
             description="挤出量小数保留位数。",
         ),
         DeclareLaunchArgument(

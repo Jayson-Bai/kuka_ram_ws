@@ -2,6 +2,9 @@ from pathlib import Path
 
 
 UI_PANEL = Path(__file__).resolve().parents[1] / "my_project_ui" / "ui_panel.py"
+PROJECT_SRC = Path(__file__).resolve().parents[2]
+STARTUP_LAUNCH = PROJECT_SRC / "my_project_startup" / "launch" / "startup.launch.py"
+CENTER_NODE = PROJECT_SRC / "control_center" / "src" / "center_node.cpp"
 
 
 def _source():
@@ -45,6 +48,30 @@ def test_test_mode_launch_can_bootstrap_without_selected_npz():
     assert "_DEFAULT_NPZ_PATH" in src
     assert 'return self._launch_params.get("npz_path") or _DEFAULT_NPZ_PATH' in src
     assert '_LAUNCH_DEFAULTS["npz_path"]' not in src
+
+
+def test_stop_paths_send_current_tool_heat_off_before_shutdown():
+    src = _source()
+
+    assert "def current_tool_id(self):" in src
+    assert "def _send_current_tool_heat_off(self):" in src
+    assert "self._send_current_tool_heat_off()" in src.split("    def _on_command_submit", 1)[1].split("    def _on_uart_command_submit", 1)[0]
+    assert "self._send_current_tool_heat_off()" in src.split("    def _on_stop_launch", 1)[1].split("    def _check_launch_process", 1)[0]
+    assert "self._send_current_tool_heat_off()" in src.split("    def shutdown_plugin", 1)[1]
+    assert "EV 0 heat_cf 0\\n" in src
+    assert "EV 0 heat_resin 0\\n" in src
+
+
+def test_extrusion_precision_defaults_preserve_4ms_e_values():
+    ui_src = _source()
+    startup_src = STARTUP_LAUNCH.read_text(encoding="utf-8")
+    center_src = CENTER_NODE.read_text(encoding="utf-8")
+
+    assert '("e_decimals", "6", "挤出小数精度", "中心节点")' in ui_src
+    e_decimals_section = startup_src.split("DeclareLaunchArgument(\n            \"e_decimals\"", 1)[1].split("        ),", 1)[0]
+    assert "default_value=\"6\"" in e_decimals_section
+    assert "int e_decimals_{6};" in center_src
+    assert 'declare_parameter<int>("e_decimals", 6)' in center_src
 
 
 def test_print_mode_excludes_print_test_controls():

@@ -209,7 +209,7 @@ E 在系统内始终以“绝对挤出量（absolute E）”流转。
 
 1. `control_center/NpzLoader` 读取 `e` 数组（`control_center/src/npz_loader.cpp`）。  
 2. `QueueManager` 将 `row.e` 填入 `TrajectoryPoint.e`（`control_center/src/queue_manager.cpp`）。  
-3. `center_node` 对 `TrajectoryPoint.e` 按 `e_decimals` 四舍五入（默认 2 位），发布到 `/planned_trajectory`（`control_center/src/center_node.cpp`）。  
+3. `center_node` 对 `TrajectoryPoint.e` 按 `e_decimals` 四舍五入（默认 6 位），发布到 `/planned_trajectory`（`control_center/src/center_node.cpp`）。  
 4. `rsi_node` 在每个 KUKA 心跳周期选择 `TrajectoryPoint`，并发布 `/rsi/heartbeat`：  
    - `hb.seq_used = to_send.seq`  
    - `hb.tool_id = to_send.tool_id`  

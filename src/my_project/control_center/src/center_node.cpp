@@ -69,7 +69,7 @@ private:
     std::unique_ptr<control_center::QueueManager> queue_manager_;
     std::mutex queue_mutex_;
     int xyzabc_decimals_{6};
-    int e_decimals_{2};
+    int e_decimals_{6};
 
 public:
     CenterNode(): Node("center_node")
@@ -85,7 +85,7 @@ public:
         traj_low_ = declare_parameter<int>("traj_low", 500);
         traj_high_ = declare_parameter<int>("traj_high", 1500);
         xyzabc_decimals_ = declare_parameter<int>("xyzabc_decimals", 6);
-        e_decimals_ = declare_parameter<int>("e_decimals", 2);
+        e_decimals_ = declare_parameter<int>("e_decimals", 6);
 
         npz_loader_ = std::make_unique<control_center::NpzLoader>(
             npz_path, static_cast<size_t>(npz_preload));
