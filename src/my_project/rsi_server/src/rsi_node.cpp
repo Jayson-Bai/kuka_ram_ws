@@ -52,6 +52,7 @@ private:
   rclcpp::Subscription<PlannedEvent>::SharedPtr event_sub_; //事件
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr status_sub_; //打印头状态
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_; //系统命令
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_cmd_sub_; //测试模式命令
   //发布 
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr kuka_pub_;  //收到kuka xml
   rclcpp::Publisher<KukaStatus>::SharedPtr kuka_status_pub_;  //解析后的KUKA状态
@@ -59,6 +60,7 @@ private:
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr resync_pub_; //请求中心节点同步
   rclcpp::Publisher<PlannedEvent>::SharedPtr triggered_event_pub_; //转发给UART的事件
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr sent_xml_pub_; //发出的RSI XML
+  rclcpp::Publisher<TrajectoryPoint>::SharedPtr current_correction_pub_; //当前RSI修正量
 
   //数据缓存
   //互斥锁
@@ -172,6 +174,16 @@ public:
       }
     );
 
+    // 测试模式专用命令。正常打印不发布该话题，默认行为不变。
+    print_test_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+      "/print_test/rsi_command",
+      rclcpp::QoS(10).reliable(),
+      [this](std_msgs::msg::String::SharedPtr msg)
+      {
+        on_print_test_command(msg->data);
+      }
+    );
+
     //发布kuka原始消息
     kuka_pub_ = create_publisher<std_msgs::msg::String>("/kuka/raw_xml", 10);
     kuka_status_pub_ = create_publisher<KukaStatus>("/kuka/status", 10);
@@ -187,6 +199,9 @@ public:
 
     //发布发出的XML给UI日志
     sent_xml_pub_ = create_publisher<std_msgs::msg::String>("/rsi/sent_xml", 10);
+
+    //发布当前 RSI 修正量，供测试模式生成下一段临时 NPZ。
+    current_correction_pub_ = create_publisher<TrajectoryPoint>("/rsi/current_correction", 10);
 
     //打开UDP
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0); //ipv4 udp套接字
@@ -389,6 +404,7 @@ private:
       hb.tool_id = to_send.tool_id;
       hb.extrude_abs = to_send.e;
       heartbeat_pub_ -> publish(hb);
+      current_correction_pub_->publish(to_send);
 
       //回复XML
       std::string reply = build_reply(ipoc, to_send);
@@ -453,6 +469,33 @@ private:
   {
     std::lock_guard<std::mutex> lk(event_mutex_);
     return event_seq_seen_.find(seq) != event_seq_seen_.end();
+  }
+
+  void on_print_test_command(const std::string &cmd)
+  {
+    if (cmd == "RESET")
+    {
+      if (state_.load() == State::ABORT) {
+        RCLCPP_WARN(get_logger(), "测试模式 RESET 被拒绝：RSI 已 ABORT");
+        return;
+      }
+      {
+        std::lock_guard<std::mutex> lk(traj_mutex_);
+        traj_queue_.clear();
+      }
+      {
+        std::lock_guard<std::mutex> lk(event_mutex_);
+        event_queue_.clear();
+        event_seq_seen_.clear();
+      }
+      current_wait_.reset();
+      next_seq_ = 0;
+      resync_sent_ = false;
+      last_event_seq_triggered_.reset();
+      state_.store(State::RUN);
+      pre_pause_state_.store(State::RUN);
+      RCLCPP_INFO(get_logger(), "测试模式重置 RSI 队列并保持当前修正量");
+    }
   }
 
   void on_system_command(const std::string &cmd)

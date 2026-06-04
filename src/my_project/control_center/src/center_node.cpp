@@ -45,6 +45,7 @@ private:
     rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_status_sub_;
     rclcpp::Subscription<std_msgs::msg::UInt32>::SharedPtr resync_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_load_sub_;
 
     rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
     rclcpp::Publisher<PlannedEvent>::SharedPtr event_pub_;
@@ -56,6 +57,8 @@ private:
     int traj_prefill_{1000};
     int traj_low_{500};
     int traj_high_{1500};
+    int queue_low_{1000};
+    int queue_high_{2000};
     std::optional<uint32_t> last_published_traj_seq_;
     std::optional<uint32_t> last_seq_used_;
 
@@ -75,8 +78,8 @@ public:
             "npz_path",
             "/home/jayson/kuka_ram_ws/data/output_npz/test.npz");
         auto npz_preload = declare_parameter<int>("npz_preload_chunks", 2);
-        auto queue_low = declare_parameter<int>("queue_low", 1000);
-        auto queue_high = declare_parameter<int>("queue_high", 2000);
+        queue_low_ = declare_parameter<int>("queue_low", 1000);
+        queue_high_ = declare_parameter<int>("queue_high", 2000);
         plan_qos_depth_ = declare_parameter<int>("plan_qos_depth", 2000);
         traj_prefill_ = declare_parameter<int>("traj_prefill", 1000);
         traj_low_ = declare_parameter<int>("traj_low", 500);
@@ -93,7 +96,7 @@ public:
                         npz_path.c_str(), static_cast<long>(npz_preload));
         }
         queue_manager_ = std::make_unique<control_center::QueueManager>(
-            static_cast<size_t>(queue_low), static_cast<size_t>(queue_high));
+            static_cast<size_t>(queue_low_), static_cast<size_t>(queue_high_));
         if (npz_loader_->ok()) {
             std::lock_guard<std::mutex> lk(queue_mutex_);
             queue_manager_->fill(*npz_loader_);
@@ -180,6 +183,15 @@ public:
             }
         );
 
+        // 测试模式专用：动态加载临时 NPZ。正常打印不发布该话题，默认行为不变。
+        print_test_load_sub_ = create_subscription<std_msgs::msg::String>(
+            "/print_test/load_npz",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg){
+                load_print_test_npz(msg->data);
+            }
+        );
+
         initial_prefill();
 
     }
@@ -210,6 +222,37 @@ private:
             last_published_traj_seq_ = tp.seq;
             RCLCPP_DEBUG(get_logger(), "预填充轨迹 序号=%u 工具=%d", tp.seq, tp.tool_id);
         }
+    }
+
+    void load_print_test_npz(const std::string &path)
+    {
+        if (path.empty()) {
+            RCLCPP_WARN(get_logger(), "测试模式动态加载 NPZ 失败：路径为空");
+            return;
+        }
+        if (aborted_.load()) {
+            RCLCPP_WARN(get_logger(), "测试模式动态加载 NPZ 被拒绝：系统已 ABORT");
+            return;
+        }
+
+        auto next_loader = std::make_unique<control_center::NpzLoader>(path, 2);
+        if (!next_loader->ok()) {
+            RCLCPP_ERROR(get_logger(), "测试模式动态加载 NPZ 失败：%s (%s)",
+                         path.c_str(), next_loader->error().c_str());
+            return;
+        }
+
+        {
+            std::lock_guard<std::mutex> lk(queue_mutex_);
+            npz_loader_ = std::move(next_loader);
+            queue_manager_ = std::make_unique<control_center::QueueManager>(
+                static_cast<size_t>(queue_low_), static_cast<size_t>(queue_high_));
+            queue_manager_->fill(*npz_loader_);
+            last_published_traj_seq_.reset();
+        }
+        paused_.store(false);
+        RCLCPP_INFO(get_logger(), "测试模式动态加载 NPZ：%s", path.c_str());
+        initial_prefill();
     }
 
     void publish_from_queue()

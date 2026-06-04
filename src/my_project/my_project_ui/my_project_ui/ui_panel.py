@@ -8,8 +8,9 @@ import os
 import signal
 import json
 import threading
+import time
 
-from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus
+from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus, TrajectoryPoint
 
 from std_msgs.msg import String as StringMsg
 import re
@@ -59,6 +60,12 @@ LAUNCH_PARAMS = [
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
 _LAUNCH_GROUPS_ORDER = ["中心节点", "RSI 节点", "UART 节点", "系统管理器", "延迟监控"]
+_MODE_PAGE_SELECT = "select"
+_MODE_PAGE_TEST = "test"
+_MODE_PAGE_PRINT = "print"
+_SYSTEM_STATUS_MIN_HEIGHT = 84
+_SYSTEM_STATUS_TARGET_HEIGHT = 145
+_LOG_BOX_MIN_HEIGHT = 0
 
 
 class _LaunchSettingsDialog(QtWidgets.QDialog):
@@ -240,10 +247,35 @@ class _AutoScaleLabel(QtWidgets.QLabel):
         rect = self.rect()
         if rect.height() > 0:
             font = self.font()
-            pixel_size = max(12, int(rect.height() * 0.55))
+            pixel_size = max(12, min(32, int(rect.height() * 0.42)))
             font.setPixelSize(pixel_size)
             self.setFont(font)
 
+
+
+class _AdaptiveHeightGroupBox(QtWidgets.QGroupBox):
+    def __init__(self, title="", min_height=0, target_height=0, parent=None):
+        super().__init__(title, parent)
+        self._min_height = int(min_height)
+        self._target_height = max(self._min_height, int(target_height))
+        self.setMinimumHeight(self._min_height)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+
+    def set_target_height(self, height):
+        height = max(self._min_height, int(height))
+        if self._target_height != height:
+            self._target_height = height
+            self.updateGeometry()
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        hint.setHeight(self._target_height)
+        return hint
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        hint.setHeight(self._min_height)
+        return hint
 
 
 _OFFSET_CONFIG_DIR = os.path.expanduser("~/.config/my_project")
@@ -366,6 +398,22 @@ def _read_npz_tool_offset(npz_source):
     return None, None
 
 
+def _format_rsi_xml_for_display(xml_text):
+    text = (xml_text or "").strip()
+    if not text:
+        return ""
+    try:
+        import xml.dom.minidom
+        parsed = xml.dom.minidom.parseString(text.encode("utf-8"))
+        pretty = parsed.toprettyxml(indent="  ")
+        lines = [line for line in pretty.splitlines() if line.strip()]
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(lines)
+    except Exception:
+        return text
+
+
 class _PanelDialog(QtWidgets.QDialog):
     """Project-styled popup dialog with an in-window title."""
 
@@ -484,6 +532,46 @@ class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
             return
         self.scale(zoom, zoom)
         self.zoom_changed.emit(self.transform().m11())
+
+
+class _LogDetailDialog(QtWidgets.QDialog):
+    def __init__(self, title_text, log_text, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setWindowTitle(title_text)
+        self.resize(820, 520)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        header = QtWidgets.QHBoxLayout()
+        title = QtWidgets.QLabel(title_text)
+        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
+        btn_close = QtWidgets.QPushButton("关闭")
+        btn_close.setFixedWidth(54)
+        btn_close.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_close.clicked.connect(self.accept)
+        header.addWidget(title, 1)
+        header.addWidget(btn_close)
+        layout.addLayout(header)
+
+        self._text = QtWidgets.QPlainTextEdit()
+        self._text.setReadOnly(True)
+        self._text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._text.setPlainText(log_text or "尚未收到日志。")
+        self._text.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #1e1e1e;"
+            "  color: #d4d4d4;"
+            "  font-family: 'Courier New', 'Noto Mono', monospace;"
+            "  font-size: 12px;"
+            "  border: 1px solid #3c3c3c;"
+            "  border-radius: 4px;"
+            "  padding: 6px;"
+            "}"
+        )
+        layout.addWidget(self._text, 1)
 
 
 class _LayerViewerDialog(QtWidgets.QDialog):
@@ -631,6 +719,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
     scale_submit = QtCore.pyqtSignal(float)
     command_submit = QtCore.pyqtSignal(str)
     uart_command_submit = QtCore.pyqtSignal(str)
+    print_test_rsi_command_submit = QtCore.pyqtSignal(str)
+    print_test_load_npz_submit = QtCore.pyqtSignal(str)
+    current_correction_received = QtCore.pyqtSignal(object)
+    print_test_status = QtCore.pyqtSignal(str, str)
+    print_test_controls_enabled = QtCore.pyqtSignal(bool)
     export_finished = QtCore.pyqtSignal(bool, str)  # (success, message)
     export_progress = QtCore.pyqtSignal(str)  # status text
     export_progress_val = QtCore.pyqtSignal(int)  # percentage (0-100)
@@ -641,6 +734,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         super().__init__()
         self._extrude_scale_current = 1.0
         self._last_npz_dir = None
+        self._print_test_current_correction = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        self._print_test_seen_correction = False
+        self._print_test_busy = False
+        self._print_test_target = None
+        self._print_test_params = None
+        self._print_test_resin_temp = None
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._build_ui()
@@ -648,24 +747,127 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.latency_received.connect(self._update_latency)
         self.rsi_xml_received.connect(self._on_rsi_xml)
         self.uart_log_received.connect(self._on_uart_log)
+        self.current_correction_received.connect(self._on_current_correction)
+        self.print_test_status.connect(self._set_print_test_status)
+        self.print_test_controls_enabled.connect(self._set_print_test_controls_enabled)
         self.export_progress_val.connect(self._on_export_progress_val)
-        
+
         self._align_timer = QtCore.QTimer(self)
         self._align_timer.timeout.connect(self._dynamic_align)
         self._align_timer.start(50)
 
     def _dynamic_align(self):
-        if not hasattr(self, '_system_box'): return
-        h1 = self._col1_layout.sizeHint().height()
-        h0_widgets = [self._kuka_box, self._rsi_log_box, self._traj_box]
-        h0_rest = sum(w.height() for w in h0_widgets)
-        h0_rest += self._col0_layout.spacing() * len(h0_widgets)
-        target_h = h1 - h0_rest
-        if target_h > 40 and abs(self._system_box.height() - target_h) > 1:
-            self._system_box.setFixedHeight(target_h)
+        if not hasattr(self, '_system_box'):
+            return
+        if self._active_mode == _MODE_PAGE_SELECT:
+            return
+        if not (self._rsi_log_box.isVisible() and self._uart_log_box.isVisible()):
+            return
+        if not (self._kuka_box.isVisible() and self._traj_box.isVisible()):
+            return
+        margins = self._content_layout.contentsMargins()
+
+        def _top_in_content(widget):
+            return widget.mapTo(self._mode_content_page, QtCore.QPoint(0, 0)).y()
+
+        target_top = _top_in_content(self._uart_log_box)
+        target_bottom = self._mode_content_page.height() - margins.bottom() - 1
+
+        log_h = max(_LOG_BOX_MIN_HEIGHT, target_bottom - target_top + 1)
+
+        def _set_box_target_height(widget, height):
+            if hasattr(widget, "set_target_height"):
+                widget.set_target_height(height)
+
+        _set_box_target_height(self._rsi_log_box, log_h)
+        _set_box_target_height(self._uart_log_box, log_h)
+
+    def _build_mode_select_page(self):
+        page = QtWidgets.QWidget()
+        page.setObjectName("modeSelectPage")
+        page_layout = QtWidgets.QVBoxLayout(page)
+        page_layout.setContentsMargins(24, 24, 24, 24)
+        page_layout.setSpacing(20)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(24)
+        self._btn_mode_test = QtWidgets.QPushButton("测试模式")
+        self._btn_mode_test.setObjectName("btnModeTest")
+        self._btn_mode_test.setMinimumSize(220, 120)
+        self._btn_mode_test.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._btn_mode_print = QtWidgets.QPushButton("正式打印")
+        self._btn_mode_print.setObjectName("btnModePrint")
+        self._btn_mode_print.setMinimumSize(220, 120)
+        self._btn_mode_print.setCursor(QtCore.Qt.PointingHandCursor)
+
+        btn_row.addStretch(1)
+        btn_row.addWidget(self._btn_mode_test)
+        btn_row.addWidget(self._btn_mode_print)
+        btn_row.addStretch(1)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(btn_row)
+        page_layout.addStretch(1)
+        return page
+
+    def _set_active_mode(self, mode):
+        self._active_mode = mode
+        mode_sections = {
+            "test": [
+                self._system_box,
+                self._kuka_box,
+                self._traj_box,
+                self._rsi_log_box,
+                self._ph_overview_box,
+                self._ph_tools_box,
+                self._uart_log_box,
+                self._print_test_box,
+            ],
+            "print": [
+                self._system_box,
+                self._kuka_box,
+                self._traj_box,
+                self._rsi_log_box,
+                self._ph_overview_box,
+                self._ph_tools_box,
+                self._uart_log_box,
+                self._export_box,
+                self._launch_box,
+                self._control_box,
+                self._latency_box,
+            ],
+        }
+        all_sections = {section for sections in mode_sections.values() for section in sections}
+        for section in all_sections:
+            section.setVisible(False)
+        for section in mode_sections.get(mode, []):
+            section.setVisible(True)
+
+        if mode == _MODE_PAGE_TEST:
+            self._title_label.setText("测试模式")
+        else:
+            self._title_label.setText("正式打印")
+        self._mode_stack.setCurrentWidget(self._mode_content_page)
+
+    def _show_mode_select(self):
+        self._active_mode = _MODE_PAGE_SELECT
+        self._mode_stack.setCurrentWidget(self._mode_select_page)
 
     def _build_ui(self):
-        layout = QtWidgets.QGridLayout(self)
+        root_layout = QtWidgets.QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        self._mode_stack = QtWidgets.QStackedWidget()
+        root_layout.addWidget(self._mode_stack)
+        self._mode_select_page = self._build_mode_select_page()
+        self._mode_content_page = QtWidgets.QWidget()
+        self._mode_stack.addWidget(self._mode_select_page)
+        self._mode_stack.addWidget(self._mode_content_page)
+
+        layout = QtWidgets.QGridLayout(self._mode_content_page)
+        self._content_layout = layout
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(6)
@@ -693,11 +895,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
             label_metrics.horizontalAdvance(text) for text in cf_resin_label_titles
         )
 
-        title = QtWidgets.QLabel("系统控制面板")
-        title.setObjectName("titleLabel")
-        title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        title.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        layout.addWidget(title, 0, 0, 1, 3)
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(8)
+        self._title_label = QtWidgets.QLabel("系统控制面板")
+        self._title_label.setObjectName("titleLabel")
+        self._title_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self._title_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        self._btn_mode_back = QtWidgets.QPushButton("返回")
+        self._btn_mode_back.setObjectName("btnModeBack")
+        self._btn_mode_back.setMinimumHeight(28)
+        self._btn_mode_back.setCursor(QtCore.Qt.PointingHandCursor)
+        header.addWidget(self._title_label, 1)
+        header.addWidget(self._btn_mode_back)
+        layout.addLayout(header, 0, 0, 1, 3)
 
         def add_group(
             group_title,
@@ -743,17 +953,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         col0_layout = QtWidgets.QVBoxLayout()
         col0_layout.setSpacing(6)
+        col0_layout.setAlignment(QtCore.Qt.AlignTop)
         self._col0_layout = col0_layout
         col1_layout = QtWidgets.QVBoxLayout()
         col1_layout.setSpacing(6)
+        col1_layout.setAlignment(QtCore.Qt.AlignTop)
         self._col1_layout = col1_layout
         col2_layout = QtWidgets.QVBoxLayout()
         col2_layout.setSpacing(6)
 
         system_box = QtWidgets.QGroupBox("系统状态")
         system_box.setObjectName("groupSystem")
-        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         self._system_box = system_box
+        self._system_box.setFixedHeight(_SYSTEM_STATUS_TARGET_HEIGHT)
         system_layout = QtWidgets.QVBoxLayout(system_box)
         system_layout.setSpacing(0)
         system_layout.setContentsMargins(4, 12, 4, 12)
@@ -834,19 +1047,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col0_layout.addWidget(traj_box)
 
         # ======== RSI 日志区域 ========
-        rsi_log_box = QtWidgets.QGroupBox("RSI 日志")
+        rsi_log_box = _AdaptiveHeightGroupBox("RSI 日志", _LOG_BOX_MIN_HEIGHT, _LOG_BOX_MIN_HEIGHT)
         rsi_log_box.setObjectName("groupRsiLog")
         rsi_log_box.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
         )
         rsi_log_layout = QtWidgets.QVBoxLayout(rsi_log_box)
         rsi_log_layout.setContentsMargins(4, 8, 4, 4)
         rsi_log_layout.setSpacing(2)
 
+        rsi_log_header = QtWidgets.QHBoxLayout()
+        rsi_log_header.setSpacing(6)
+        self._rsi_log_summary = QtWidgets.QLabel("等待 XML")
+        self._rsi_log_summary.setObjectName("fieldLabel")
+        self._btn_rsi_log_detail = QtWidgets.QPushButton("放大查看")
+        self._btn_rsi_log_detail.setObjectName("btnRsiLogDetail")
+        self._btn_rsi_log_detail.setMinimumHeight(24)
+        self._btn_rsi_log_detail.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_rsi_log_detail.setEnabled(False)
+        rsi_log_header.addWidget(self._rsi_log_summary, 1)
+        rsi_log_header.addWidget(self._btn_rsi_log_detail)
+        rsi_log_layout.addLayout(rsi_log_header)
+
         self._rsi_log_text = QtWidgets.QPlainTextEdit()
         self._rsi_log_text.setReadOnly(True)
-        self._rsi_log_text.setMaximumBlockCount(30)
-        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._rsi_log_text.setMaximumBlockCount(80)
+        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
         self._rsi_log_text.setStyleSheet(
             "QPlainTextEdit {"
             "  background: #1e1e1e;"
@@ -860,9 +1086,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
         rsi_log_layout.addWidget(self._rsi_log_text)
 
-        self._rsi_log_text.setMaximumHeight(100)
+        self._rsi_log_text.setMinimumHeight(0)
 
         self._rsi_log_last_xml = ""
+        self._rsi_log_latest_display = ""
         self._rsi_log_dup_count = 0
         col0_layout.addWidget(rsi_log_box)
         self._rsi_log_box = rsi_log_box
@@ -923,6 +1150,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         ph_overview_layout.addLayout(events_row)
         
         col1_layout.addWidget(ph_overview_box)
+        self._ph_overview_box = ph_overview_box
         
         ph_tools_box = QtWidgets.QGroupBox("工具管理")
         ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
@@ -1144,21 +1372,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
             
         ph_tools_layout.addLayout(head_panels_row)
         col1_layout.addWidget(ph_tools_box)
+        self._ph_tools_box = ph_tools_box
 
         # ======== UART 日志区域 ========
-        uart_log_box = QtWidgets.QGroupBox("UART 日志")
+        uart_log_box = _AdaptiveHeightGroupBox("UART 日志", _LOG_BOX_MIN_HEIGHT, _LOG_BOX_MIN_HEIGHT)
         uart_log_box.setObjectName("groupUartLog")
         uart_log_box.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
         )
         uart_log_layout = QtWidgets.QVBoxLayout(uart_log_box)
         uart_log_layout.setContentsMargins(4, 8, 4, 4)
         uart_log_layout.setSpacing(2)
 
+        uart_log_header = QtWidgets.QHBoxLayout()
+        uart_log_header.setSpacing(6)
+        self._uart_log_summary = QtWidgets.QLabel("等待日志")
+        self._uart_log_summary.setObjectName("fieldLabel")
+        self._btn_uart_log_detail = QtWidgets.QPushButton("放大查看")
+        self._btn_uart_log_detail.setObjectName("btnUartLogDetail")
+        self._btn_uart_log_detail.setMinimumHeight(24)
+        self._btn_uart_log_detail.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_uart_log_detail.setEnabled(False)
+        uart_log_header.addWidget(self._uart_log_summary, 1)
+        uart_log_header.addWidget(self._btn_uart_log_detail)
+        uart_log_layout.addLayout(uart_log_header)
+
         self._uart_log_text = QtWidgets.QPlainTextEdit()
         self._uart_log_text.setReadOnly(True)
-        self._uart_log_text.setMaximumBlockCount(30)
-        self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._uart_log_text.setMaximumBlockCount(80)
+        self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
         self._uart_log_text.setStyleSheet(
             "QPlainTextEdit {"
             "  background: #1e1e1e;"
@@ -1171,10 +1413,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "}"
         )
         uart_log_layout.addWidget(self._uart_log_text)
-        self._uart_log_text.setMaximumHeight(100)
+        self._uart_log_text.setMinimumHeight(0)
+        self._uart_log_latest_display = ""
 
         col1_layout.addWidget(uart_log_box)
-        col1_layout.addStretch(1)
+        self._uart_log_box = uart_log_box
 
         # ======== Print Control 区域 ========
         control_box = QtWidgets.QGroupBox("打印控制")
@@ -1487,6 +1730,125 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_clear_npz_dir.clicked.connect(self._on_clear_npz_dir)
 
 
+        # ======== Print Test 区域 ========
+        print_test_box = QtWidgets.QGroupBox("打印测试（树脂）")
+        print_test_box.setObjectName("groupPrintTest")
+        print_test_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        print_test_layout = QtWidgets.QVBoxLayout(print_test_box)
+        print_test_layout.setSpacing(6)
+
+        test_form = QtWidgets.QGridLayout()
+        test_form.setHorizontalSpacing(8)
+        test_form.setVerticalSpacing(4)
+        self._test_temp_input = QtWidgets.QLineEdit("250")
+        self._test_layer_height_min_input = QtWidgets.QLineEdit("0.5")
+        self._test_layer_height_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_speed_input = QtWidgets.QLineEdit("10.0")
+        self._test_scale_min_input = QtWidgets.QLineEdit("0.8")
+        self._test_scale_max_input = QtWidgets.QLineEdit("1.2")
+
+        range_inputs = (
+            self._test_layer_height_min_input,
+            self._test_layer_height_max_input,
+            self._test_scale_min_input,
+            self._test_scale_max_input,
+        )
+        for inp in (self._test_temp_input, self._test_speed_input, *range_inputs):
+            inp.setMaximumWidth(64)
+            validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, inp)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            inp.setValidator(validator)
+
+        def _range_widget(min_input, max_input, unit_text=None):
+            widget = QtWidgets.QWidget()
+            layout = QtWidgets.QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            layout.addWidget(min_input)
+            layout.addWidget(QtWidgets.QLabel("-"))
+            layout.addWidget(max_input)
+            if unit_text:
+                unit_label = QtWidgets.QLabel(unit_text)
+                unit_label.setObjectName("fieldLabel")
+                layout.addWidget(unit_label)
+            layout.addStretch(1)
+            return widget
+
+        def _value_widget(input_widget, unit_text=None):
+            widget = QtWidgets.QWidget()
+            layout = QtWidgets.QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            layout.addWidget(input_widget)
+            if unit_text:
+                unit_label = QtWidgets.QLabel(unit_text)
+                unit_label.setObjectName("fieldLabel")
+                layout.addWidget(unit_label)
+            layout.addStretch(1)
+            return widget
+
+        for row, (label, widget) in enumerate((
+            ("目标温度", _value_widget(self._test_temp_input)),
+            ("层高", _range_widget(
+                self._test_layer_height_min_input,
+                self._test_layer_height_max_input,
+                "mm",
+            )),
+            ("速度", _value_widget(self._test_speed_input, "mm/s")),
+            ("挤出倍率", _range_widget(
+                self._test_scale_min_input,
+                self._test_scale_max_input,
+            )),
+        )):
+            lbl = QtWidgets.QLabel(label)
+            lbl.setObjectName("fieldLabel")
+            test_form.addWidget(lbl, row, 0)
+            test_form.addWidget(widget, row, 1)
+        print_test_layout.addLayout(test_form)
+
+        self._test_correction_label = QtWidgets.QLabel("RSI 修正量: 未收到")
+        self._test_correction_label.setObjectName("fieldLabel")
+        self._test_correction_label.setWordWrap(True)
+        print_test_layout.addWidget(self._test_correction_label)
+
+        self._btn_test_prepare = QtWidgets.QPushButton("进入测试准备")
+        self._btn_test_prepare.setMinimumHeight(30)
+        self._btn_test_prepare.setCursor(QtCore.Qt.PointingHandCursor)
+        print_test_layout.addWidget(self._btn_test_prepare)
+
+        z_row_up = QtWidgets.QHBoxLayout()
+        z_row_down = QtWidgets.QHBoxLayout()
+        self._test_z_buttons = []
+        for text_label, delta in (("上升 0.1", 0.1), ("上升 1", 1.0), ("上升 5", 5.0)):
+            btn = QtWidgets.QPushButton(text_label)
+            btn.setEnabled(False)
+            btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
+            z_row_up.addWidget(btn)
+            self._test_z_buttons.append(btn)
+        for text_label, delta in (("下降 0.1", -0.1), ("下降 1", -1.0), ("下降 5", -5.0)):
+            btn = QtWidgets.QPushButton(text_label)
+            btn.setEnabled(False)
+            btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
+            z_row_down.addWidget(btn)
+            self._test_z_buttons.append(btn)
+        print_test_layout.addLayout(z_row_up)
+        print_test_layout.addLayout(z_row_down)
+
+        self._btn_test_confirm_height = QtWidgets.QPushButton("确认高度并打印测试线")
+        self._btn_test_confirm_height.setMinimumHeight(30)
+        self._btn_test_confirm_height.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_test_confirm_height.setEnabled(False)
+        print_test_layout.addWidget(self._btn_test_confirm_height)
+
+        self._test_status = QtWidgets.QLabel("未进入测试。")
+        self._test_status.setObjectName("fieldLabel")
+        self._test_status.setWordWrap(True)
+        print_test_layout.addWidget(self._test_status)
+
+        self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
+        self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
+
+
         # ======== Launch Control 区域 ========
         launch_box = QtWidgets.QGroupBox("启动")
         launch_box.setObjectName("groupLaunch")
@@ -1530,14 +1892,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
+        self._export_box = export_box
+        self._launch_box = launch_box
+        self._print_test_box = print_test_box
+        self._control_box = control_box
+        self._latency_box = latency_box
+
         # Add all boxes to col2_layout in the desired order
         col2_layout.addWidget(export_box)
         col2_layout.addWidget(launch_box)
+        col2_layout.addWidget(print_test_box)
         col2_layout.addWidget(control_box)
         col2_layout.addWidget(latency_box)
         col2_layout.addStretch(1)
-
-        col0_layout.addStretch(1)
 
         layout.addLayout(col0_layout, 1, 0)
         layout.addLayout(col1_layout, 1, 1)
@@ -1565,6 +1932,50 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  font-size: 16px;"
             "  font-weight: 700;"
             "  color: #2b2b2b;"
+            "}"
+            "QPushButton#btnModeTest, QPushButton#btnModePrint {"
+            "  font-weight: 700;"
+            "  font-size: 22px;"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 8px;"
+            "  background: #ffffff;"
+            "  color: #1a73e8;"
+            "  padding: 18px 28px;"
+            "}"
+            "QPushButton#btnModeTest:hover, QPushButton#btnModePrint:hover {"
+            "  background: #e8f0fe;"
+            "  border-color: #1558b0;"
+            "}"
+            "QPushButton#btnModeBack {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton#btnModeBack:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnRsiLogDetail, QPushButton#btnUartLogDetail {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 3px 10px;"
+            "}"
+            "QPushButton#btnRsiLogDetail:hover, QPushButton#btnUartLogDetail:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnRsiLogDetail:disabled, QPushButton#btnUartLogDetail:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
             "}"
             "QLabel#fieldLabel { color: #666666; }"
             "QLabel#valueLabel {"
@@ -1858,6 +2269,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "}"
         )
 
+        self._btn_mode_test.clicked.connect(lambda: self._set_active_mode(_MODE_PAGE_TEST))
+        self._btn_mode_print.clicked.connect(lambda: self._set_active_mode(_MODE_PAGE_PRINT))
+        self._btn_mode_back.clicked.connect(self._show_mode_select)
+        self._btn_rsi_log_detail.clicked.connect(self._show_rsi_log_detail)
+        self._btn_uart_log_detail.clicked.connect(self._show_uart_log_detail)
+        self._show_mode_select()
+
         self._extrude_scale_apply.clicked.connect(self._on_extrude_scale_apply)
         self._extrude_scale_input.returnPressed.connect(self._on_extrude_scale_apply)
         self._btn_pause.clicked.connect(self._on_pause)
@@ -2083,6 +2501,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_value("Resin Fan OK", "开" if ps.fan_ok_resin else "关", resin_fan_color)
             self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
+            self._print_test_resin_temp = (ps.current_temp_resin, ps.target_temp_resin)
         else:
             missing_keys = [
                 "Carbon Fiber State",
@@ -2268,6 +2687,203 @@ class _UiStatusWidget(QtWidgets.QWidget):
             pid_inputs[key].setText(f"{defaults[key]:.2f}")
         pid_status.setText("已恢复默认值。")
         pid_status.setStyleSheet("color: #1a73e8;")
+
+    # ---- Print test ----
+
+    def _set_print_test_status(self, text, color=None):
+        self._test_status.setText(text)
+        if color:
+            self._test_status.setStyleSheet(f"color: {color};")
+        else:
+            self._test_status.setStyleSheet("")
+
+    def _parse_print_test_params(self):
+        from gcode_planner.print_test_generator import (
+            TEST_MATRIX_MAX_LINES,
+            expand_test_values,
+        )
+
+        temp = float(self._test_temp_input.text().strip())
+        speed = float(self._test_speed_input.text().strip())
+        layer_heights = expand_test_values(
+            f"{self._test_layer_height_min_input.text()}-"
+            f"{self._test_layer_height_max_input.text()}",
+            label="层高",
+        )
+        scales = expand_test_values(
+            f"{self._test_scale_min_input.text()}-"
+            f"{self._test_scale_max_input.text()}",
+            label="挤出倍率",
+        )
+        line_count = len(layer_heights) * len(scales)
+        if temp < 0.0:
+            raise ValueError("目标温度不能为负。")
+        if speed <= 0.0:
+            raise ValueError("速度必须大于 0。")
+        if line_count > TEST_MATRIX_MAX_LINES:
+            raise ValueError(
+                f"测试线数量为 {line_count}，超过最大 {TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
+            )
+        return {
+            "temp": temp,
+            "layer_heights": layer_heights,
+            "speed": speed,
+            "scales": scales,
+            "line_count": line_count,
+        }
+
+    def _on_print_test_prepare(self):
+        try:
+            params = self._parse_print_test_params()
+        except Exception as exc:
+            self._set_print_test_status(f"参数无效: {exc}", "#b42318")
+            return
+        self._print_test_params = params
+        self.scale_submit.emit(1.0)
+        self.uart_command_submit.emit("EV 0 fan_resin 1\n")
+        self.uart_command_submit.emit(f"EV 0 heat_resin {params['temp']}\n")
+        self.print_test_rsi_command_submit.emit("RESET")
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._set_print_test_status(
+            f"已进入测试准备：固定树脂喷头，矩阵 {params['line_count']} 条线，"
+            "UART 挤出倍率已设为 1.0。请启动/准备 KUKA RSI，"
+            "收到修正量后可做 Z 微调。",
+            "#1b6e3c",
+        )
+
+    def _set_print_test_controls_enabled(self, enabled):
+        for btn in getattr(self, "_test_z_buttons", []):
+            btn.setEnabled(enabled and not self._print_test_busy)
+        self._btn_test_confirm_height.setEnabled(enabled and not self._print_test_busy)
+
+    def _on_current_correction(self, msg):
+        self._print_test_current_correction = (msg.x, msg.y, msg.z, msg.a, msg.b, msg.c)
+        self._print_test_seen_correction = True
+        self._test_correction_label.setText(
+            "RSI 修正量: "
+            f"X={msg.x:.3f} Y={msg.y:.3f} Z={msg.z:.3f} "
+            f"A={msg.a:.3f} B={msg.b:.3f} C={msg.c:.3f}"
+        )
+        if self._print_test_params is not None and not self._print_test_busy:
+            self._set_print_test_controls_enabled(True)
+        if self._print_test_busy and self._print_test_target is not None:
+            target = self._print_test_target
+            err = max(abs(v - t) for v, t in zip(self._print_test_current_correction[:6], target[:6]))
+            if err <= 0.03:
+                self._print_test_busy = False
+                self._print_test_target = None
+                self._set_print_test_controls_enabled(True)
+                self._set_print_test_status("测试动作已到达目标，RSI 正在保持最后一帧。", "#1b6e3c")
+
+    def _on_print_test_z(self, delta_z):
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        start = self._print_test_current_correction
+        target_z = start[2] + float(delta_z)
+        target = (start[0], start[1], target_z, start[3], start[4], start[5])
+        self._run_print_test_job("z", start, target_z=target_z, target_pose=target)
+
+    def _on_print_test_confirm_height(self):
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        temp_target = float(self._print_test_params.get("temp", 0.0))
+        if self._print_test_resin_temp is None:
+            self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
+            return
+        current_temp, _target_temp = self._print_test_resin_temp
+        if current_temp < temp_target - 2.0:
+            self._set_print_test_status(
+                f"树脂温度未到达: 当前 {current_temp:.1f} / 目标 {temp_target:.1f}",
+                "#b42318",
+            )
+            return
+        start = self._print_test_current_correction
+        line_count = int(self._print_test_params.get("line_count", 1))
+        layer_heights = self._print_test_params.get("layer_heights", [0.0])
+        last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
+        target = (
+            start[0] + 300.0,
+            start[1] + max(0, line_count - 1) * 10.0,
+            start[2] + last_layer_height + 10.0,
+            start[3],
+            start[4],
+            start[5],
+        )
+        self._run_print_test_job("line", start, target_pose=target)
+
+    def _run_print_test_job(self, job_type, start_pose, target_pose, target_z=None):
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
+        params = self._print_test_params or {}
+        self._print_test_busy = True
+        self._print_test_target = target_pose
+        self._set_print_test_controls_enabled(False)
+        self._set_print_test_status("正在生成临时测试 NPZ...", "#b15e00")
+
+        def _worker():
+            try:
+                from gcode_planner.gcode_parser import parse_gcode_lines
+                from gcode_planner.npz_exporter import export_npz
+                from gcode_planner.print_test_generator import (
+                    format_gcode,
+                    generate_test_matrix_gcode,
+                    generate_z_adjust_gcode,
+                )
+                base_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test")
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                job_dir = os.path.join(base_dir, stamp)
+                os.makedirs(job_dir, exist_ok=True)
+                if job_type == "z":
+                    lines = generate_z_adjust_gcode(
+                        start_pose=start_pose,
+                        target_z=target_z,
+                        speed_mm_s=min(float(params.get("speed", 10.0)), 10.0),
+                    )
+                    stem = "z_adjust"
+                else:
+                    lines = generate_test_matrix_gcode(
+                        start_pose=start_pose,
+                        layer_heights_mm=params["layer_heights"],
+                        extrusion_scales=params["scales"],
+                        speed_mm_s=float(params["speed"]),
+                        line_length_mm=300.0,
+                        y_spacing_mm=10.0,
+                        finish_lift_mm=10.0,
+                    )
+                    stem = "test_matrix"
+                gcode_path = os.path.join(job_dir, f"{stem}.gcode")
+                npz_path = os.path.join(job_dir, f"{stem}.npz")
+                with open(gcode_path, "w", encoding="utf-8") as f:
+                    f.write(format_gcode(lines))
+                parsed = parse_gcode_lines(lines)
+                export_npz(
+                    parsed,
+                    npz_path,
+                    dt=0.004,
+                    chunk_size=5000000,
+                    default_feed_mm_s=float(params.get("speed", 10.0)),
+                    tool_offset=(0.0, 0.0, 0.0),
+                )
+                self.print_test_rsi_command_submit.emit("RESET")
+                time.sleep(0.05)
+                self.print_test_load_npz_submit.emit(npz_path)
+                self.print_test_status.emit(f"已下发测试动作: {npz_path}", "#1b6e3c")
+            except Exception as exc:
+                self._print_test_busy = False
+                self._print_test_target = None
+                self.print_test_controls_enabled.emit(True)
+                self.print_test_status.emit(f"测试动作生成失败: {exc}", "#b42318")
+
+        threading.Thread(target=_worker, daemon=True).start()
 
     # ---- Offset persistence ----
 
@@ -2592,17 +3208,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if xml_stripped == self._rsi_log_last_xml:
             return
         self._rsi_log_last_xml = xml_stripped
+        display_text = _format_rsi_xml_for_display(xml_text)
+        self._rsi_log_latest_display = display_text
+        self._btn_rsi_log_detail.setEnabled(True)
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
-        lines = xml_text.strip().split("\n")
-        for line in lines:
-            self._rsi_log_text.appendPlainText(f"[{ts}] {line}")
+        self._rsi_log_summary.setText(f"最近 XML: {ts}")
+        self._rsi_log_text.appendPlainText(f"[{ts}] RSI sent XML")
+        self._rsi_log_text.appendPlainText(display_text)
+
+    def _show_rsi_log_detail(self):
+        dialog = _LogDetailDialog("RSI XML 放大查看", self._rsi_log_latest_display, self)
+        dialog.exec_()
 
     def _on_uart_log(self, line_text):
         import time
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
-        self._uart_log_text.appendPlainText(f"[{ts}] {line_text}")
+        display_text = str(line_text or "")
+        self._uart_log_latest_display = display_text
+        self._btn_uart_log_detail.setEnabled(True)
+        self._uart_log_summary.setText(f"最近日志: {ts}")
+        self._uart_log_text.appendPlainText(f"[{ts}] {display_text}")
+
+    def _show_uart_log_detail(self):
+        dialog = _LogDetailDialog("UART 日志放大查看", self._uart_log_latest_display, self)
+        dialog.exec_()
 
 
 class MyProjectUiPlugin(Plugin):
@@ -2624,10 +3255,18 @@ class MyProjectUiPlugin(Plugin):
         self._uart_cmd_pub = self._node.create_publisher(
             StringMsg, "/uart/manual_command", 10
         )
+        self._print_test_rsi_cmd_pub = self._node.create_publisher(
+            StringMsg, "/print_test/rsi_command", 10
+        )
+        self._print_test_load_pub = self._node.create_publisher(
+            StringMsg, "/print_test/load_npz", 10
+        )
         self._widget = _UiStatusWidget()
         self._widget.scale_submit.connect(self._on_scale_submit)
         self._widget.command_submit.connect(self._on_command_submit)
         self._widget.uart_command_submit.connect(self._on_uart_command_submit)
+        self._widget.print_test_rsi_command_submit.connect(self._on_print_test_rsi_command)
+        self._widget.print_test_load_npz_submit.connect(self._on_print_test_load_npz)
         context.add_widget(self._widget)
 
         # Launch state
@@ -2662,6 +3301,9 @@ class MyProjectUiPlugin(Plugin):
         self._node.create_subscription(
             StringMsg, "/uart/raw", self._on_uart_log_msg, 10
         )
+        self._node.create_subscription(
+            TrajectoryPoint, "/rsi/current_correction", self._on_current_correction, 10
+        )
 
         self._spin_timer = QtCore.QTimer(self._widget)
         self._spin_timer.timeout.connect(self._spin_once)
@@ -2683,6 +3325,9 @@ class MyProjectUiPlugin(Plugin):
     def _on_uart_log_msg(self, msg: StringMsg):
         self._widget.uart_log_received.emit(msg.data)
 
+    def _on_current_correction(self, msg: TrajectoryPoint):
+        self._widget.current_correction_received.emit(msg)
+
     def _on_command_submit(self, cmd: str):
         msg = StringMsg()
         msg.data = cmd
@@ -2692,6 +3337,16 @@ class MyProjectUiPlugin(Plugin):
         msg = StringMsg()
         msg.data = cmd
         self._uart_cmd_pub.publish(msg)
+
+    def _on_print_test_rsi_command(self, cmd: str):
+        msg = StringMsg()
+        msg.data = cmd
+        self._print_test_rsi_cmd_pub.publish(msg)
+
+    def _on_print_test_load_npz(self, path: str):
+        msg = StringMsg()
+        msg.data = path
+        self._print_test_load_pub.publish(msg)
 
     def _on_scale_submit(self, value: float):
         if not self._param_client.service_is_ready():
@@ -2999,4 +3654,3 @@ class MyProjectUiPlugin(Plugin):
             except OSError:
                 self._launch_process.terminate()
             self._launch_process = None
-        self._node.destroy_node()

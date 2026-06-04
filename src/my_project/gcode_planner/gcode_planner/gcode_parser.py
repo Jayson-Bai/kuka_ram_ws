@@ -161,6 +161,18 @@ def _handle_m83(state: MachineState):
 
 
 def _handle_g92(parsed: ParsedCommandList, state: MachineState, params, line_idx, raw_line=None):
+    if "X" in params:
+        state.x = params["X"]
+    if "Y" in params:
+        state.y = params["Y"]
+    if "Z" in params:
+        state.z = params["Z"]
+    if "A" in params:
+        state.a = params["A"]
+    if "B" in params:
+        state.b = params["B"]
+    if "C" in params:
+        state.c = params["C"]
     if "E" in params:
         new_e = params["E"]
         state.e = new_e
