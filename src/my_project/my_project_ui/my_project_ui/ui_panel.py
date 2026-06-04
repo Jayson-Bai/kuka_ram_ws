@@ -822,6 +822,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._ph_overview_box,
                 self._ph_tools_box,
                 self._uart_log_box,
+                self._launch_box,
                 self._print_test_box,
             ],
             "print": [
@@ -853,6 +854,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _show_mode_select(self):
         self._active_mode = _MODE_PAGE_SELECT
         self._mode_stack.setCurrentWidget(self._mode_select_page)
+
+    def active_mode(self):
+        return self._active_mode
 
     def _build_ui(self):
         root_layout = QtWidgets.QVBoxLayout(self)
@@ -3505,6 +3509,9 @@ class MyProjectUiPlugin(Plugin):
         ])
         return "\n".join(lines)
 
+    def _test_mode_bootstrap_npz_path(self):
+        return self._launch_params.get("npz_path") or _LAUNCH_DEFAULTS["npz_path"]
+
     def _on_launch(self):
         if (
             self._launch_process is not None
@@ -3514,6 +3521,10 @@ class MyProjectUiPlugin(Plugin):
 
         npz_launch_path, source = self._current_npz_launch_path()
         if not npz_launch_path:
+            if self._widget.active_mode() == _MODE_PAGE_TEST:
+                if self._do_launch(self._test_mode_bootstrap_npz_path()):
+                    self._widget._launch_status.setText("测试模式节点已启动（等待 KUKA 首包/临时 NPZ）")
+                return
             gcode_path = self._launch_params.get("gcode_path", "").strip()
             if not gcode_path or not os.path.isfile(gcode_path):
                 self._widget._launch_status.setText("启动失败: 未选择有效 GCode 或 NPZ 文件夹。")
@@ -3587,12 +3598,15 @@ class MyProjectUiPlugin(Plugin):
             self._widget._launch_status.setStyleSheet(
                 "color: #1b6e3c; font-weight: 700; font-size: 13px;"
             )
+            return True
         except Exception as exc:
             self._widget._btn_launch.setEnabled(True)
             self._widget._launch_status.setText(f"启动失败: {exc}")
             self._widget._launch_status.setStyleSheet(
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
+
+            return False
 
     def _on_stop_launch(self):
         if (

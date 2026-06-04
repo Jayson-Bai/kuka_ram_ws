@@ -17,7 +17,7 @@ def test_rqt_starts_on_mode_selection_page():
     assert "self._mode_stack.setCurrentWidget(self._mode_select_page)" in src
 
 
-def test_test_mode_keeps_test_controls_and_hides_print_only_sections():
+def test_test_mode_keeps_test_controls_and_launch_controls_and_hides_print_only_sections():
     src = _source()
 
     assert '"test": [' in src
@@ -29,10 +29,19 @@ def test_test_mode_keeps_test_controls_and_hides_print_only_sections():
 
     test_section = src.split('"test": [', 1)[1].split("],", 1)[0]
     assert "self._print_test_box" in test_section
+    assert "self._launch_box" in test_section
     assert "self._export_box" not in test_section
-    assert "self._launch_box" not in test_section
     assert "self._control_box" not in test_section
     assert "self._latency_box" not in test_section
+
+
+def test_test_mode_launch_can_bootstrap_without_selected_npz():
+    src = _source()
+
+    assert "def _test_mode_bootstrap_npz_path(self):" in src
+    assert "if self._widget.active_mode() == _MODE_PAGE_TEST:" in src
+    assert "self._do_launch(self._test_mode_bootstrap_npz_path())" in src
+    assert "测试模式节点已启动" in src
 
 
 def test_print_mode_excludes_print_test_controls():
