@@ -57,7 +57,7 @@ LAUNCH_PARAMS = [
     ("robot_match_max_error_mm", "1.0", "机械臂匹配最大空间误差（mm）", "延迟监控"),
     ("robot_match_uncertainty_min_band_mm", "0.10", "匹配不确定度最小误差带（mm）", "延迟监控"),
     ("robot_match_uncertainty_spacing_multiplier", "3.0", "匹配不确定度轨迹间距倍率", "延迟监控"),
-    ("robot_match_nozzle_lever_mm", "100.0", "默认 TCP 姿态等效臂长（mm）", "延迟监控"),
+    ("robot_match_nozzle_lever_mm", "401.68", "TCP 姿态误差等效臂长（mm）", "延迟监控"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}

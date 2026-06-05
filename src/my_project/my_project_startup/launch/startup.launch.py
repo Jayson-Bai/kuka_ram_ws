@@ -281,8 +281,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "robot_match_nozzle_lever_mm",
-            default_value="100.0",
-            description="TCP 未实测前用于姿态误差等效换算的默认臂长（毫米）。",
+            default_value="401.68",
+            description="TCP 姿态误差等效臂长（毫米），默认按 KUKA 工具 XYZ=(-2.99,-1.27,401.67) 计算。",
         ),
         DeclareLaunchArgument(
             "sen_type",

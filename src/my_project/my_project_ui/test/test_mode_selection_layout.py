@@ -104,3 +104,13 @@ def test_launch_title_changes_for_test_mode():
     assert 'self._launch_box.setTitle("启动通信")' in src
     assert 'self._launch_box.setTitle("启动")' in src
     assert 'self._btn_launch = QtWidgets.QPushButton("启动")' in src
+
+
+def test_latency_nozzle_lever_defaults_from_kuka_tool_data():
+    ui_src = _source()
+    startup_src = STARTUP_LAUNCH.read_text(encoding="utf-8")
+
+    assert '("robot_match_nozzle_lever_mm", "401.68", "TCP 姿态误差等效臂长（mm）", "延迟监控")' in ui_src
+    lever_section = startup_src.split('DeclareLaunchArgument(\n            "robot_match_nozzle_lever_mm"', 1)[1].split("        ),", 1)[0]
+    assert 'default_value="401.68"' in lever_section
+    assert 'TCP 姿态误差等效臂长' in lever_section
