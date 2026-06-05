@@ -96,3 +96,11 @@ def test_print_test_range_inputs_use_separate_fields_and_units():
     assert "QtWidgets.QLabel(\"-\")" in src
     assert "mm" in src
     assert "mm/s" in src
+
+
+def test_launch_title_changes_for_test_mode():
+    src = _source()
+
+    assert 'self._launch_box.setTitle("启动通信")' in src
+    assert 'self._launch_box.setTitle("启动")' in src
+    assert 'self._btn_launch = QtWidgets.QPushButton("启动")' in src

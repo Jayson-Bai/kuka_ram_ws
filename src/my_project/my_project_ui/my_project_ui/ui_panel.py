@@ -850,8 +850,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         if mode == _MODE_PAGE_TEST:
             self._title_label.setText("测试模式")
+            self._launch_box.setTitle("启动通信")
         else:
             self._title_label.setText("正式打印")
+            self._launch_box.setTitle("启动")
         self._mode_stack.setCurrentWidget(self._mode_content_page)
 
     def _show_mode_select(self):
