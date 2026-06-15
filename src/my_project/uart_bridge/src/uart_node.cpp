@@ -53,6 +53,8 @@ private:
     // 缓存
     std::mutex event_mutex_;
     std::optional<PlannedEvent> current_event_;
+    bool current_event_ack_received_{false};
+    bool current_event_done_received_{false};
     std::mutex status_mutex_; // 保护 ready 状态
     bool ready_for_motion_{true};
     uint32_t ready_event_seq_{0};
@@ -65,6 +67,9 @@ private:
         bool fan_ok_cf{false}, fan_ok_resin{false};
         int32_t current_tool{0};
         int32_t error_code{0};
+        int32_t last_e_seq{-1};
+        double last_e_abs{0.0};
+        uint64_t last_e_us{0};
     };
     std::mutex status_cache_mutex_;
     Status status_;
@@ -218,6 +223,8 @@ private:
         {
             std::lock_guard<std::mutex> lk(event_mutex_);
             current_event_ = ev;
+            current_event_ack_received_ = false;
+            current_event_done_received_ = false;
         }
 
         // heat 事件：payload 为目标温度(℃)，写入缓存，供温差判定
@@ -307,6 +314,16 @@ private:
             check_event_completion();
             return;
         }
+        if(line.rfind("EVACK ", 0) == 0)
+        {
+            handle_event_response(line, false);
+            return;
+        }
+        if(line.rfind("EVDONE ", 0) == 0)
+        {
+            handle_event_response(line, true);
+            return;
+        }
     }
 
 
@@ -318,6 +335,29 @@ private:
             raw.data.pop_back();
         }
         uart_raw_pub_->publish(raw);
+    }
+
+    void handle_event_response(const std::string &line, bool done_response)
+    {
+        std::istringstream ss(line);
+        std::string tag;
+        std::string event_type;
+        uint32_t event_seq{0};
+        ss >> tag >> event_seq >> event_type;
+        {
+            std::lock_guard<std::mutex> lk(event_mutex_);
+            if (current_event_ &&
+                current_event_->trigger_seq == event_seq &&
+                current_event_->event_type == event_type) {
+                if (done_response) {
+                    current_event_done_received_ = true;
+                } else {
+                    current_event_ack_received_ = true;
+                }
+            }
+        }
+        publish_ready_state(line);
+        check_event_completion();
     }
 
     void parse_stat(const std::string& payload) 
@@ -341,6 +381,9 @@ private:
                 else if (key=="fan_ok_resin") status_.fan_ok_resin = (val=="1");
                 else if (key=="tool") status_.current_tool = std::stoi(val);
                 else if (key=="err") status_.error_code = std::stoi(val);
+                else if (key=="last_e_seq") status_.last_e_seq = std::stoi(val);
+                else if (key=="last_e_abs") status_.last_e_abs = std::stod(val);
+                else if (key=="last_e_us") status_.last_e_us = static_cast<uint64_t>(std::stoull(val));
             } catch(...) {
                 RCLCPP_WARN_THROTTLE(
                     get_logger(),
@@ -404,7 +447,11 @@ private:
         }
         else if (ev.event_type == "extrude_reset")
         {
-            done = true;
+            const bool stat_cleared =
+                snapshot.last_e_seq == -1 &&
+                std::abs(snapshot.last_e_abs) < 1e-9 &&
+                snapshot.last_e_us == 0;
+            done = current_event_ack_received_ && current_event_done_received_ && stat_cleared;
         }
 
         if(done)
