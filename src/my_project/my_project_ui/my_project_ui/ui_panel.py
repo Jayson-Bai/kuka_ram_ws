@@ -1755,6 +1755,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._test_speed_input = QtWidgets.QLineEdit("10.0")
         self._test_scale_min_input = QtWidgets.QLineEdit("0.8")
         self._test_scale_max_input = QtWidgets.QLineEdit("1.2")
+        self._test_prime_length_input = QtWidgets.QLineEdit("5.0")
+        self._test_prime_speed_input = QtWidgets.QLineEdit("2.0")
+        self._test_retract_length_input = QtWidgets.QLineEdit("3.0")
+        self._test_retract_speed_input = QtWidgets.QLineEdit("8.0")
 
         range_inputs = (
             self._test_layer_height_min_input,
@@ -1765,6 +1769,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
         for inp in (self._test_temp_input, self._test_speed_input, *range_inputs):
             inp.setMaximumWidth(64)
             validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, inp)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            inp.setValidator(validator)
+        for inp in (
+            self._test_prime_length_input,
+            self._test_prime_speed_input,
+            self._test_retract_length_input,
+            self._test_retract_speed_input,
+        ):
+            inp.setMaximumWidth(64)
+            validator = QtGui.QDoubleValidator(0.0, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
 
@@ -1808,6 +1822,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._test_scale_min_input,
                 self._test_scale_max_input,
             )),
+            ("预挤出线长", _value_widget(self._test_prime_length_input, "mm")),
+            ("预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
+            ("回抽线长", _value_widget(self._test_retract_length_input, "mm")),
+            ("回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
         )):
             lbl = QtWidgets.QLabel(label)
             lbl.setObjectName("fieldLabel")
@@ -2729,11 +2747,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f"{self._test_scale_max_input.text()}",
             label="挤出倍率",
         )
+        prime_length = float(self._test_prime_length_input.text().strip())
+        prime_speed = float(self._test_prime_speed_input.text().strip())
+        retract_length = float(self._test_retract_length_input.text().strip())
+        retract_speed = float(self._test_retract_speed_input.text().strip())
         line_count = len(layer_heights) * len(scales)
         if temp < 0.0:
             raise ValueError("目标温度不能为负。")
         if speed <= 0.0:
             raise ValueError("速度必须大于 0。")
+        if prime_length < 0.0 or retract_length < 0.0:
+            raise ValueError("预挤出/回抽线长不能为负。")
+        if prime_speed <= 0.0 or retract_speed <= 0.0:
+            raise ValueError("预挤出/回抽速度必须大于 0。")
         if line_count > TEST_MATRIX_MAX_LINES:
             raise ValueError(
                 f"测试线数量为 {line_count}，超过最大 {TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
@@ -2744,6 +2770,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "speed": speed,
             "scales": scales,
             "line_count": line_count,
+            "prime_length": prime_length,
+            "prime_speed": prime_speed,
+            "retract_length": retract_length,
+            "retract_speed": retract_speed,
         }
 
     def _on_print_test_prepare(self):
@@ -2823,8 +2853,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         line_count = int(self._print_test_params.get("line_count", 1))
         layer_heights = self._print_test_params.get("layer_heights", [0.0])
         last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
+        final_x = start[0] + 300.0 if line_count % 2 == 1 else start[0]
         target = (
-            start[0] + 300.0,
+            final_x,
             start[1] + max(0, line_count - 1) * 10.0,
             start[2] + last_layer_height + 10.0,
             start[3],
@@ -2872,6 +2903,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         line_length_mm=300.0,
                         y_spacing_mm=10.0,
                         finish_lift_mm=10.0,
+                        prime_length_mm=float(params.get("prime_length", 0.0)),
+                        retract_length_mm=float(params.get("retract_length", 0.0)),
+                        prime_speed_mm_s=float(params.get("prime_speed", 2.0)),
+                        retract_speed_mm_s=float(params.get("retract_speed", 8.0)),
                     )
                     stem = "test_matrix"
                 gcode_path = os.path.join(job_dir, f"{stem}.gcode")
@@ -2886,6 +2921,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     chunk_size=5000000,
                     default_feed_mm_s=float(params.get("speed", 10.0)),
                     tool_offset=(0.0, 0.0, 0.0),
+                    enable_extrude_wait=(job_type == "line"),
                 )
                 self.print_test_rsi_command_submit.emit("RESET")
                 time.sleep(0.05)

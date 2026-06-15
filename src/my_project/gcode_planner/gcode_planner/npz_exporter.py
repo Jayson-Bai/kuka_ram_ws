@@ -22,6 +22,7 @@ from .types import (
     ToolChangeCommand,
     MCommand,
     ResetECommand,
+    ExtrudeWait,
 )
 from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
@@ -72,6 +73,7 @@ def export_npz(
     plot_stride: int = 5,
     tool_offset: tuple = (0.0, 0.0, 0.0),
     progress_callback = None,
+    enable_extrude_wait: bool = False,
 ) -> dict:
     """
     导出 npz（分片）。
@@ -775,6 +777,55 @@ def export_npz(
         current_subtype = None
         current_occ = None
 
+    def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
+        nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
+        hold_row = last_pose or CsvRow(
+            seq=seq,
+            x=0.0,
+            y=0.0,
+            z=0.0,
+            a=0.0,
+            b=0.0,
+            c=0.0,
+            e=0.0,
+            tool_id=current_tool,
+            move_type="PRINT",
+            src_line=str(cmd.line),
+            event_flag=0,
+            event_type="",
+            payload="",
+            trigger_seq=None,
+        )
+        start_e = hold_row.e
+        steps = max(1, int(math.ceil(max(float(cmd.wait_sec), dt) / dt)))
+        writer = _writer_for(layer, subtype, occ)
+        for i in range(1, steps + 1):
+            ratio = i / steps
+            row = CsvRow(
+                seq=seq,
+                x=hold_row.x,
+                y=hold_row.y,
+                z=hold_row.z,
+                a=hold_row.a,
+                b=hold_row.b,
+                c=hold_row.c,
+                e=start_e + cmd.delta_e * ratio,
+                tool_id=current_tool,
+                move_type="PRINT",
+                src_line=str(cmd.line),
+                event_flag=0,
+                event_type="",
+                payload="",
+                trigger_seq=None,
+            )
+            writer.add(row)
+            processed_rows += 1
+            _maybe_yield()
+            seq += 1
+            last_pose = row
+        if cmd.feedrate > 0:
+            last_feedrate_mm_min = cmd.feedrate
+
     def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose_map, last_pose
         hold_row = last_pose or CsvRow(
@@ -916,6 +967,18 @@ def export_npz(
                     if occ == 0:
                         occ = _ensure_segment(cmd.layer, cmd.subtype)
                     _emit_event(ev, cmd.layer, cmd.subtype, occ)
+            continue
+
+        if isinstance(cmd, ExtrudeWait):
+            if not enable_extrude_wait:
+                continue
+            flush_moves()
+            layer = getattr(cmd, "layer", 0)
+            subtype = getattr(cmd, "subtype", "UNKNOWN") or "UNKNOWN"
+            occ = occ_counters.get((layer, subtype), 0)
+            if occ == 0:
+                occ = _ensure_segment(layer, subtype)
+            _append_extrude_wait(cmd, layer, subtype, occ)
             continue
 
         # 轨迹分段收集

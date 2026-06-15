@@ -37,6 +37,8 @@ class ExtrudeWait:
     delta_e: float
     feedrate: float
     line: int
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
 
 

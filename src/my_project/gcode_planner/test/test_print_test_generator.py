@@ -9,7 +9,7 @@ from gcode_planner.print_test_generator import (
     generate_test_line_gcode,
     generate_z_adjust_gcode,
 )
-from gcode_planner.types import MoveCommand, ToolChangeCommand
+from gcode_planner.types import ExtrudeWait, MoveCommand, ToolChangeCommand
 
 
 def _moves(lines):
@@ -89,11 +89,11 @@ def test_test_matrix_gcode_generates_full_combinations_with_y_spacing_and_scaled
     assert len(print_moves) == 4
     assert [(cmd.start_pos.x, cmd.start_pos.y) for cmd in print_moves] == [
         (1.0, 2.0),
-        (1.0, 12.0),
+        (301.0, 12.0),
         (1.0, 22.0),
-        (1.0, 32.0),
+        (301.0, 32.0),
     ]
-    assert [cmd.pos.x for cmd in print_moves] == [301.0, 301.0, 301.0, 301.0]
+    assert [cmd.pos.x for cmd in print_moves] == [301.0, 1.0, 301.0, 1.0]
     assert [cmd.pos.z for cmd in print_moves] == [0.9, 0.9, 1.0, 1.0]
 
     expected_deltas = [
@@ -109,23 +109,24 @@ def test_test_matrix_gcode_generates_full_combinations_with_y_spacing_and_scaled
         cmd.start_pos.x == 301.0
         and cmd.start_pos.y == 2.0
         and cmd.start_pos.z == 10.9
-        and cmd.pos.x == 1.0
+        and cmd.pos.x == 301.0
         and cmd.pos.y == 12.0
         and cmd.pos.z == 10.9
         and cmd.delta_e == 0.0
         for cmd in travel_moves
     )
     assert any(
-        cmd.start_pos.x == 1.0
+        cmd.start_pos.x == 301.0
         and cmd.start_pos.y == 12.0
         and cmd.start_pos.z == 10.9
-        and cmd.pos.x == 1.0
+        and cmd.pos.x == 301.0
         and cmd.pos.y == 12.0
         and cmd.pos.z == 0.9
         and cmd.delta_e == 0.0
         for cmd in travel_moves
     )
     assert moves[-1].type == "TRAVEL"
+    assert moves[-1].pos.x == 1.0
     assert moves[-1].pos.z == 11.0
 
 
@@ -141,3 +142,32 @@ def test_test_matrix_gcode_rejects_more_than_45_lines():
         assert "45" in str(exc)
     else:
         raise AssertionError("expected matrix line limit to be enforced")
+
+
+def test_test_matrix_gcode_adds_prime_and_retract_from_equivalent_lengths():
+    lines = generate_test_matrix_gcode(
+        start_pose=(1.0, 2.0, 0.4, 0.0, 0.0, 0.0),
+        layer_heights_mm=[0.5],
+        extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=300.0,
+        prime_length_mm=5.0,
+        retract_length_mm=3.0,
+        prime_speed_mm_s=2.0,
+        retract_speed_mm_s=8.0,
+        finish_lift_mm=10.0,
+    )
+
+    parsed = parse_gcode_lines(lines)
+    waits = [cmd for cmd in parsed if isinstance(cmd, ExtrudeWait)]
+    print_move = next(
+        cmd for cmd in parsed if isinstance(cmd, MoveCommand) and cmd.type == "PRINT"
+    )
+
+    e_per_path_mm = 2.0 * 0.5 * EXTRUSION_PER_MM3
+    assert len(waits) == 2
+    assert math.isclose(waits[0].delta_e, 5.0 * e_per_path_mm)
+    assert math.isclose(waits[0].feedrate, 2.0 * 60.0)
+    assert math.isclose(print_move.delta_e, 300.0 * e_per_path_mm)
+    assert math.isclose(waits[1].delta_e, -3.0 * e_per_path_mm)
+    assert math.isclose(waits[1].feedrate, 8.0 * 60.0)

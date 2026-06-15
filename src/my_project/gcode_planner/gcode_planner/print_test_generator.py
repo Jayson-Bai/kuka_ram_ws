@@ -106,28 +106,59 @@ def generate_test_line_gcode(
     speed_mm_s: float,
     line_length_mm: float = 200.0,
     finish_lift_mm: float = 10.0,
+    prime_length_mm: float = 0.0,
+    retract_length_mm: float = 0.0,
+    prime_speed_mm_s: float = 2.0,
+    retract_speed_mm_s: float = 8.0,
 ) -> list[str]:
     x, y, z, a, b, c = _pose_values(start_pose)
     layer_height = float(layer_height_mm)
     line_length = float(line_length_mm)
     finish_lift = float(finish_lift_mm)
+    prime_length = float(prime_length_mm)
+    retract_length = float(retract_length_mm)
     if layer_height <= 0.0:
         raise ValueError("layer_height_mm must be > 0")
     if line_length <= 0.0:
         raise ValueError("line_length_mm must be > 0")
     if finish_lift < 0.0:
         raise ValueError("finish_lift_mm must be >= 0")
+    if prime_length < 0.0:
+        raise ValueError("prime_length_mm must be >= 0")
+    if retract_length < 0.0:
+        raise ValueError("retract_length_mm must be >= 0")
 
     feed = _feed(speed_mm_s)
-    total_e = line_length * DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3
+    prime_feed = _feed(prime_speed_mm_s)
+    retract_feed = _feed(retract_speed_mm_s)
+    e_per_path_mm = DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3
+    prime_e = prime_length * e_per_path_mm
+    retract_e = retract_length * e_per_path_mm
+    total_e = line_length * e_per_path_mm
     end_x = x + line_length
     lift_z = z + finish_lift
     lines = _header(start_pose)
+    current_e = 0.0
     lines.append(f";HEIGHT:{layer_height:.6f}")
+    lines.append(f";PRIME_LENGTH:{prime_length:.6f}")
+    lines.append(f";RETRACT_LENGTH:{retract_length:.6f}")
+    if prime_e > 0.0:
+        current_e += prime_e
+        lines.append(
+            f"G1 X{x:.6f} Y{y:.6f} Z{z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+            f"E{current_e:.6f} F{prime_feed:.3f}"
+        )
+    current_e += total_e
     lines.append(
         f"G1 X{end_x:.6f} Y{y:.6f} Z{z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
-        f"E{total_e:.6f} F{feed:.3f}"
+        f"E{current_e:.6f} F{feed:.3f}"
     )
+    if retract_e > 0.0:
+        current_e -= retract_e
+        lines.append(
+            f"G1 X{end_x:.6f} Y{y:.6f} Z{z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+            f"E{current_e:.6f} F{retract_feed:.3f}"
+        )
     if finish_lift > 0.0:
         lines.append(
             f"G1 X{end_x:.6f} Y{y:.6f} Z{lift_z:.6f} "
@@ -146,6 +177,10 @@ def generate_test_matrix_gcode(
     y_spacing_mm: float = 10.0,
     finish_lift_mm: float = 10.0,
     max_lines: int = TEST_MATRIX_MAX_LINES,
+    prime_length_mm: float = 0.0,
+    retract_length_mm: float = 0.0,
+    prime_speed_mm_s: float = 2.0,
+    retract_speed_mm_s: float = 8.0,
 ) -> list[str]:
     x, y, base_z, a, b, c = _pose_values(start_pose)
     layer_heights = _validate_positive_sequence(layer_heights_mm, "层高")
@@ -159,14 +194,22 @@ def generate_test_matrix_gcode(
     line_length = float(line_length_mm)
     y_spacing = float(y_spacing_mm)
     finish_lift = float(finish_lift_mm)
+    prime_length = float(prime_length_mm)
+    retract_length = float(retract_length_mm)
     if line_length <= 0.0:
         raise ValueError("line_length_mm must be > 0")
     if y_spacing <= 0.0:
         raise ValueError("y_spacing_mm must be > 0")
     if finish_lift < 0.0:
         raise ValueError("finish_lift_mm must be >= 0")
+    if prime_length < 0.0:
+        raise ValueError("prime_length_mm must be >= 0")
+    if retract_length < 0.0:
+        raise ValueError("retract_length_mm must be >= 0")
 
     feed = _feed(speed_mm_s)
+    prime_feed = _feed(prime_speed_mm_s)
+    retract_feed = _feed(retract_speed_mm_s)
     lines = _header(start_pose)
     end_x = x + line_length
     current_e = 0.0
@@ -178,39 +221,54 @@ def generate_test_matrix_gcode(
             line_y = y + index * y_spacing
             print_z = base_z + layer_height
             lift_z = print_z + finish_lift
-            delta_e = (
-                line_length
-                * DEFAULT_LINE_WIDTH_MM
-                * layer_height
-                * EXTRUSION_PER_MM3
-                * scale
+            line_start_x = x if index % 2 == 0 else end_x
+            line_end_x = end_x if index % 2 == 0 else x
+            e_per_path_mm = (
+                DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3 * scale
             )
-            current_e += delta_e
+            prime_e = prime_length * e_per_path_mm
+            retract_e = retract_length * e_per_path_mm
+            delta_e = line_length * e_per_path_mm
 
             lines.append(f";TEST_LINE:{index + 1}")
             lines.append(f";HEIGHT:{layer_height:.6f}")
             lines.append(f";EXTRUDE_SCALE:{scale:.6f}")
+            lines.append(f";PRIME_LENGTH:{prime_length:.6f}")
+            lines.append(f";RETRACT_LENGTH:{retract_length:.6f}")
             if previous_lift_z is None:
                 lines.append(
-                    f"G0 X{x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                    f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
             else:
                 lines.append(
-                    f"G0 X{x:.6f} Y{line_y:.6f} Z{previous_lift_z:.6f} "
+                    f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{previous_lift_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
                 lines.append(
-                    f"G0 X{x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                    f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
+            if prime_e > 0.0:
+                current_e += prime_e
+                lines.append(
+                    f"G1 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+                    f"E{current_e:.6f} F{prime_feed:.3f}"
+                )
+            current_e += delta_e
             lines.append(
-                f"G1 X{end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+                f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
                 f"E{current_e:.6f} F{feed:.3f}"
             )
+            if retract_e > 0.0:
+                current_e -= retract_e
+                lines.append(
+                    f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+                    f"E{current_e:.6f} F{retract_feed:.3f}"
+                )
             if finish_lift > 0.0:
                 lines.append(
-                    f"G0 X{end_x:.6f} Y{line_y:.6f} Z{lift_z:.6f} "
+                    f"G0 X{line_end_x:.6f} Y{line_y:.6f} Z{lift_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
                 previous_lift_z = lift_z

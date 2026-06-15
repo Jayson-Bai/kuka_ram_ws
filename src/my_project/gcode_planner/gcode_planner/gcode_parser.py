@@ -239,6 +239,8 @@ def _handle_move(parsed: ParsedCommandList, state: MachineState, params, line_id
                     delta_e=delta_e,
                     feedrate=target_f,
                     line=line_idx + 1,
+                    layer=state.current_layer,
+                    subtype=state.current_subtype or "UNKNOWN",
                     raw=raw_line,
                 )
             )
