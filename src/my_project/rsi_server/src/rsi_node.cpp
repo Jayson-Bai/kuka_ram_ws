@@ -13,7 +13,6 @@
 #include <my_project_interfaces/msg/print_head_status.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/kuka_status.hpp>
-#include <rsi_server/rsi_xml_parser.hpp>
 //标准消息头
 #include <std_msgs/msg/string.hpp>
 #include <std_msgs/msg/u_int32.hpp>
@@ -27,6 +26,7 @@
 #include <cctype>
 #include <limits>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <thread>
 #include <optional>
@@ -106,8 +106,8 @@ private:
   std::atomic<bool> run_udp_{false}; //控制循环的原子开关
   std::thread udp_thread_;
   std::optional<uint32_t> last_event_seq_triggered_;
-  uint32_t diag_counter_{0};
-  uint32_t diag_sample_period_{50};
+  
+
 
 public:
   RSINode(): Node("rsi_node")
@@ -118,11 +118,6 @@ public:
     local_port_ = declare_parameter<int>("local_port", 49152);  //端口
     abort_lift_mm_ = declare_parameter<double>("abort_lift_mm", 100.0);  //ABORT抬升距离(mm)
     abort_lift_speed_mm_s_ = declare_parameter<double>("abort_lift_speed_mm_s", 10.0);  //ABORT抬升速度(mm/s)
-    int diag_sample_period = declare_parameter<int>("diag_sample_period", 50);  //诊断XML发布采样周期，1=每包发布
-    if (diag_sample_period < 1) {
-      diag_sample_period = 1;
-    }
-    diag_sample_period_ = static_cast<uint32_t>(diag_sample_period);
 
     // 计算每帧(4ms)的Z轴抬升步长
     constexpr double RSI_PERIOD_S = 0.004; // 4ms
@@ -251,15 +246,33 @@ private:
 
       if (n <= 0) continue;
       buf[n] = '\0';
-      std::string recv_str(buf, static_cast<size_t>(n)); //数据转字符串
+      std::string recv_str(buf); //数据转字符串
 
-      //解IPOC。首包回包路径只保留构造回复所需的最小解析。
+      //发布原始xml 字符串消息
+      std_msgs::msg::String raw_msg;
+      raw_msg.data = recv_str;
+      kuka_pub_ -> publish(raw_msg);     
+
+      //解析KUKA位姿（XYZABC）
+      auto kuka_pose = parse_kuka_xyzabc(recv_str);
+      if (kuka_pose)
+      {
+        KukaStatus status;
+        status.stamp = now();
+        status.x = kuka_pose->x;
+        status.y = kuka_pose->y;
+        status.z = kuka_pose->z;
+        status.a = kuka_pose->a;
+        status.b = kuka_pose->b;
+        status.c = kuka_pose->c;
+        kuka_status_pub_->publish(status);
+      }
+
+      //解IPOC
       std::string ipoc = extract_ipoc(recv_str);
       
       //********默认发送上一帧********
       TrajectoryPoint to_send = *last_sent_;
-      std::optional<PlannedEvent> triggered_event_to_publish;
-      std::optional<uint32_t> resync_request_to_publish;
 
       // 读取当前状态（atomic）
       State current_state = state_.load();
@@ -272,7 +285,7 @@ private:
           current_wait_ = pop_next_event();
           if (current_wait_)
           {
-            triggered_event_to_publish = current_wait_;
+            triggered_event_pub_->publish(*current_wait_);
             last_event_seq_triggered_ = current_wait_->trigger_seq;
             state_.store(State::WAIT);
           }
@@ -321,8 +334,16 @@ private:
                   std::lock_guard<std::mutex> lk(traj_mutex_);
                   traj_queue_.clear();
                 }
-                //触发 resync 请求；实际发布放到UDP回包之后，避免阻塞本周期回复。
-                resync_request_to_publish = next_seq_;
+                //触发 resync 请求
+                auto nowt = now();
+                if(!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) //限流
+                {
+                  std_msgs::msg::UInt32 req;
+                  req.data = next_seq_; //从next_seq_开始重播
+                  resync_pub_ -> publish(req);
+                  resync_sent_ = true;
+                  last_resync_time_ = nowt;
+                }
               }
             }
             break; //每个心跳只处理一条
@@ -359,9 +380,6 @@ private:
           // 抬升完成，切断UDP循环
           RCLCPP_WARN(get_logger(), "ABORT Z轴抬升完成(%.1fmm)，切断RSI通信", abort_lift_mm_);
           // 先发送最后一帧回复，然后退出循环
-          std::string reply = build_reply(ipoc, to_send);
-          sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
-
           RsiHeartBeat hb;
           hb.stamp = now();
           hb.ipoc = ipoc;
@@ -370,67 +388,32 @@ private:
           hb.extrude_abs = to_send.e;
           heartbeat_pub_->publish(hb);
 
+          std::string reply = build_reply(ipoc, to_send);
+          sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+
           run_udp_.store(false); // 退出UDP循环 → KUKA通信中断 → 安全制动
           continue;
         }
       }
       
-      //回复XML：必须先回KUKA，再做ROS诊断/状态发布，避免首包4ms窗口被DDS阻塞。
-      std::string reply = build_reply(ipoc, to_send);
-      sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
-
-      if (triggered_event_to_publish) {
-        triggered_event_pub_->publish(*triggered_event_to_publish);
-      }
-
-      if (resync_request_to_publish) {
-        auto nowt = now();
-        if (!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) { //限流
-          std_msgs::msg::UInt32 req;
-          req.data = *resync_request_to_publish; //从next_seq_开始重播
-          resync_pub_->publish(req);
-          resync_sent_ = true;
-          last_resync_time_ = nowt;
-        }
-      }
-
-      const bool publish_diag = (++diag_counter_ % diag_sample_period_) == 0;
-      if (publish_diag) {
-        std_msgs::msg::String raw_msg;
-        raw_msg.data = recv_str;
-        kuka_pub_->publish(raw_msg);
-      }
-
-      //解析KUKA位姿（XYZABC）并发布状态。该诊断状态放在UDP回包之后。
-      auto kuka_pose = rsi_server::parse_kuka_xyzabc(recv_str);
-      if (kuka_pose)
-      {
-        KukaStatus status;
-        status.stamp = now();
-        status.x = kuka_pose->x;
-        status.y = kuka_pose->y;
-        status.z = kuka_pose->z;
-        status.a = kuka_pose->a;
-        status.b = kuka_pose->b;
-        status.c = kuka_pose->c;
-        kuka_status_pub_->publish(status);
-      }
-
-      //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐
+      //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐 
       RsiHeartBeat hb;
       hb.stamp = now();
       hb.ipoc = ipoc;
       hb.seq_used = to_send.seq;
       hb.tool_id = to_send.tool_id;
       hb.extrude_abs = to_send.e;
-      heartbeat_pub_->publish(hb);
+      heartbeat_pub_ -> publish(hb);
       current_correction_pub_->publish(to_send);
 
-      if (publish_diag) {
+      //回复XML
+      std::string reply = build_reply(ipoc, to_send);
+      {
         std_msgs::msg::String sent_msg;
         sent_msg.data = reply;
         sent_xml_pub_->publish(sent_msg);
       }
+      sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
 
     }
   }
@@ -552,6 +535,62 @@ private:
     auto e = xml.find(tag_close, s);
     if (e == std::string::npos) return "0";
     return xml.substr(s, e - s);
+  }
+
+  struct _PoseXYZABC
+  {
+    double x{0.0};
+    double y{0.0};
+    double z{0.0};
+    double a{0.0};
+    double b{0.0};
+    double c{0.0};
+  };
+
+  std::optional<_PoseXYZABC> parse_kuka_xyzabc(const std::string &data_str)
+  {
+    _PoseXYZABC pose;
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    pose.x = nan;
+    pose.y = nan;
+    pose.z = nan;
+    pose.a = nan;
+    pose.b = nan;
+    pose.c = nan;
+    bool found_any = false;
+
+    // 仅解析属性格式：X="..." Y="..." Z="..." A="..." B="..." C="..."
+    static const std::regex attr_re(
+      R"re(\b([XYZABC])\s*=\s*"([-+]?\d*\.?\d+)")re",
+      std::regex::icase);
+    try
+    {
+      for (std::sregex_iterator it(data_str.begin(), data_str.end(), attr_re), end; it != end; ++it)
+      {
+        char key = static_cast<char>(std::toupper(static_cast<unsigned char>((*it)[1].str()[0])));
+        double val = std::stod((*it)[2].str());
+        found_any = true;
+        switch (key)
+        {
+          case 'X': pose.x = val; break;
+          case 'Y': pose.y = val; break;
+          case 'Z': pose.z = val; break;
+          case 'A': pose.a = val; break;
+          case 'B': pose.b = val; break;
+          case 'C': pose.c = val; break;
+          default: break;
+        }
+      }
+    }
+    catch (...)
+    {
+      return std::nullopt;
+    }
+
+    if (!found_any) {
+      return std::nullopt;
+    }
+    return pose;
   }
 
   std::string build_reply(const std::string &ipoc, const TrajectoryPoint &tp) 

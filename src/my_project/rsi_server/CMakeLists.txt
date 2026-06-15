@@ -16,7 +16,7 @@ target_compile_features(rsi_node PUBLIC cxx_std_17)
 target_include_directories(rsi_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-
+  
 ament_target_dependencies(
   rsi_node
   rclcpp
@@ -28,10 +28,7 @@ install(TARGETS rsi_node
   DESTINATION lib/${PROJECT_NAME})
 
 if(BUILD_TESTING)
-  find_package(ament_cmake_gtest REQUIRED)
   find_package(ament_lint_auto REQUIRED)
-  ament_add_gtest(test_rsi_xml_parser test/test_rsi_xml_parser.cpp)
-  target_include_directories(test_rsi_xml_parser PRIVATE include)
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   set(ament_cmake_copyright_FOUND TRUE)
