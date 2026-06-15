@@ -1869,9 +1869,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         print_test_layout.addWidget(self._btn_test_confirm_height)
 
         self._btn_export_uart_log = QtWidgets.QPushButton("导出 UART 日志")
-        self._btn_export_uart_log.setMinimumHeight(28)
+        self._btn_export_uart_log.setMinimumHeight(36)
         self._btn_export_uart_log.setCursor(QtCore.Qt.PointingHandCursor)
-        print_test_layout.addWidget(self._btn_export_uart_log)
 
         self._test_status = QtWidgets.QLabel("未进入测试。")
         self._test_status.setObjectName("fieldLabel")
@@ -1939,6 +1938,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col2_layout.addWidget(control_box)
         col2_layout.addWidget(latency_box)
         col2_layout.addStretch(1)
+        col2_layout.addWidget(self._btn_export_uart_log)
 
         layout.addLayout(col0_layout, 1, 0)
         layout.addLayout(col1_layout, 1, 1)

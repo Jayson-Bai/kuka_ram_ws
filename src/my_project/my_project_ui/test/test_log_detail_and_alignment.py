@@ -50,6 +50,17 @@ def test_left_column_keeps_system_status_first_and_logs_stretch_to_shared_bottom
     assert middle_section.index("col1_layout.addWidget(ph_tools_box)") < middle_section.index("col1_layout.addWidget(uart_log_box)")
 
 
+def test_uart_log_export_button_is_standalone_at_right_column_bottom():
+    src = _source()
+
+    print_test_section = src.split('        # ======== Print Test 区域 ========', 1)[1].split('        # ======== Launch Control 区域 ========', 1)[0]
+    col2_section = src.split('        # Add all boxes to col2_layout in the desired order', 1)[1].split('        layout.addLayout(col0_layout, 1, 0)', 1)[0]
+    assert 'print_test_layout.addWidget(self._btn_export_uart_log)' not in print_test_section
+    assert 'col2_layout.addStretch(1)' in col2_section
+    assert 'col2_layout.addWidget(self._btn_export_uart_log)' in col2_section
+    assert col2_section.index('col2_layout.addStretch(1)') < col2_section.index('col2_layout.addWidget(self._btn_export_uart_log)')
+
+
 def test_rsi_and_uart_log_boxes_are_dynamically_resized_while_system_status_is_fixed():
     src = _source()
 
