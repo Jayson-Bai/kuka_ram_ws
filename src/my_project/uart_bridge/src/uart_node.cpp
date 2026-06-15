@@ -106,6 +106,7 @@ public:
         auto hb_qos = rclcpp::QoS(2000).reliable();
         auto event_qos = rclcpp::QoS(200).reliable();
         auto pub_qos = rclcpp::QoS(200).reliable();
+        auto ready_qos = rclcpp::QoS(200).reliable().transient_local();
         hb_sub_ = create_subscription<RsiHeartBeat>(
             "/rsi/heartbeat",
             hb_qos,
@@ -141,7 +142,7 @@ public:
         //发布UART状态
         uart_raw_pub_ = create_publisher<std_msgs::msg::String>("/uart/raw", pub_qos);
         //发布ready状态
-        ready_pub_ = create_publisher<PrintHeadStatus>("/printhead/status", pub_qos);
+        ready_pub_ = create_publisher<PrintHeadStatus>("/printhead/status", ready_qos);
 
         //启动默认就绪(允许RSI从初始WAIT切入RUN)
         publish_ready_state("startup");

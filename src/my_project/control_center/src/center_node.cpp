@@ -104,6 +104,7 @@ public:
 
         kuka_status_raw_ = declare_parameter<bool>("kuka_status_raw", false);
         auto monitor_qos = rclcpp::QoS(10);
+        auto ready_qos = rclcpp::QoS(200).reliable().transient_local();
         auto plan_qos = rclcpp::QoS(plan_qos_depth_).reliable();
         auto event_qos = rclcpp::QoS(plan_qos_depth_).reliable().transient_local();
 
@@ -141,7 +142,7 @@ public:
         //订阅打印头状态
         printhead_status_sub_ = create_subscription<PrintHeadStatus>(
             "/printhead/status",
-            monitor_qos,
+            ready_qos,
             [this](PrintHeadStatus::SharedPtr msg){
                 std::lock_guard<std::mutex> lk(cache_mutex_);
                 last_printhead_status_ = *msg;

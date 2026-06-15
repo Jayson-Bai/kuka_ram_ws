@@ -127,6 +127,7 @@ public:
 
     auto traj_qos = rclcpp::QoS(2000).reliable();//轨迹队列长度2000 = 收到消息的最多缓存条数 reliable协议保证丢包时顺序
     auto event_qos = rclcpp::QoS(200).reliable().transient_local();//事件队列长度200，允许迟到订阅接收历史事件
+    auto ready_qos = rclcpp::QoS(200).reliable().transient_local();//打印头ready状态需要持久化，避免启动竞态
 
     //订阅中心节点轨迹消息
     traj_sub_ = create_subscription<TrajectoryPoint>(
@@ -154,7 +155,7 @@ public:
     //订阅UART状态
     status_sub_ = create_subscription<PrintHeadStatus>(
       "/printhead/status",
-      traj_qos,
+      ready_qos,
       [this](PrintHeadStatus::SharedPtr msg)
       {
         std::lock_guard<std::mutex> lk(ready_mutex_);

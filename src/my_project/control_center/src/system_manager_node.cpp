@@ -70,8 +70,9 @@ public:
                 last_hb_stamp_ = now();
             });
 
+        auto ready_qos = rclcpp::QoS(200).reliable().transient_local();
         printhead_sub_ = create_subscription<PrintHeadStatus>(
-            "/printhead/status", 10,
+            "/printhead/status", ready_qos,
             [this](PrintHeadStatus::SharedPtr msg) {
                 std::lock_guard<std::mutex> lk(mutex_);
                 last_printhead_status_ = *msg;
