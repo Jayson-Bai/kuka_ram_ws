@@ -375,23 +375,13 @@ private:
         }
       }
       
+      //回复XML：必须先回KUKA，再做ROS诊断/状态发布，避免首包4ms窗口被DDS阻塞。
+      std::string reply = build_reply(ipoc, to_send);
+      sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+
       if (triggered_event_to_publish) {
         triggered_event_pub_->publish(*triggered_event_to_publish);
       }
-
-      //发布RSI心跳包，UART挤出机依赖该话题触发 E 指令，必须保持在本周期回复前。
-      RsiHeartBeat hb;
-      hb.stamp = now();
-      hb.ipoc = ipoc;
-      hb.seq_used = to_send.seq;
-      hb.tool_id = to_send.tool_id;
-      hb.extrude_abs = to_send.e;
-      heartbeat_pub_->publish(hb);
-      current_correction_pub_->publish(to_send);
-
-      //回复XML：执行链路发布完成后立即回KUKA；诊断/解析放在回包之后。
-      std::string reply = build_reply(ipoc, to_send);
-      sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
 
       if (resync_request_to_publish) {
         auto nowt = now();
@@ -425,6 +415,16 @@ private:
         status.c = kuka_pose->c;
         kuka_status_pub_->publish(status);
       }
+
+      //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐
+      RsiHeartBeat hb;
+      hb.stamp = now();
+      hb.ipoc = ipoc;
+      hb.seq_used = to_send.seq;
+      hb.tool_id = to_send.tool_id;
+      hb.extrude_abs = to_send.e;
+      heartbeat_pub_->publish(hb);
+      current_correction_pub_->publish(to_send);
 
       if (publish_diag) {
         std_msgs::msg::String sent_msg;
