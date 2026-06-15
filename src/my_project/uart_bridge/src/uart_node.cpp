@@ -299,6 +299,7 @@ private:
 
     void handle_line(const std::string& line)
     {
+        publish_uart_log("RX", line);
         if(line.rfind("STAT",0) == 0)
         {
             parse_stat(line.substr(4));
@@ -306,9 +307,17 @@ private:
             check_event_completion();
             return;
         }
+    }
+
+
+    void publish_uart_log(const std::string &direction, const std::string &line)
+    {
         std_msgs::msg::String raw;
-        raw.data = line;
-        uart_raw_pub_ -> publish(raw);
+        raw.data = direction + " " + line;
+        while (!raw.data.empty() && (raw.data.back() == '\n' || raw.data.back() == '\r')) {
+            raw.data.pop_back();
+        }
+        uart_raw_pub_->publish(raw);
     }
 
     void parse_stat(const std::string& payload) 
@@ -415,6 +424,7 @@ private:
 
     void write_line(const std::string &line)
     {
+        publish_uart_log("TX", line);
         std::lock_guard<std::mutex> lk(serial_write_mutex_);
         boost::system::error_code ec;
         boost::asio::write(serial_, boost::asio::buffer(line), ec);

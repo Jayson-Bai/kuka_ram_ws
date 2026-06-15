@@ -743,6 +743,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_target = None
         self._print_test_params = None
         self._print_test_resin_temp = None
+        self._uart_log_history = []
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._build_ui()
@@ -1867,6 +1868,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_confirm_height.setEnabled(False)
         print_test_layout.addWidget(self._btn_test_confirm_height)
 
+        self._btn_export_uart_log = QtWidgets.QPushButton("导出 UART 日志")
+        self._btn_export_uart_log.setMinimumHeight(28)
+        self._btn_export_uart_log.setCursor(QtCore.Qt.PointingHandCursor)
+        print_test_layout.addWidget(self._btn_export_uart_log)
+
         self._test_status = QtWidgets.QLabel("未进入测试。")
         self._test_status.setObjectName("fieldLabel")
         self._test_status.setWordWrap(True)
@@ -1874,6 +1880,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
         self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
+        self._btn_export_uart_log.clicked.connect(self._on_export_uart_log)
 
 
         # ======== Launch Control 区域 ========
@@ -2783,6 +2790,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status(f"参数无效: {exc}", "#b42318")
             return
         self._print_test_params = params
+        self._uart_log_history.clear()
+        self._uart_log_text.clear()
+        self._uart_log_latest_display = ""
+        self._uart_log_summary.setText("测试日志已清空")
         self.scale_submit.emit(1.0)
         self.uart_command_submit.emit("EV 0 fan_resin 1\n")
         self.uart_command_submit.emit(f"EV 0 heat_resin {params['temp']}\n")
@@ -3276,13 +3287,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
         display_text = str(line_text or "")
+        payload = display_text[3:].lstrip() if display_text.startswith(("RX ", "TX ")) else display_text
+        if payload.startswith("EWARN"):
+            return
+        entry = f"[{ts}] {display_text}"
+        self._uart_log_history.append(entry)
         self._uart_log_latest_display = display_text
         self._btn_uart_log_detail.setEnabled(True)
         self._uart_log_summary.setText(f"最近日志: {ts}")
-        self._uart_log_text.appendPlainText(f"[{ts}] {display_text}")
+        self._uart_log_text.appendPlainText(entry)
+
+    def _on_export_uart_log(self):
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test/uart_logs")
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"uart_log_{stamp}.txt")
+        lines = self._uart_log_history or ["# 当前测试没有收到 UART 日志"]
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+            f.write("\n")
+        self._set_print_test_status(f"UART 日志已导出: {path}", "#1b6e3c")
 
     def _show_uart_log_detail(self):
-        dialog = _LogDetailDialog("UART 日志放大查看", self._uart_log_latest_display, self)
+        detail_text = "\n".join(self._uart_log_history) or self._uart_log_latest_display
+        dialog = _LogDetailDialog("UART 日志放大查看", detail_text, self)
         dialog.exec_()
 
 

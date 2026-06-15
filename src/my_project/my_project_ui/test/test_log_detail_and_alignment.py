@@ -17,7 +17,10 @@ def test_uart_log_matches_rsi_detail_view_pattern():
     assert "self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)" in src
     assert "self._uart_log_text.setMinimumHeight(0)" in src
     assert "self._uart_log_latest_display" in src
+    assert "self._uart_log_history" in src
     assert "def _show_uart_log_detail" in src
+    assert 'detail_text = "\\n".join(self._uart_log_history)' in src
+    assert 'payload.startswith("EWARN")' in src
 
 
 def test_left_column_keeps_system_status_first_and_logs_stretch_to_shared_bottom():

@@ -26,7 +26,7 @@ def test_z_adjust_gcode_starts_from_current_rsi_correction_and_uses_resin_tool()
     moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
     tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
 
-    assert tools[-1].tool == 1  # GCode T1 maps to internal resin tool id 2.
+    assert tools == []
     assert moves[0].start_pos.z == 1.5
     assert moves[0].pos.z == 1.6
     assert moves[0].feedrate == 300.0
@@ -46,7 +46,7 @@ def test_test_line_gcode_uses_fixed_resin_line_width_and_finish_lift():
     tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
 
     assert RESIN_TOOL_ID == 2
-    assert tools[-1].tool == 1
+    assert tools == []
     print_move = next(cmd for cmd in moves if cmd.type == "PRINT")
     assert print_move.start_pos.x == 1.0
     assert print_move.pos.x == 201.0

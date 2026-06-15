@@ -69,7 +69,6 @@ def _header(start_pose: Sequence[float]) -> list[str]:
         "G21",
         "G90",
         "M82",
-        f"T{RESIN_GCODE_TOOL}",
         f"G92 X{x:.6f} Y{y:.6f} Z{z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} E0",
         ";TYPE:PrintTest",
         f";WIDTH:{DEFAULT_LINE_WIDTH_MM:.3f}",
