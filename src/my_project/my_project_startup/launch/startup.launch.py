@@ -44,6 +44,7 @@ def generate_launch_description():
     local_port = LaunchConfiguration("local_port")
     abort_lift_mm = LaunchConfiguration("abort_lift_mm")
     abort_lift_speed_mm_s = LaunchConfiguration("abort_lift_speed_mm_s")
+    diag_sample_period = LaunchConfiguration("diag_sample_period")
 
     # UART node params
     port = LaunchConfiguration("port")
@@ -62,6 +63,7 @@ def generate_launch_description():
             "local_port": local_port,
             "abort_lift_mm": abort_lift_mm,
             "abort_lift_speed_mm_s": abort_lift_speed_mm_s,
+            "diag_sample_period": diag_sample_period,
         }],
     )
 
@@ -303,6 +305,11 @@ def generate_launch_description():
             "local_port",
             default_value="49152",
             description="RSI 本地监听端口。",
+        ),
+        DeclareLaunchArgument(
+            "diag_sample_period",
+            default_value="50",
+            description="RSI 原始/回包 XML 诊断发布采样周期，1 表示每包发布。",
         ),
         DeclareLaunchArgument(
             "port",
