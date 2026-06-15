@@ -44,6 +44,7 @@ def generate_launch_description():
     local_port = LaunchConfiguration("local_port")
     abort_lift_mm = LaunchConfiguration("abort_lift_mm")
     abort_lift_speed_mm_s = LaunchConfiguration("abort_lift_speed_mm_s")
+    fast_first_reply = LaunchConfiguration("fast_first_reply")
 
     # UART node params
     port = LaunchConfiguration("port")
@@ -62,6 +63,7 @@ def generate_launch_description():
             "local_port": local_port,
             "abort_lift_mm": abort_lift_mm,
             "abort_lift_speed_mm_s": abort_lift_speed_mm_s,
+            "fast_first_reply": fast_first_reply,
         }],
     )
 
@@ -303,6 +305,11 @@ def generate_launch_description():
             "local_port",
             default_value="49152",
             description="RSI 本地监听端口。",
+        ),
+        DeclareLaunchArgument(
+            "fast_first_reply",
+            default_value="true",
+            description="是否仅对首个 KUKA UDP 包快速回包，不推进挤出/轨迹链路。",
         ),
         DeclareLaunchArgument(
             "port",

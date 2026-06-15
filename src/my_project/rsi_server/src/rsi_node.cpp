@@ -106,8 +106,9 @@ private:
   std::atomic<bool> run_udp_{false}; //控制循环的原子开关
   std::thread udp_thread_;
   std::optional<uint32_t> last_event_seq_triggered_;
+  bool fast_first_reply_{true};
+  bool first_udp_reply_sent_{false};
   
-
 
 public:
   RSINode(): Node("rsi_node")
@@ -118,6 +119,7 @@ public:
     local_port_ = declare_parameter<int>("local_port", 49152);  //端口
     abort_lift_mm_ = declare_parameter<double>("abort_lift_mm", 100.0);  //ABORT抬升距离(mm)
     abort_lift_speed_mm_s_ = declare_parameter<double>("abort_lift_speed_mm_s", 10.0);  //ABORT抬升速度(mm/s)
+    fast_first_reply_ = declare_parameter<bool>("fast_first_reply", true);  //仅首个KUKA包快速回包，不推进挤出链路
 
     // 计算每帧(4ms)的Z轴抬升步长
     constexpr double RSI_PERIOD_S = 0.004; // 4ms
@@ -248,6 +250,17 @@ private:
       if (n <= 0) continue;
       buf[n] = '\0';
       std::string recv_str(buf); //数据转字符串
+
+      if (fast_first_reply_ && !first_udp_reply_sent_)
+      {
+        std::string ipoc = extract_ipoc(recv_str);
+        TrajectoryPoint to_send = *last_sent_;
+        std::string reply = build_reply(ipoc, to_send);
+        sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+        first_udp_reply_sent_ = true;
+        continue;
+      }
+      first_udp_reply_sent_ = true;
 
       //发布原始xml 字符串消息
       std_msgs::msg::String raw_msg;
