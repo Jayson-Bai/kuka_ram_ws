@@ -500,13 +500,10 @@ private:
         {
             {
                 std::lock_guard<std::mutex> lk(event_mutex_);
-                current_event_.reset();
                 current_event_ack_received_ = false;
                 current_event_done_received_ = false;
             }
-            set_ready_state(true, 0, "print_test_reset");
-            publish_ready_state("print_test_reset");
-            RCLCPP_INFO(get_logger(), "测试模式RESET：清除UART事件等待状态");
+            RCLCPP_INFO(get_logger(), "测试模式RESET：复位UART事件ACK/DONE临时状态");
         }
     }
 

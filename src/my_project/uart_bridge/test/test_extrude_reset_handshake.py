@@ -27,7 +27,7 @@ def test_extrude_reset_waits_for_firmware_ack_done_and_stat_clear():
     assert "done = true" not in reset_block
 
 
-def test_print_test_reset_clears_stale_uart_event_ready_gate():
+def test_print_test_reset_does_not_fake_event_completion():
     src = _source()
 
     assert 'print_test_cmd_sub_' in src
@@ -36,8 +36,7 @@ def test_print_test_reset_clears_stale_uart_event_ready_gate():
     assert 'void on_print_test_command(const std::string &cmd)' in src
     reset_block = src.split('void on_print_test_command(const std::string &cmd)', 1)[1].split('void on_system_command', 1)[0]
     assert 'cmd == "RESET"' in reset_block
-    assert 'current_event_.reset()' in reset_block
     assert 'current_event_ack_received_ = false' in reset_block
     assert 'current_event_done_received_ = false' in reset_block
-    assert 'set_ready_state(true, 0, "print_test_reset")' in reset_block
-    assert 'publish_ready_state("print_test_reset")' in reset_block
+    assert 'set_ready_state(true' not in reset_block
+    assert 'publish_ready_state("print_test_reset")' not in reset_block
