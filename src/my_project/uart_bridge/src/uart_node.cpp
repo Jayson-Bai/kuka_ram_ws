@@ -52,7 +52,7 @@ private:
     rclcpp::Publisher<PrintHeadStatus>::SharedPtr ready_pub_;
 
     // 缓存
-    std::mutex event_mutex_;
+    mutable std::mutex event_mutex_;
     std::optional<PlannedEvent> current_event_;
     bool current_event_ack_received_{false};
     bool current_event_done_received_{false};
@@ -257,25 +257,34 @@ private:
             }
         }
 
-        // 收到事件后立刻清除ready，避免上一事件ready粘住导致RSI误退出WAIT
+        // 发送事件指令 EV <trigger_seq> <event_type> <arg>
+        // current_event_ 已经设置，心跳线程会暂停 E 转发，避免 reset 未完成时刷 old_seq。
+        std::string arg = ev.payload.empty() ? "0" : ev.payload;
+        std::ostringstream oss;
+        oss << "EV " << ev.trigger_seq << " " << ev.event_type << " " << arg << "\n";
+        write_line(oss.str());
+
+        // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
         set_ready_state(false, ev.trigger_seq, ev.event_type);
         std::string ev_info = "event:" + ev.event_type;
         if (!ev.payload.empty()) {
             ev_info += " payload=" + ev.payload;
         }
         publish_ready_state(ev_info);
-        // 发送事件指令 EV <trigger_seq> <event_type> <arg>
-        std::string arg = ev.payload.empty() ? "0" : ev.payload;
-        std::ostringstream oss;
-        oss << "EV " << ev.trigger_seq << " " << ev.event_type << " " << arg << "\n";
-        write_line(oss.str());
         // 事件完成由 MCU 上报 STAT 后 check_event_completion 判定
+    }
+
+    bool has_pending_event() const
+    {
+        std::lock_guard<std::mutex> lk(event_mutex_);
+        return current_event_.has_value();
     }
 
     void on_heartbeat(const RsiHeartBeat &hb)//心跳触发挤出
     {
-        // PAUSE 或 ABORT 时不转发挤出命令
-        if (paused_.load() || aborted_.load()) {
+        // PAUSE、ABORT 或事件等待时不转发挤出命令。
+        // extrude_reset 未完成前继续发 E 会被固件 old_seq 拒绝，并污染时序。
+        if (paused_.load() || aborted_.load() || has_pending_event()) {
             return;
         }
         const double scale = extrude_scale_.load();
