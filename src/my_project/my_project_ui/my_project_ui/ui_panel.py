@@ -732,6 +732,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
     rsi_xml_received = QtCore.pyqtSignal(str)  # RSI 发出 XML 日志
     uart_log_received = QtCore.pyqtSignal(str)  # UART 原始日志
 
+    _DIAGNOSTIC_LOG_LIMIT = 200000
+
     def __init__(self):
         super().__init__()
         self._extrude_scale_current = 1.0
@@ -744,6 +746,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_params = None
         self._print_test_resin_temp = None
         self._uart_log_history = []
+        self._diagnostic_log_history = []
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._build_ui()
@@ -1868,7 +1871,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_confirm_height.setEnabled(False)
         print_test_layout.addWidget(self._btn_test_confirm_height)
 
-        self._btn_export_uart_log = QtWidgets.QPushButton("导出 UART 日志")
+        self._btn_export_uart_log = QtWidgets.QPushButton("导出诊断日志")
         self._btn_export_uart_log.setMinimumHeight(36)
         self._btn_export_uart_log.setCursor(QtCore.Qt.PointingHandCursor)
 
@@ -1879,7 +1882,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
         self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
-        self._btn_export_uart_log.clicked.connect(self._on_export_uart_log)
+        self._btn_export_uart_log.clicked.connect(self._on_export_diagnostic_log)
 
 
         # ======== Launch Control 区域 ========
@@ -2394,6 +2397,62 @@ class _UiStatusWidget(QtWidgets.QWidget):
         return self._current_tool_id
 
 
+    def _format_diagnostic_time(self, epoch):
+        local = time.localtime(epoch)
+        ms = int((epoch - int(epoch)) * 1000)
+        return time.strftime("%Y-%m-%d %H:%M:%S", local) + f".{ms:03d}"
+
+    def _append_diagnostic(self, source, kind, detail):
+        epoch = time.time()
+        record = {
+            "time_epoch": epoch,
+            "time": self._format_diagnostic_time(epoch),
+            "source": str(source),
+            "kind": str(kind),
+            "detail": detail,
+        }
+        self._diagnostic_log_history.append(record)
+        overflow = len(self._diagnostic_log_history) - self._DIAGNOSTIC_LOG_LIMIT
+        if overflow > 0:
+            del self._diagnostic_log_history[:overflow]
+
+    def _trajectory_diagnostic(self, traj):
+        return {
+            "seq": int(getattr(traj, "seq", 0)),
+            "tool_id": int(getattr(traj, "tool_id", 0)),
+            "x": float(getattr(traj, "x", 0.0)),
+            "y": float(getattr(traj, "y", 0.0)),
+            "z": float(getattr(traj, "z", 0.0)),
+            "a": float(getattr(traj, "a", 0.0)),
+            "b": float(getattr(traj, "b", 0.0)),
+            "c": float(getattr(traj, "c", 0.0)),
+            "e": float(getattr(traj, "e", 0.0)),
+        }
+
+    def _event_diagnostic(self, event):
+        return {
+            "event_type": str(getattr(event, "event_type", "") or ""),
+            "payload": str(getattr(event, "payload", "") or ""),
+            "event_src_line": int(getattr(event, "event_src_line", 0)),
+            "trigger_seq": int(getattr(event, "trigger_seq", 0)),
+        }
+
+    def _printhead_diagnostic(self, ps):
+        return {
+            "ready_for_motion": bool(getattr(ps, "ready_for_motion", False)),
+            "ready_event_seq": int(getattr(ps, "ready_event_seq", 0)),
+            "ready_event_type": str(getattr(ps, "ready_event_type", "") or ""),
+            "fan_ok_cf": bool(getattr(ps, "fan_ok_cf", False)),
+            "fan_ok_resin": bool(getattr(ps, "fan_ok_resin", False)),
+            "current_temp_cf": float(getattr(ps, "current_temp_cf", 0.0)),
+            "target_temp_cf": float(getattr(ps, "target_temp_cf", 0.0)),
+            "current_temp_resin": float(getattr(ps, "current_temp_resin", 0.0)),
+            "target_temp_resin": float(getattr(ps, "target_temp_resin", 0.0)),
+            "current_tool": int(getattr(ps, "current_tool", 0)),
+            "error_code": int(getattr(ps, "error_code", 0)),
+            "raw": str(getattr(ps, "raw", "") or ""),
+        }
+
     def _show_latency_detail(self):
         self._latency_diag_widget.adjustSize()
         self._latency_diag_widget.show()
@@ -2401,6 +2460,29 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._latency_diag_widget.activateWindow()
 
     def _update_latency(self, msg: ExtruderLatencyStatus):
+        self._append_diagnostic("latency", "snapshot", {
+            "arm_seq": int(msg.arm_seq),
+            "last_eack_seq": int(msg.last_eack_seq),
+            "stat_last_e_seq": int(msg.stat_last_e_seq),
+            "has_eack": bool(msg.has_eack),
+            "has_stat": bool(msg.has_stat),
+            "seq_lag": int(msg.seq_lag),
+            "cycle_lag_ms": float(msg.cycle_lag_ms),
+            "ack_delay_ms": float(msg.ack_delay_ms),
+            "linux_mcu_delay_ms": float(msg.linux_mcu_delay_ms),
+            "has_robot_match": bool(msg.has_robot_match),
+            "actual_robot_seq": int(msg.actual_robot_seq),
+            "robot_match_error_mm": float(msg.robot_match_error_mm),
+            "mcu_robot_delay_ms": float(msg.mcu_robot_delay_ms),
+            "eack_count": int(msg.eack_count),
+            "old_seq_warn_count": int(msg.old_seq_warn_count),
+            "gap_warn_count": int(msg.gap_warn_count),
+            "last_tool_id": int(msg.last_tool_id),
+            "last_extrude_abs": float(msg.last_extrude_abs),
+            "last_mcu_us": int(msg.last_mcu_us),
+            "last_warn": str(msg.last_warn or ""),
+            "last_raw": str(msg.last_raw or ""),
+        })
         link_labels = getattr(self, "_latency_link_labels", {})
         diag_labels = getattr(self, "_latency_diag_labels", {})
         if not link_labels:
@@ -2513,6 +2595,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
 
     def _update_ui(self, msg: UiStatus):
+        self._append_diagnostic("ui_status", "snapshot", {
+            "state": str(msg.state or ""),
+            "last_warn": str(msg.last_warn or ""),
+            "last_error": str(msg.last_error or ""),
+            "ready_for_motion": bool(msg.ready_for_motion),
+            "kuka_status_valid": bool(msg.kuka_status_valid),
+            "kuka_status_age_s": float(msg.kuka_status_age_s),
+            "rsi_heartbeat_valid": bool(msg.rsi_heartbeat_valid),
+            "rsi_heartbeat_age_s": float(msg.rsi_heartbeat_age_s),
+            "printhead_status_valid": bool(msg.printhead_status_valid),
+            "printhead_status_age_s": float(msg.printhead_status_age_s),
+            "printhead_status": self._printhead_diagnostic(msg.printhead_status),
+            "traj_next_seq": int(msg.traj_next_seq),
+            "traj_backlog": int(msg.traj_backlog),
+            "event_next_seq": int(msg.event_next_seq),
+            "event_pending": int(msg.event_pending),
+            "current_traj_valid": bool(msg.current_traj_valid),
+            "next_traj_valid": bool(msg.next_traj_valid),
+            "current_event_valid": bool(msg.current_event_valid),
+            "next_event_valid": bool(msg.next_event_valid),
+            "current_traj": self._trajectory_diagnostic(msg.current_traj),
+            "next_traj": self._trajectory_diagnostic(msg.next_traj),
+            "current_event": self._event_diagnostic(msg.current_event),
+            "next_event": self._event_diagnostic(msg.next_event),
+            "print_test_busy": bool(self._print_test_busy),
+            "print_test_seen_correction": bool(self._print_test_seen_correction),
+            "print_test_target": list(self._print_test_target) if self._print_test_target is not None else None,
+            "print_test_resin_temp": list(self._print_test_resin_temp) if self._print_test_resin_temp is not None else None,
+        })
         state_str = msg.state or "-"
         state_color = self._STATE_COLORS.get(state_str, "#a0a0a0")
         self._set_value("System State", state_str, state_color)
@@ -2730,6 +2841,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     # ---- Print test ----
 
     def _set_print_test_status(self, text, color=None):
+        self._append_diagnostic("ui", "print_test_status", {"text": str(text), "color": str(color or "")})
         self._test_status.setText(text)
         if color:
             self._test_status.setStyleSheet(f"color: {color};")
@@ -2791,6 +2903,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         self._print_test_params = params
         self._uart_log_history.clear()
+        self._diagnostic_log_history.clear()
+        self._append_diagnostic("ui", "diagnostic_reset", {"reason": "print_test_prepare"})
         self._uart_log_text.clear()
         self._uart_log_latest_display = ""
         self._uart_log_summary.setText("测试日志已清空")
@@ -2812,6 +2926,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_confirm_height.setEnabled(enabled and not self._print_test_busy)
 
     def _on_current_correction(self, msg):
+        self._append_diagnostic("rsi", "current_correction", {
+            "seq": int(getattr(msg, "seq", 0)),
+            "tool_id": int(getattr(msg, "tool_id", 0)),
+            "x": float(msg.x),
+            "y": float(msg.y),
+            "z": float(msg.z),
+            "a": float(msg.a),
+            "b": float(msg.b),
+            "c": float(msg.c),
+            "e": float(getattr(msg, "e", 0.0)),
+        })
         self._print_test_current_correction = (msg.x, msg.y, msg.z, msg.a, msg.b, msg.c)
         self._print_test_seen_correction = True
         self._test_correction_label.setText(
@@ -3265,6 +3390,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _on_rsi_xml(self, xml_text):
         import time, re
+        ipoc_match = re.search(r"<IPOC>([^<]*)</IPOC>", xml_text or "")
+        self._append_diagnostic("rsi", "sent_xml", {
+            "ipoc": ipoc_match.group(1) if ipoc_match else "",
+            "xml": str(xml_text or ""),
+        })
         xml_stripped = re.sub(r'<IPOC>[^<]*</IPOC>', '<IPOC>...</IPOC>', xml_text)
         if xml_stripped == self._rsi_log_last_xml:
             return
@@ -3287,7 +3417,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
         display_text = str(line_text or "")
+        direction = display_text[:2] if display_text.startswith(("RX ", "TX ")) else ""
         payload = display_text[3:].lstrip() if display_text.startswith(("RX ", "TX ")) else display_text
+        self._append_diagnostic("uart", "raw", {
+            "direction": direction,
+            "line": display_text,
+            "payload": payload,
+        })
         if payload.startswith("EWARN"):
             return
         entry = f"[{ts}] {display_text}"
@@ -3297,16 +3433,25 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._uart_log_summary.setText(f"最近日志: {ts}")
         self._uart_log_text.appendPlainText(entry)
 
-    def _on_export_uart_log(self):
+    def _on_export_diagnostic_log(self):
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        out_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test/uart_logs")
+        out_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test/diagnostic_logs")
         os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"uart_log_{stamp}.txt")
-        lines = self._uart_log_history or ["# 当前测试没有收到 UART 日志"]
+        path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl")
+        records = self._diagnostic_log_history or [
+            {
+                "time_epoch": time.time(),
+                "time": self._format_diagnostic_time(time.time()),
+                "source": "ui",
+                "kind": "empty",
+                "detail": {"message": "当前测试没有诊断日志"},
+            }
+        ]
         with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines))
-            f.write("\n")
-        self._set_print_test_status(f"UART 日志已导出: {path}", "#1b6e3c")
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
+                f.write("\n")
+        self._set_print_test_status(f"诊断日志已导出: {path}", "#1b6e3c")
 
     def _show_uart_log_detail(self):
         detail_text = "\n".join(self._uart_log_history) or self._uart_log_latest_display

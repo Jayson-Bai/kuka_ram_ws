@@ -55,10 +55,46 @@ def test_uart_log_export_button_is_standalone_at_right_column_bottom():
 
     print_test_section = src.split('        # ======== Print Test 区域 ========', 1)[1].split('        # ======== Launch Control 区域 ========', 1)[0]
     col2_section = src.split('        # Add all boxes to col2_layout in the desired order', 1)[1].split('        layout.addLayout(col0_layout, 1, 0)', 1)[0]
+    assert 'QtWidgets.QPushButton("导出诊断日志")' in src
+    assert "self._btn_export_uart_log.clicked.connect(self._on_export_diagnostic_log)" in src
     assert 'print_test_layout.addWidget(self._btn_export_uart_log)' not in print_test_section
     assert 'col2_layout.addStretch(1)' in col2_section
     assert 'col2_layout.addWidget(self._btn_export_uart_log)' in col2_section
     assert col2_section.index('col2_layout.addStretch(1)') < col2_section.index('col2_layout.addWidget(self._btn_export_uart_log)')
+
+
+def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
+    src = _source()
+
+    assert "self._diagnostic_log_history = []" in src
+    assert "_DIAGNOSTIC_LOG_LIMIT = 200000" in src
+    assert "def _append_diagnostic(self, source, kind, detail):" in src
+    assert '"time_epoch": epoch' in src
+    assert '"source": str(source)' in src
+    assert '"kind": str(kind)' in src
+    assert "json.dumps(record, ensure_ascii=False, sort_keys=True)" in src
+
+    assert "diagnostic_logs" in src
+    assert "diagnostic_log_" in src
+    assert ".jsonl" in src
+    assert "诊断日志已导出" in src
+
+    uart_section = src.split("    def _on_uart_log(self, line_text):", 1)[1].split("    def _on_export_diagnostic_log", 1)[0]
+    assert 'self._append_diagnostic("uart", "raw"' in uart_section
+    assert 'payload.startswith("EWARN")' in uart_section
+    assert uart_section.index('self._append_diagnostic("uart", "raw"') < uart_section.index('payload.startswith("EWARN")')
+
+    update_ui_section = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split("    def _on_pause", 1)[0]
+    for token in (
+        '"ready_for_motion": bool(msg.ready_for_motion)',
+        '"traj_backlog": int(msg.traj_backlog)',
+        '"event_pending": int(msg.event_pending)',
+        '"printhead_status_valid": bool(msg.printhead_status_valid)',
+        '"rsi_heartbeat_valid": bool(msg.rsi_heartbeat_valid)',
+        '"current_event": self._event_diagnostic(msg.current_event)',
+        '"current_traj": self._trajectory_diagnostic(msg.current_traj)',
+    ):
+        assert token in update_ui_section
 
 
 def test_rsi_and_uart_log_boxes_are_dynamically_resized_while_system_status_is_fixed():
