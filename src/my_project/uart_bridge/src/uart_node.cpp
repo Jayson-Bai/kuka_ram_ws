@@ -411,7 +411,7 @@ private:
         if(!current_event_) return;
         const auto& ev = *current_event_;
         bool done = false;
-        constexpr float TEMP_EPS = 2.0f;
+        constexpr float TEMP_EPS = 5.0f;
         Status snapshot;
         {
             std::lock_guard<std::mutex> sk(status_cache_mutex_);

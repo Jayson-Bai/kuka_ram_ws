@@ -2854,7 +2854,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
             return
         current_temp, _target_temp = self._print_test_resin_temp
-        if current_temp < temp_target - 2.0:
+        if current_temp < temp_target - 5.0:
             self._set_print_test_status(
                 f"树脂温度未到达: 当前 {current_temp:.1f} / 目标 {temp_target:.1f}",
                 "#b42318",
