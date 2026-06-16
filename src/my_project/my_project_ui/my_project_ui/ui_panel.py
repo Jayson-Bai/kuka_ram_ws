@@ -2932,7 +2932,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     chunk_size=5000000,
                     default_feed_mm_s=float(params.get("speed", 10.0)),
                     tool_offset=(0.0, 0.0, 0.0),
-                    enable_extrude_wait=(job_type == "line"),
+                    enable_extrude_wait=True,
                 )
                 self.print_test_rsi_command_submit.emit("RESET")
                 time.sleep(0.05)
