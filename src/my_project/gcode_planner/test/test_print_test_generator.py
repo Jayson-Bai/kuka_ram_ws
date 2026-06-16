@@ -9,7 +9,7 @@ from gcode_planner.print_test_generator import (
     generate_test_line_gcode,
     generate_z_adjust_gcode,
 )
-from gcode_planner.types import ExtrudeWait, MoveCommand, ToolChangeCommand
+from gcode_planner.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
 
 
 def _moves(lines):
@@ -25,8 +25,10 @@ def test_z_adjust_gcode_starts_from_current_rsi_correction_and_uses_resin_tool()
     parsed = parse_gcode_lines(lines)
     moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
     tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    resets = [cmd for cmd in parsed if isinstance(cmd, ResetECommand)]
 
     assert tools == []
+    assert resets == []
     assert moves[0].start_pos.z == 1.5
     assert moves[0].pos.z == 1.6
     assert moves[0].feedrate == 300.0
