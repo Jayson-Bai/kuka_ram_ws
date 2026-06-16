@@ -47,6 +47,7 @@ private:
     rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
     rclcpp::Subscription<std_msgs::msg::String>::SharedPtr manual_cmd_sub_;
+    rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_cmd_sub_;
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr uart_raw_pub_;
     rclcpp::Publisher<PrintHeadStatus>::SharedPtr ready_pub_;
 
@@ -142,6 +143,14 @@ public:
             [this](std_msgs::msg::String::SharedPtr msg){
                 RCLCPP_INFO(get_logger(), "收到手动控制命令: %s", msg->data.c_str());
                 write_line(msg->data);
+            }
+        );
+        //订阅测试模式RESET命令，清理可能遗留的事件等待状态
+        print_test_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+            "/print_test/rsi_command",
+            rclcpp::QoS(10).reliable(),
+            [this](std_msgs::msg::String::SharedPtr msg){
+                on_print_test_command(msg->data);
             }
         );
         //发布UART状态
@@ -482,6 +491,22 @@ private:
                 2000,
                 "写入失败：%s",
                 ec.message().c_str());
+        }
+    }
+
+    void on_print_test_command(const std::string &cmd)
+    {
+        if (cmd == "RESET")
+        {
+            {
+                std::lock_guard<std::mutex> lk(event_mutex_);
+                current_event_.reset();
+                current_event_ack_received_ = false;
+                current_event_done_received_ = false;
+            }
+            set_ready_state(true, 0, "print_test_reset");
+            publish_ready_state("print_test_reset");
+            RCLCPP_INFO(get_logger(), "测试模式RESET：清除UART事件等待状态");
         }
     }
 
