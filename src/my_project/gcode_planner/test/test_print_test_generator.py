@@ -59,6 +59,33 @@ def test_test_line_gcode_uses_fixed_resin_line_width_and_finish_lift():
     assert lift_move.delta_e == 0.0
 
 
+def test_test_line_gcode_adds_prime_and_retract_as_filament_lengths():
+    lines = generate_test_line_gcode(
+        start_pose=(1.0, 2.0, 0.4, 0.0, 0.0, 0.0),
+        layer_height_mm=0.5,
+        speed_mm_s=10.0,
+        line_length_mm=200.0,
+        finish_lift_mm=10.0,
+        prime_length_mm=5.0,
+        retract_length_mm=3.0,
+        prime_speed_mm_s=2.0,
+        retract_speed_mm_s=8.0,
+    )
+
+    parsed = parse_gcode_lines(lines)
+    waits = [cmd for cmd in parsed if isinstance(cmd, ExtrudeWait)]
+    print_move = next(
+        cmd for cmd in parsed if isinstance(cmd, MoveCommand) and cmd.type == "PRINT"
+    )
+
+    assert len(waits) == 2
+    assert math.isclose(waits[0].delta_e, 5.0)
+    assert math.isclose(waits[0].feedrate, 2.0 * 60.0)
+    assert math.isclose(print_move.delta_e, 200.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3)
+    assert math.isclose(waits[1].delta_e, -3.0)
+    assert math.isclose(waits[1].feedrate, 8.0 * 60.0)
+
+
 def test_expand_test_values_accepts_single_value_and_inclusive_range():
     assert expand_test_values("0.5") == [0.5]
     assert expand_test_values("0.5-0.7") == [0.5, 0.6, 0.7]
@@ -146,7 +173,7 @@ def test_test_matrix_gcode_rejects_more_than_45_lines():
         raise AssertionError("expected matrix line limit to be enforced")
 
 
-def test_test_matrix_gcode_adds_prime_and_retract_from_equivalent_lengths():
+def test_test_matrix_gcode_adds_prime_and_retract_as_filament_lengths():
     lines = generate_test_matrix_gcode(
         start_pose=(1.0, 2.0, 0.4, 0.0, 0.0, 0.0),
         layer_heights_mm=[0.5],
@@ -166,10 +193,9 @@ def test_test_matrix_gcode_adds_prime_and_retract_from_equivalent_lengths():
         cmd for cmd in parsed if isinstance(cmd, MoveCommand) and cmd.type == "PRINT"
     )
 
-    e_per_path_mm = 2.0 * 0.5 * EXTRUSION_PER_MM3
     assert len(waits) == 2
-    assert math.isclose(waits[0].delta_e, 5.0 * e_per_path_mm)
+    assert math.isclose(waits[0].delta_e, 5.0)
     assert math.isclose(waits[0].feedrate, 2.0 * 60.0)
-    assert math.isclose(print_move.delta_e, 300.0 * e_per_path_mm)
-    assert math.isclose(waits[1].delta_e, -3.0 * e_per_path_mm)
+    assert math.isclose(print_move.delta_e, 300.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3)
+    assert math.isclose(waits[1].delta_e, -3.0)
     assert math.isclose(waits[1].feedrate, 8.0 * 60.0)

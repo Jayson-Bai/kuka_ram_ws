@@ -134,16 +134,16 @@ def generate_test_line_gcode(
     prime_feed = _feed(prime_speed_mm_s)
     retract_feed = _feed(retract_speed_mm_s)
     e_per_path_mm = DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3
-    prime_e = prime_length * e_per_path_mm
-    retract_e = retract_length * e_per_path_mm
+    prime_e = prime_length
+    retract_e = retract_length
     total_e = line_length * e_per_path_mm
     end_x = x + line_length
     lift_z = z + finish_lift
     lines = _header(start_pose)
     current_e = 0.0
     lines.append(f";HEIGHT:{layer_height:.6f}")
-    lines.append(f";PRIME_LENGTH:{prime_length:.6f}")
-    lines.append(f";RETRACT_LENGTH:{retract_length:.6f}")
+    lines.append(f";PRIME_FILAMENT_LENGTH:{prime_length:.6f}")
+    lines.append(f";RETRACT_FILAMENT_LENGTH:{retract_length:.6f}")
     if prime_e > 0.0:
         current_e += prime_e
         lines.append(
@@ -228,15 +228,15 @@ def generate_test_matrix_gcode(
             e_per_path_mm = (
                 DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3 * scale
             )
-            prime_e = prime_length * e_per_path_mm
-            retract_e = retract_length * e_per_path_mm
+            prime_e = prime_length
+            retract_e = retract_length
             delta_e = line_length * e_per_path_mm
 
             lines.append(f";TEST_LINE:{index + 1}")
             lines.append(f";HEIGHT:{layer_height:.6f}")
             lines.append(f";EXTRUDE_SCALE:{scale:.6f}")
-            lines.append(f";PRIME_LENGTH:{prime_length:.6f}")
-            lines.append(f";RETRACT_LENGTH:{retract_length:.6f}")
+            lines.append(f";PRIME_FILAMENT_LENGTH:{prime_length:.6f}")
+            lines.append(f";RETRACT_FILAMENT_LENGTH:{retract_length:.6f}")
             if previous_lift_z is None:
                 lines.append(
                     f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "

@@ -45,6 +45,7 @@ def main(argv=None):
     parser.add_argument("--tool-offset-x", type=float, default=0.0, help="Tool 1 X offset from Tool 2 (mm)")
     parser.add_argument("--tool-offset-y", type=float, default=0.0, help="Tool 1 Y offset from Tool 2 (mm)")
     parser.add_argument("--tool-offset-z", type=float, default=0.0, help="Tool 1 Z offset from Tool 2 (mm)")
+    parser.add_argument("--resin-z-print-compensation-mm", type=float, default=0.0, help="Resin Z print compensation prepended as a Z travel before formal printing (mm)")
     args = parser.parse_args(argv)
 
     input_dir = args.input_gcode_dir or os.path.join(args.data_root, "input_gcode")
@@ -86,6 +87,8 @@ def main(argv=None):
         plot_layer_xy=args.plot_layer_xy,
         plot_stride=args.plot_stride,
         tool_offset=(args.tool_offset_x, args.tool_offset_y, args.tool_offset_z),
+        enable_extrude_wait=True,
+        resin_z_print_compensation_mm=args.resin_z_print_compensation_mm,
     )
     t3 = time.perf_counter()
     print("[信息] 导出完成: %s (npz, chunk<=5000000)" % output_path)

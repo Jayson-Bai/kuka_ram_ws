@@ -23,6 +23,7 @@ from .types import (
     MCommand,
     ResetECommand,
     ExtrudeWait,
+    Position,
 )
 from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
@@ -74,6 +75,7 @@ def export_npz(
     tool_offset: tuple = (0.0, 0.0, 0.0),
     progress_callback = None,
     enable_extrude_wait: bool = False,
+    resin_z_print_compensation_mm: float = 0.0,
 ) -> dict:
     """
     导出 npz（分片）。
@@ -406,6 +408,7 @@ def export_npz(
             return
 
     current_occ: Optional[int] = None
+    resin_z_compensation_inserted = False
 
     def _move_length(move: MoveCommand) -> float:
         dx = move.pos.x - move.start_pos.x
@@ -777,6 +780,32 @@ def export_npz(
         current_subtype = None
         current_occ = None
 
+    def _append_resin_z_print_compensation(reference: MoveCommand):
+        nonlocal resin_z_compensation_inserted
+        if resin_z_compensation_inserted:
+            return
+        resin_z_compensation_inserted = True
+        compensation = float(resin_z_print_compensation_mm)
+        if abs(compensation) <= 1e-9:
+            return
+        end = reference.start_pos
+        start = Position(end.x, end.y, end.z - compensation, end.a, end.b, end.c)
+        gc = GlobalCurveCommand(
+            type="TRAVEL",
+            cmd="SPLINE",
+            start_pos=start,
+            control_points=[end, end, end],
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=reference.feedrate,
+            line=reference.line,
+            raw="resin_z_print_compensation",
+            constraints=[],
+            original_moves=[],
+        )
+        occ = _ensure_segment(reference.layer, "TRAVEL")
+        _append_sample(gc, reference.layer, "TRAVEL", occ)
+
     def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
         hold_row = last_pose or CsvRow(
@@ -985,6 +1014,7 @@ def export_npz(
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
                 continue
+            _append_resin_z_print_compensation(cmd)
             if current_type is None:
                 current_type = cmd.type
                 current_layer = cmd.layer
@@ -1043,7 +1073,7 @@ def export_npz(
     try:
         offset_file = base_no_ext + ".offset.json"
         with open(offset_file, "w", encoding="utf-8") as f:
-            json.dump({"tool_offset": list(tool_offset)}, f, ensure_ascii=False, indent=2)
+            json.dump({"tool_offset": list(tool_offset), "resin_z_print_compensation_mm": float(resin_z_print_compensation_mm)}, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         print(f"[Warning] Failed to write offset sidecar json: {exc}")
 

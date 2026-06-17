@@ -282,7 +282,7 @@ class _AdaptiveHeightGroupBox(QtWidgets.QGroupBox):
 
 _OFFSET_CONFIG_DIR = os.path.expanduser("~/.config/my_project")
 _OFFSET_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "tool_offset.json")
-_OFFSET_DEFAULTS = {"tool_offset_x": 0.64, "tool_offset_y": -1.29, "tool_offset_z": 0.17}
+_OFFSET_DEFAULTS = {"tool_offset_x": 0.64, "tool_offset_y": -1.29, "tool_offset_z": 0.17, "resin_z_print_compensation_mm": 0.0}
 _NPZ_OFFSET_TOLERANCE_MM = 0.005
 _NPZ_RELATED_LAUNCH_PARAMS = (
     "npz_path",
@@ -316,15 +316,16 @@ def _load_offset_config():
             "tool_offset_x": float(data.get("tool_offset_x", _OFFSET_DEFAULTS["tool_offset_x"])),
             "tool_offset_y": float(data.get("tool_offset_y", _OFFSET_DEFAULTS["tool_offset_y"])),
             "tool_offset_z": float(data.get("tool_offset_z", _OFFSET_DEFAULTS["tool_offset_z"])),
+            "resin_z_print_compensation_mm": float(data.get("resin_z_print_compensation_mm", _OFFSET_DEFAULTS["resin_z_print_compensation_mm"])),
         }
     except Exception:
         return dict(_OFFSET_DEFAULTS)
 
 
-def _save_offset_config(x, y, z):
+def _save_offset_config(x, y, z, resin_z_print_compensation_mm=0.0):
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
     with open(_OFFSET_CONFIG_PATH, "w") as f:
-        json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z}, f, indent=2)
+        json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z, "resin_z_print_compensation_mm": resin_z_print_compensation_mm}, f, indent=2)
 
 
 def _format_tool_offset(offset):
@@ -387,17 +388,24 @@ def _offset_sidecar_candidates(npz_source):
     return candidates
 
 
-def _read_npz_tool_offset(npz_source):
+def _read_npz_export_metadata(npz_source):
     for offset_file in _offset_sidecar_candidates(npz_source):
         if not offset_file.is_file():
             continue
         with open(offset_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         saved_offset = data.get("tool_offset")
-        if not saved_offset or len(saved_offset) != 3:
-            return None, str(offset_file)
-        return tuple(float(v) for v in saved_offset), str(offset_file)
-    return None, None
+        offset = None
+        if saved_offset and len(saved_offset) == 3:
+            offset = tuple(float(v) for v in saved_offset)
+        resin_z = data.get("resin_z_print_compensation_mm")
+        resin_z_value = None if resin_z is None else float(resin_z)
+        return offset, resin_z_value, str(offset_file)
+    return None, None, None
+
+def _read_npz_tool_offset(npz_source):
+    saved_offset, _resin_z, offset_file = _read_npz_export_metadata(npz_source)
+    return saved_offset, offset_file
 
 
 def _format_rsi_xml_for_display(xml_text):
@@ -1546,6 +1554,33 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout = QtWidgets.QVBoxLayout(export_box)
         export_layout.setSpacing(6)
 
+        # Resin Z print compensation
+        resin_z_subtitle = QtWidgets.QLabel("树脂轴 Z 打印补偿")
+        resin_z_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+        export_layout.addWidget(resin_z_subtitle)
+
+        resin_z_desc = QtWidgets.QLabel("正式打印导出时，在轨迹开头插入一段 Z 方向空走补偿；负值表示开始前先向下运动。")
+        resin_z_desc.setObjectName("fieldLabel")
+        resin_z_desc.setWordWrap(True)
+        export_layout.addWidget(resin_z_desc)
+
+        offset_cfg = _load_offset_config()
+        resin_z_row = QtWidgets.QHBoxLayout()
+        resin_z_row.setSpacing(4)
+        resin_z_label = QtWidgets.QLabel("补偿 (mm)")
+        resin_z_label.setObjectName("fieldLabel")
+        self._resin_z_print_comp_spin = QtWidgets.QDoubleSpinBox()
+        self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
+        self._resin_z_print_comp_spin.setDecimals(2)
+        self._resin_z_print_comp_spin.setSingleStep(0.1)
+        self._resin_z_print_comp_spin.setValue(offset_cfg["resin_z_print_compensation_mm"])
+        self._resin_z_print_comp_spin.setMinimumHeight(28)
+        self._resin_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
+        resin_z_row.addWidget(resin_z_label)
+        resin_z_row.addWidget(self._resin_z_print_comp_spin)
+        resin_z_row.addStretch(1)
+        export_layout.addLayout(resin_z_row)
+
         # Subtitle: Tool Offset
         offset_subtitle = QtWidgets.QLabel("工具偏移")
         offset_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
@@ -1560,7 +1595,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_desc.setWordWrap(True)
         export_layout.addWidget(offset_desc)
 
-        offset_cfg = _load_offset_config()
         offset_grid = QtWidgets.QHBoxLayout()
         offset_grid.setSpacing(8)
         self._offset_spins = {}
@@ -1826,9 +1860,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._test_scale_min_input,
                 self._test_scale_max_input,
             )),
-            ("预挤出线长", _value_widget(self._test_prime_length_input, "mm")),
+            ("预挤出耗材长度", _value_widget(self._test_prime_length_input, "mm E")),
             ("预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
-            ("回抽线长", _value_widget(self._test_retract_length_input, "mm")),
+            ("回抽耗材长度", _value_widget(self._test_retract_length_input, "mm E")),
             ("回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
         )):
             lbl = QtWidgets.QLabel(label)
@@ -2876,7 +2910,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if speed <= 0.0:
             raise ValueError("速度必须大于 0。")
         if prime_length < 0.0 or retract_length < 0.0:
-            raise ValueError("预挤出/回抽线长不能为负。")
+            raise ValueError("预挤出/回抽耗材长度不能为负。")
         if prime_speed <= 0.0 or retract_speed <= 0.0:
             raise ValueError("预挤出/回抽速度必须大于 0。")
         if line_count > TEST_MATRIX_MAX_LINES:
@@ -3077,9 +3111,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
         x = self._offset_spins["X"].value()
         y = self._offset_spins["Y"].value()
         z = self._offset_spins["Z"].value()
+        resin_z = self.current_resin_z_print_compensation()
         try:
-            _save_offset_config(x, y, z)
-            self._offset_status.setText(f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}")
+            _save_offset_config(x, y, z, resin_z)
+            self._offset_status.setText(f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}  树脂Z补偿={resin_z:.2f}")
             self._offset_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
             self._offset_status.setText(f"保存失败: {exc}")
@@ -3091,6 +3126,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._offset_spins["Y"].value(),
             self._offset_spins["Z"].value(),
         )
+
+    def current_resin_z_print_compensation(self):
+        return self._resin_z_print_comp_spin.value()
 
     # ---- GCode Export ----
 
@@ -3194,6 +3232,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     split_by_layer_type=params["split_by_layer_type"],
                     plot_layer_xy=params["plot_layer_xy"],
                     plot_stride=params["plot_stride"],
+                    enable_extrude_wait=True,
+                    resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
                 )
                 rows = stats.get("rows", 0)
                 parts = stats.get("parts", 0)
@@ -3260,8 +3300,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 changed.append((name, current, default))
         return changed
 
-    def _npz_dir_selection_warnings(self, saved_offset):
+    def _npz_dir_selection_warnings(self, saved_offset, saved_resin_z_print_compensation):
         current_offset = self.get_tool_offset()
+        current_resin_z = self.current_resin_z_print_compensation()
         warnings = []
 
         if saved_offset is None:
@@ -3274,6 +3315,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             if mismatch:
                 warnings.append("NPZ 中的工具偏移与当前界面设置不一致。")
 
+        if saved_resin_z_print_compensation is None:
+            warnings.append("未找到或无法读取树脂轴 Z 打印补偿，无法确认该 NPZ 是否使用了当前界面补偿值。")
+        elif abs(saved_resin_z_print_compensation - current_resin_z) > _NPZ_OFFSET_TOLERANCE_MM:
+            warnings.append("NPZ 中的树脂轴 Z 打印补偿与当前界面设置不一致。")
+
         changed_launch_params = self._changed_npz_related_launch_params()
         if changed_launch_params:
             details = ", ".join(
@@ -3284,12 +3330,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         return warnings
 
-    def _confirm_npz_dir_selection(self, npz_dir, launch_path, saved_offset, offset_file, warnings):
+    def _confirm_npz_dir_selection(self, npz_dir, launch_path, saved_offset, saved_resin_z_print_compensation, offset_file, warnings):
         current_offset = self.get_tool_offset()
+        current_resin_z = self.current_resin_z_print_compensation()
         detail = [
             f"NPZ 文件夹: {npz_dir}",
             f"启动将使用: {launch_path}",
             f"当前界面工具偏移: {_format_tool_offset(current_offset)}",
+            f"当前界面树脂轴 Z 打印补偿: {current_resin_z:.2f} mm",
         ]
 
         if saved_offset is None:
@@ -3298,6 +3346,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             detail.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
             if offset_file:
                 detail.append(f"偏移文件: {offset_file}")
+
+        if saved_resin_z_print_compensation is None:
+            detail.append("NPZ 保存的树脂轴 Z 打印补偿: 未知")
+        else:
+            detail.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
 
         detail.append("")
         detail.append("检测到以下相关参数变化/风险:")
@@ -3334,15 +3387,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
 
         try:
-            saved_offset, offset_file = _read_npz_tool_offset(launch_path)
+            saved_offset, saved_resin_z_print_compensation, offset_file = _read_npz_export_metadata(launch_path)
         except Exception as exc:
-            saved_offset, offset_file = None, None
+            saved_offset, saved_resin_z_print_compensation, offset_file = None, None, None
             self._export_status.setText(f"读取 NPZ 偏移信息失败: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
 
-        warnings = self._npz_dir_selection_warnings(saved_offset)
+        warnings = self._npz_dir_selection_warnings(saved_offset, saved_resin_z_print_compensation)
         if warnings and not self._confirm_npz_dir_selection(
-            npz_dir, launch_path, saved_offset, offset_file, warnings
+            npz_dir, launch_path, saved_offset, saved_resin_z_print_compensation, offset_file, warnings
         ):
             return
 
@@ -3679,51 +3732,61 @@ class MyProjectUiPlugin(Plugin):
 
     def _check_npz_and_offset_match(self, npz_launch_path):
         if not npz_launch_path:
-            return False, "missing", None, None
+            return False, "missing", None, None, None
 
         p = Path(npz_launch_path)
         is_manifest = p.name.endswith("_manifest.json")
         if is_manifest and not p.is_file():
-            return False, "missing", None, None
+            return False, "missing", None, None, None
         if p.suffix == ".npz" and not p.is_file():
             part_probe = p.with_name(p.stem + "_part0000.npz")
             if not part_probe.is_file():
-                return False, "missing", None, None
+                return False, "missing", None, None, None
 
         try:
-            saved_offset, offset_file = _read_npz_tool_offset(npz_launch_path)
+            saved_offset, saved_resin_z_print_compensation, offset_file = _read_npz_export_metadata(npz_launch_path)
         except Exception:
-            return False, "mismatch", None, None
+            return False, "mismatch", None, None, None
 
         if saved_offset is None:
-            return False, "no_offset", None, offset_file
+            return False, "no_offset", None, saved_resin_z_print_compensation, offset_file
 
         cur_offset = self._widget.get_tool_offset()
         for val_saved, val_cur in zip(saved_offset, cur_offset):
             if abs(val_saved - val_cur) > _NPZ_OFFSET_TOLERANCE_MM:
-                return False, "mismatch", saved_offset, offset_file
+                return False, "mismatch", saved_offset, saved_resin_z_print_compensation, offset_file
 
-        return True, "ok", saved_offset, offset_file
+        cur_resin_z = self._widget.current_resin_z_print_compensation()
+        if saved_resin_z_print_compensation is None:
+            return False, "no_offset", saved_offset, saved_resin_z_print_compensation, offset_file
+        if abs(saved_resin_z_print_compensation - cur_resin_z) > _NPZ_OFFSET_TOLERANCE_MM:
+            return False, "mismatch", saved_offset, saved_resin_z_print_compensation, offset_file
 
-    def _launch_npz_notice(self, npz_launch_path, source, saved_offset, offset_file, status):
+        return True, "ok", saved_offset, saved_resin_z_print_compensation, offset_file
+
+    def _launch_npz_notice(self, npz_launch_path, source, saved_offset, saved_resin_z_print_compensation, offset_file, status):
         cur_offset = self._widget.get_tool_offset()
+        cur_resin_z = self._widget.current_resin_z_print_compensation()
         source_text = "手动选择的 NPZ 文件夹" if source == "selected" else "按 GCode 自动匹配的 NPZ"
         lines = [
             f"NPZ 来源: {source_text}",
             f"启动 npz_path: {npz_launch_path}",
             f"当前界面工具偏移: {_format_tool_offset(cur_offset)}",
+            f"当前界面树脂轴 Z 打印补偿: {cur_resin_z:.2f} mm",
         ]
         if saved_offset is not None:
             lines.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+        if saved_resin_z_print_compensation is not None:
+            lines.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
         if offset_file:
             lines.append(f"偏移文件: {offset_file}")
 
         if status == "ok":
-            lines.append("工具偏移校验通过。")
+            lines.append("工具偏移和树脂轴 Z 打印补偿校验通过。")
         elif status == "no_offset":
-            lines.append("警告: 未找到或无法读取工具偏移 sidecar，无法确认偏移是否一致。")
+            lines.append("警告: 未找到或无法读取工具偏移或树脂轴 Z 打印补偿 sidecar，无法确认参数是否一致。")
         elif status == "mismatch":
-            lines.append("警告: NPZ 中的工具偏移与当前界面设置不一致。")
+            lines.append("警告: NPZ 中的工具偏移或树脂轴 Z 打印补偿与当前界面设置不一致。")
 
         related_values = []
         for name in _NPZ_RELATED_LAUNCH_PARAMS:
@@ -3775,7 +3838,7 @@ class MyProjectUiPlugin(Plugin):
             )
             return
 
-        ok, status, saved_offset, offset_file = self._check_npz_and_offset_match(npz_launch_path)
+        ok, status, saved_offset, saved_resin_z_print_compensation, offset_file = self._check_npz_and_offset_match(npz_launch_path)
         if status == "missing":
             _show_warning(
                 self._widget,
@@ -3793,7 +3856,7 @@ class MyProjectUiPlugin(Plugin):
         reply = _ask_yes_no(
             self._widget,
             title,
-            self._launch_npz_notice(npz_launch_path, source, saved_offset, offset_file, status),
+            self._launch_npz_notice(npz_launch_path, source, saved_offset, saved_resin_z_print_compensation, offset_file, status),
             default_button,
         )
         if reply != QtWidgets.QMessageBox.Yes:
