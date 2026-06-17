@@ -337,14 +337,6 @@ def _resolve_npz_launch_path_from_dir(npz_dir):
     if not root.is_dir():
         return None
 
-    manifests = sorted(root.glob("*_manifest.json"))
-    if manifests:
-        return str(manifests[0])
-
-    manifests = sorted(root.rglob("*_manifest.json"))
-    if manifests:
-        return str(manifests[0])
-
     single_files = sorted(
         p for p in root.glob("*.npz")
         if not re.search(r"_part\d+$", p.stem)
@@ -1690,7 +1682,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("max_fit_points_per_segment", "20000", "每段最大拟合点数"),
             ("export_sleep_ms", "0", "导出节流休眠（ms）"),
             ("export_yield_every", "0", "导出 yield 间隔"),
-            ("split_by_layer_type", "true", "按层+类型拆分 NPZ"),
+            ("split_by_layer_type", "false", "按层+类型拆分 NPZ"),
             ("plot_layer_xy", "true", "每层生成 XY 路径图"),
             ("plot_stride", "5", "绘图采样步长"),
         ]
@@ -3274,7 +3266,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             if npz_path:
                 self._last_npz_dir = os.path.splitext(npz_path)[0]
                 self._selected_npz_dir = self._last_npz_dir
-                self._selected_npz_launch_path = _resolve_npz_launch_path_from_dir(self._last_npz_dir)
+                self._selected_npz_launch_path = npz_path if not params["split_by_layer_type"] else None
                 self._selected_npz_dir_input.setText(self._last_npz_dir)
                 self._btn_view_layers.setEnabled(True)
         else:
@@ -3291,7 +3283,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _npz_launch_relation_text(self):
         return (
-            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 manifest/npz 传给它。\n"
+            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 flat NPZ 或 _part 分片入口传给它。\n"
             "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 只影响加载、预取和队列阈值，"
             "不会改变 NPZ 文件内容。"
         )
@@ -3390,7 +3382,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             _show_warning(
                 self,
                 "NPZ 文件夹无效",
-                "所选文件夹中未找到 *_manifest.json 或可识别的 .npz 文件。",
+                "所选文件夹中未找到可用于正式打印的 flat NPZ 或 _part 分片。",
             )
             return
 

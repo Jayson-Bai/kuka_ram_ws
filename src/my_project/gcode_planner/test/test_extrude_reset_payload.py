@@ -148,3 +148,37 @@ def test_export_npz_prepends_resin_z_print_compensation_and_records_sidecar(tmp_
 
     sidecar = json.loads(out.with_suffix(".offset.json").read_text(encoding="utf-8"))
     assert sidecar["resin_z_print_compensation_mm"] == -2.0
+
+
+def test_flat_export_can_generate_layer_preview_images_without_manifest(tmp_path):
+    out = tmp_path / "flat_preview.npz"
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=1,
+            layer=1,
+            subtype="Perimeter",
+            raw="G1 X10 E1",
+            is_pure_state_change=False,
+        ),
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=0.1,
+        default_feed_mm_s=10.0,
+        split_by_layer_type=False,
+        plot_layer_xy=True,
+        plot_stride=1,
+    )
+
+    assert out.exists()
+    assert not (tmp_path / "flat_preview" / "flat_preview_manifest.json").exists()
+    assert (tmp_path / "flat_preview" / "layer_previews" / "layer_0001.png").exists()
