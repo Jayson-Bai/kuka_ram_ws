@@ -786,7 +786,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return widget.mapTo(self._mode_content_page, QtCore.QPoint(0, 0)).y()
 
         target_top = _top_in_content(self._uart_log_box)
-        target_bottom = self._mode_content_page.height() - margins.bottom() - 1
+        viewport = self._content_scroll.viewport() if hasattr(self, '_content_scroll') else self._mode_content_page
+        target_bottom = viewport.height() - margins.bottom() - 1
 
         log_h = max(_LOG_BOX_MIN_HEIGHT, target_bottom - target_top + 1)
 
@@ -866,7 +867,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         else:
             self._title_label.setText("正式打印")
             self._launch_box.setTitle("启动")
-        self._mode_stack.setCurrentWidget(self._mode_content_page)
+        self._mode_stack.setCurrentWidget(self._content_scroll)
 
     def _show_mode_select(self):
         self._active_mode = _MODE_PAGE_SELECT
@@ -884,8 +885,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         root_layout.addWidget(self._mode_stack)
         self._mode_select_page = self._build_mode_select_page()
         self._mode_content_page = QtWidgets.QWidget()
+
+        self._content_scroll = QtWidgets.QScrollArea()
+        self._content_scroll.setWidgetResizable(True)
+        self._content_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self._content_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self._content_scroll.setWidget(self._mode_content_page)
+
         self._mode_stack.addWidget(self._mode_select_page)
-        self._mode_stack.addWidget(self._mode_content_page)
+        self._mode_stack.addWidget(self._content_scroll)
 
         layout = QtWidgets.QGridLayout(self._mode_content_page)
         self._content_layout = layout

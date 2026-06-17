@@ -29,7 +29,8 @@ def test_left_column_keeps_system_status_first_and_logs_stretch_to_shared_bottom
     dynamic_align = src.split("    def _dynamic_align(self):", 1)[1].split("    def _build_mode_select_page", 1)[0]
     assert "self._align_timer" in src
     assert "target_top = _top_in_content(self._uart_log_box)" in dynamic_align
-    assert "target_bottom = self._mode_content_page.height() - margins.bottom() - 1" in dynamic_align
+    assert "target_bottom = viewport.height() - margins.bottom() - 1" in dynamic_align
+    assert "self._content_scroll.viewport()" in dynamic_align
     assert "system_h = target_top - system_top - fixed_between - spacing_h" not in dynamic_align
     assert "_set_box_target_height(self._system_box" not in dynamic_align
     assert "log_h = max(_LOG_BOX_MIN_HEIGHT, target_bottom - target_top + 1)" in dynamic_align
