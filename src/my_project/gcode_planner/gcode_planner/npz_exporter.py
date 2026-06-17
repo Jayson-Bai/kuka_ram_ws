@@ -124,6 +124,7 @@ def export_npz(
     current_subtype: Optional[str] = None
     last_pose: Optional[CsvRow] = None
     last_feedrate_mm_min: Optional[float] = None
+    resin_z_offset: float = 0.0
 
     # 预先定义 vocab，确保分片一致
     import numpy as np
@@ -408,7 +409,8 @@ def export_npz(
             return
 
     current_occ: Optional[int] = None
-    resin_z_compensation_inserted = False
+    resin_z_compensation_fired = False
+    resin_z_compensation_appended = False
 
     def _move_length(move: MoveCommand) -> float:
         dx = move.pos.x - move.start_pos.x
@@ -781,29 +783,34 @@ def export_npz(
         current_occ = None
 
     def _append_resin_z_print_compensation(reference: MoveCommand):
-        nonlocal resin_z_compensation_inserted
-        if resin_z_compensation_inserted:
+        nonlocal resin_z_compensation_appended
+        if resin_z_compensation_appended:
             return
-        resin_z_compensation_inserted = True
-        compensation = float(resin_z_print_compensation_mm)
-        if abs(compensation) <= 1e-9:
+        resin_z_compensation_appended = True
+        if abs(resin_z_print_compensation_mm) <= 1e-9:
             return
-        end = reference.start_pos
-        start = Position(end.x, end.y, end.z - compensation, end.a, end.b, end.c)
+        base = last_pose
+        if base is None:
+            base = CsvRow(seq=0, x=0.0, y=0.0, z=0.0, a=0.0, b=0.0, c=0.0,
+                          e=0.0, tool_id=0, move_type="TRAVEL", src_line="0",
+                          event_flag=0, event_type="", payload="", trigger_seq=None)
+        start_p = Position(base.x, base.y, base.z, base.a, base.b, base.c)
+        end_p = Position(base.x, base.y, base.z + resin_z_print_compensation_mm,
+                         base.a, base.b, base.c)
+        occ = _ensure_segment(reference.layer, "TRAVEL")
         gc = GlobalCurveCommand(
             type="TRAVEL",
             cmd="SPLINE",
-            start_pos=start,
-            control_points=[end, end, end],
+            start_pos=start_p,
+            control_points=[end_p, end_p, end_p],
             e_val=0.0,
             delta_e=0.0,
-            feedrate=reference.feedrate,
+            feedrate=600.0,
             line=reference.line,
             raw="resin_z_print_compensation",
             constraints=[],
             original_moves=[],
         )
-        occ = _ensure_segment(reference.layer, "TRAVEL")
         _append_sample(gc, reference.layer, "TRAVEL", occ)
 
     def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
@@ -903,9 +910,20 @@ def export_npz(
     for idx, cmd in enumerate(parsed_commands):
         if progress_callback and total_cmds > 0 and idx % 200 == 0:
             progress_callback(idx / total_cmds)
+
+        # ---- 树脂 Z 打印补偿：在第一个 MoveCommand 之前设置偏置，使 offset 段对本 cmd 生效 ----
+        if not resin_z_compensation_fired and isinstance(cmd, MoveCommand) and not cmd.is_pure_state_change:
+            if abs(resin_z_print_compensation_mm) > 1e-9:
+                resin_z_compensation_fired = True
+                resin_z_offset = resin_z_print_compensation_mm
+
         # ---- 偏置补偿：对 Tool 1 的所有轨迹应用坐标偏置 ----
+        ox = oy = oz = 0.0
         if current_tool == 1 and (abs(tool_offset[0]) > 1e-9 or abs(tool_offset[1]) > 1e-9 or abs(tool_offset[2]) > 1e-9):
             ox, oy, oz = tool_offset
+        if abs(resin_z_offset) > 1e-9:
+            oz += resin_z_offset
+        if abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9:
             from .types import Position as _Pos
             if isinstance(cmd, MoveCommand):
                 cmd.start_pos = _Pos(cmd.start_pos.x + ox, cmd.start_pos.y + oy, cmd.start_pos.z + oz,
@@ -1015,6 +1033,10 @@ def export_npz(
             if cmd.is_pure_state_change:
                 continue
             _append_resin_z_print_compensation(cmd)
+            if resin_z_compensation_appended and current_type is None and last_pose is not None:
+                from .types import Position as _Pos
+                cmd.start_pos = _Pos(last_pose.x, last_pose.y, last_pose.z,
+                                     last_pose.a, last_pose.b, last_pose.c)
             if current_type is None:
                 current_type = cmd.type
                 current_layer = cmd.layer

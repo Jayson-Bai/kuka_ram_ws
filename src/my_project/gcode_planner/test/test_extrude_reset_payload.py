@@ -131,11 +131,12 @@ def test_export_npz_prepends_resin_z_print_compensation_and_records_sidecar(tmp_
 
     data = np.load(out)
     assert data["move_type"][0] == 0
-    assert np.isclose(data["x"][0], 10.0)
-    assert np.isclose(data["y"][0], 20.0)
-    assert np.isclose(data["z"][0], 7.0)
+    assert np.isclose(data["x"][0], 0.0)
+    assert np.isclose(data["y"][0], 0.0)
+    assert np.isclose(data["z"][0], 0.0)
     before_extrude = data["e"] <= 1e-9
-    assert np.any(np.isclose(data["z"][before_extrude], 5.0, atol=1e-4))
+    assert np.any(np.isclose(data["z"][before_extrude], -2.0, atol=1e-4))
+    assert np.any(np.isclose(data["z"][before_extrude], 3.0, atol=1e-4))
 
 
     sidecar = json.loads(out.with_suffix(".offset.json").read_text(encoding="utf-8"))
