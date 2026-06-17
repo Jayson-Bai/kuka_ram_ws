@@ -252,6 +252,9 @@ def export_npz(
     occ_counters = {}
     finalized_keys = set()
     plotted_layers = set()
+    flat_preview_points = {}
+    flat_preview_counts = {}
+    flat_preview_stride = max(1, int(plot_stride))
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
         if not split_by_layer_type:
@@ -351,6 +354,19 @@ def export_npz(
         if processed_rows % export_yield_every == 0:
             time.sleep(export_sleep_ms / 1000.0)
 
+    def _record_flat_preview_point(layer: int, row: CsvRow):
+        if split_by_layer_type or not plot_layer_xy:
+            return
+        if row.move_type not in ("PRINT", "PRINT_FIT"):
+            return
+        count = flat_preview_counts.get(layer, 0)
+        flat_preview_counts[layer] = count + 1
+        if count % flat_preview_stride != 0:
+            return
+        xs, ys = flat_preview_points.setdefault(layer, ([], []))
+        xs.append(row.x)
+        ys.append(row.y)
+
     def _append_sample(gc: GlobalCurveCommand, layer: int, subtype: str, occ: int):
         nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map, last_pose
         t0 = time.perf_counter()
@@ -394,6 +410,7 @@ def export_npz(
                 trigger_seq=None,
             )
             _writer_for(layer, subtype, occ).add(row)
+            _record_flat_preview_point(layer, row)
             processed_rows += 1
             _maybe_yield()
             seq += 1
@@ -1071,6 +1088,11 @@ def export_npz(
         for key in list(writers.keys()):
             _finalize_writer(key)
 
+    if plot_layer_xy and not split_by_layer_type and flat_preview_points:
+        t0_plot = time.perf_counter()
+        _plot_flat_layer_previews(flat_preview_points, base_root)
+        timings["plot_s"] += time.perf_counter() - t0_plot
+
     if split_by_layer_type and manifest:
         t0 = time.perf_counter()
         manifest_path = os.path.join(base_root, f"{base_name}_manifest.json")
@@ -1098,6 +1120,34 @@ def export_npz(
     timings["rows"] = processed_rows
     timings["total_s"] = time.perf_counter() - t_total_start
     return timings
+
+
+def _plot_flat_layer_previews(layer_points: dict, base_root: str) -> None:
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+    except Exception:
+        return
+
+    from pathlib import Path
+
+    out_dir = Path(base_root) / "layer_previews"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for layer, points in sorted(layer_points.items()):
+        xs, ys = points
+        if not xs:
+            continue
+        layer_num = int(layer)
+        fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+        ax.plot(xs, ys, linewidth=0.8, color="#2b2b2b")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel("X (mm)")
+        ax.set_ylabel("Y (mm)")
+        ax.set_title(f"Layer {layer_num:04d} XY Path")
+        ax.grid(True, linewidth=0.3, alpha=0.5)
+        fig.savefig(str(out_dir / f"layer_{layer_num:04d}.png"), bbox_inches="tight")
+        plt.close(fig)
 
 
 def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:

@@ -50,6 +50,33 @@ def test_test_mode_launch_can_bootstrap_without_selected_npz():
     assert '_LAUNCH_DEFAULTS["npz_path"]' not in src
 
 
+def test_formal_print_prefers_flat_npz_over_manifest():
+    src = _source()
+
+    resolver = src.split("def _resolve_npz_launch_path_from_dir", 1)[1].split(
+        "def _offset_sidecar_candidates", 1
+    )[0]
+    assert 'root.glob("*.npz")' in resolver
+    assert 'root.glob("*_part*.npz")' in resolver
+    assert "manifest" not in resolver.lower()
+
+    auto_path = src.split("    def _auto_npz_launch_path", 1)[1].split(
+        "    def _current_npz_launch_path", 1
+    )[0]
+    assert "npz_file = os.path.join(data_root, base + \".npz\")" in auto_path
+    assert "npz_part = os.path.join(data_root, base + \"_part0000.npz\")" in auto_path
+    assert "_resolve_npz_launch_path_from_dir(npz_dir)" in auto_path
+    assert "manifest" not in auto_path.lower()
+
+
+def test_split_export_is_not_enabled_by_default_for_formal_print():
+    src = _source()
+
+    planner_params = src.split("_PLANNER_PARAMS = [", 1)[1].split("]", 1)[0]
+    assert '("split_by_layer_type", "false", "按层+类型拆分 NPZ")' in planner_params
+    assert '("plot_layer_xy", "true", "每层生成 XY 路径图")' in planner_params
+
+
 def test_stop_paths_send_current_tool_heat_off_before_shutdown():
     src = _source()
 
