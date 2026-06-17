@@ -1,7 +1,7 @@
 import numpy as np
 
 from gcode_planner.npz_exporter import export_npz
-from gcode_planner.types import ExtrudeWait, MoveCommand, Position, ResetECommand
+from gcode_planner.types import ExtrudeWait, MoveCommand, Position, ResetECommand, ToolChangeCommand
 
 
 def test_extrude_reset_payload_uses_current_tool_id(tmp_path):
@@ -91,6 +91,13 @@ def test_export_npz_prepends_resin_z_print_compensation_and_records_sidecar(tmp_
 
     out = tmp_path / "z_comp.npz"
     parsed = [
+        ToolChangeCommand(
+            type="TOOL_CHANGE",
+            tool=1,
+            line=0,
+            layer=0,
+            subtype="TRAVEL",
+        ),
         MoveCommand(
             type="TRAVEL",
             cmd="G0",

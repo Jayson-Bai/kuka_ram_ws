@@ -409,7 +409,6 @@ def export_npz(
             return
 
     current_occ: Optional[int] = None
-    resin_z_compensation_fired = False
     resin_z_compensation_appended = False
 
     def _move_length(move: MoveCommand) -> float:
@@ -782,8 +781,8 @@ def export_npz(
         current_subtype = None
         current_occ = None
 
-    def _append_resin_z_print_compensation(reference: MoveCommand):
-        nonlocal resin_z_compensation_appended
+    def _append_resin_z_print_compensation(layer: int, line: int):
+        nonlocal resin_z_compensation_appended, resin_z_offset
         if resin_z_compensation_appended:
             return
         resin_z_compensation_appended = True
@@ -797,7 +796,7 @@ def export_npz(
         start_p = Position(base.x, base.y, base.z, base.a, base.b, base.c)
         end_p = Position(base.x, base.y, base.z + resin_z_print_compensation_mm,
                          base.a, base.b, base.c)
-        occ = _ensure_segment(reference.layer, "TRAVEL")
+        occ = _ensure_segment(layer, "TRAVEL")
         gc = GlobalCurveCommand(
             type="TRAVEL",
             cmd="SPLINE",
@@ -806,12 +805,13 @@ def export_npz(
             e_val=0.0,
             delta_e=0.0,
             feedrate=600.0,
-            line=reference.line,
+            line=line,
             raw="resin_z_print_compensation",
             constraints=[],
             original_moves=[],
         )
-        _append_sample(gc, reference.layer, "TRAVEL", occ)
+        _append_sample(gc, layer, "TRAVEL", occ)
+        resin_z_offset = resin_z_print_compensation_mm
 
     def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
@@ -907,15 +907,14 @@ def export_npz(
         last_pose = hold_row
 
     total_cmds = len(parsed_commands)
+
+    # ---- 树脂 Z 打印补偿：在循环开始前就执行，后续所有 GCode 统一偏置 ----
+    _append_resin_z_print_compensation(0, 0)
+    # ---- 补偿结束 ----
+
     for idx, cmd in enumerate(parsed_commands):
         if progress_callback and total_cmds > 0 and idx % 200 == 0:
             progress_callback(idx / total_cmds)
-
-        # ---- 树脂 Z 打印补偿：在第一个 MoveCommand 之前设置偏置，使 offset 段对本 cmd 生效 ----
-        if not resin_z_compensation_fired and isinstance(cmd, MoveCommand) and not cmd.is_pure_state_change:
-            if abs(resin_z_print_compensation_mm) > 1e-9:
-                resin_z_compensation_fired = True
-                resin_z_offset = resin_z_print_compensation_mm
 
         # ---- 偏置补偿：对 Tool 1 的所有轨迹应用坐标偏置 ----
         ox = oy = oz = 0.0
@@ -954,49 +953,47 @@ def export_npz(
                 if occ == 0:
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
 
-                # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
-                ox, oy, oz = tool_offset
-                has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
-                if has_offset:
-                    last_row = last_pose
-                    if last_row is not None:
-                        from .types import Position as _Pos
-                        if mapped_tool == 1:
-                            # 切到 CF (Tool 1): 正向补偿
-                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                           last_row.a, last_row.b, last_row.c)
-                            end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
-                                         last_row.a, last_row.b, last_row.c)
-                        else:
-                            # 切到 Resin (Tool 2): 反向补偿
-                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                           last_row.a, last_row.b, last_row.c)
-                            end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
-                                         last_row.a, last_row.b, last_row.c)
-                        # 构造 fallback_linear GlobalCurveCommand（走标准七阶 S 曲线插值）
-                        offset_gc = GlobalCurveCommand(
-                            type="TRAVEL",
-                            cmd="SPLINE",
-                            start_pos=start_p,
-                            control_points=[end_p, end_p, end_p],
-                            e_val=last_row.e,
-                            delta_e=0.0,
-                            feedrate=default_feed_mm_s * 60.0,
-                            line=cmd.line,
-                            raw="fallback_linear",
-                            constraints=[],
-                            original_moves=[],
-                        )
-                        _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
-                # ---- 偏置补偿结束 ----
+                if mapped_tool != current_tool:
+                    # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
+                    ox, oy, oz = tool_offset
+                    has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
+                    if has_offset:
+                        last_row = last_pose
+                        if last_row is not None:
+                            from .types import Position as _Pos
+                            if mapped_tool == 1:
+                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                               last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
+                                             last_row.a, last_row.b, last_row.c)
+                            else:
+                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                               last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
+                                             last_row.a, last_row.b, last_row.c)
+                            offset_gc = GlobalCurveCommand(
+                                type="TRAVEL",
+                                cmd="SPLINE",
+                                start_pos=start_p,
+                                control_points=[end_p, end_p, end_p],
+                                e_val=last_row.e,
+                                delta_e=0.0,
+                                feedrate=default_feed_mm_s * 60.0,
+                                line=cmd.line,
+                                raw="fallback_linear",
+                                constraints=[],
+                                original_moves=[],
+                            )
+                            _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
+                    # ---- 偏置补偿结束 ----
 
-                current_tool = mapped_tool
-                _emit_event(_PendingEvent(
-                    event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
-                    payload=str(mapped_tool),
-                    src_line=cmd.line,
-                    tool_id=mapped_tool,
-                ), cmd.layer, cmd.subtype, occ)
+                    current_tool = mapped_tool
+                    _emit_event(_PendingEvent(
+                        event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
+                        payload=str(mapped_tool),
+                        src_line=cmd.line,
+                        tool_id=mapped_tool,
+                    ), cmd.layer, cmd.subtype, occ)
             elif isinstance(cmd, ResetECommand):
                 occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
                 if occ == 0:
@@ -1032,7 +1029,6 @@ def export_npz(
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
                 continue
-            _append_resin_z_print_compensation(cmd)
             if resin_z_compensation_appended and current_type is None and last_pose is not None:
                 from .types import Position as _Pos
                 cmd.start_pos = _Pos(last_pose.x, last_pose.y, last_pose.z,
