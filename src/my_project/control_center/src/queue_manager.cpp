@@ -3,22 +3,26 @@
 #include <algorithm>
 #include <cstdlib>
 
-namespace control_center {
+namespace control_center
+{
 
 QueueManager::QueueManager(size_t low_water, size_t high_water)
-    : low_water_(low_water), high_water_(high_water) {}
+: low_water_(low_water), high_water_(high_water) {}
 
-void QueueManager::set_watermarks(size_t low_water, size_t high_water) {
+void QueueManager::set_watermarks(size_t low_water, size_t high_water)
+{
   low_water_ = low_water;
   high_water_ = high_water;
 }
 
-void QueueManager::clear() {
+void QueueManager::clear()
+{
   traj_queue_.clear();
   event_queue_.clear();
 }
 
-void QueueManager::fill(NpzLoader& loader) {
+void QueueManager::fill(NpzLoader & loader)
+{
   if (!loader.ok()) {
     return;
   }
@@ -34,13 +38,13 @@ void QueueManager::fill(NpzLoader& loader) {
 
     if (row.event_flag == 1) {
       my_project_interfaces::msg::PlannedEvent ev;
-      ev.event_type = loader.event_type_vocab().count(row.event_type)
-                          ? loader.event_type_vocab().at(row.event_type)
-                          : "unknown";
+      ev.event_type = loader.event_type_vocab().count(row.event_type) ?
+        loader.event_type_vocab().at(row.event_type) :
+        "unknown";
       ev.payload = row.payload;
       ev.event_src_line = parse_src_line(row.src_line);
-      ev.trigger_seq = row.trigger_seq >= 0 ? static_cast<uint32_t>(row.trigger_seq)
-                                            : row.seq;
+      ev.trigger_seq = row.trigger_seq >= 0 ? static_cast<uint32_t>(row.trigger_seq) :
+        row.seq;
       event_queue_.push_back(ev);
       continue;
     }
@@ -59,7 +63,8 @@ void QueueManager::fill(NpzLoader& loader) {
   }
 }
 
-bool QueueManager::pop_next_traj(my_project_interfaces::msg::TrajectoryPoint& out) {
+bool QueueManager::pop_next_traj(my_project_interfaces::msg::TrajectoryPoint & out)
+{
   if (traj_queue_.empty()) {
     return false;
   }
@@ -68,7 +73,8 @@ bool QueueManager::pop_next_traj(my_project_interfaces::msg::TrajectoryPoint& ou
   return true;
 }
 
-bool QueueManager::pop_next_event(my_project_interfaces::msg::PlannedEvent& out) {
+bool QueueManager::pop_next_event(my_project_interfaces::msg::PlannedEvent & out)
+{
   if (event_queue_.empty()) {
     return false;
   }
@@ -77,7 +83,8 @@ bool QueueManager::pop_next_event(my_project_interfaces::msg::PlannedEvent& out)
   return true;
 }
 
-bool QueueManager::peek_next_traj_seq(uint32_t& out) const {
+bool QueueManager::peek_next_traj_seq(uint32_t & out) const
+{
   if (traj_queue_.empty()) {
     return false;
   }
@@ -85,7 +92,8 @@ bool QueueManager::peek_next_traj_seq(uint32_t& out) const {
   return true;
 }
 
-bool QueueManager::peek_next_event_trigger(uint32_t& out) const {
+bool QueueManager::peek_next_event_trigger(uint32_t & out) const
+{
   if (event_queue_.empty()) {
     return false;
   }
@@ -93,19 +101,21 @@ bool QueueManager::peek_next_event_trigger(uint32_t& out) const {
   return true;
 }
 
-bool QueueManager::should_enter_wait(uint32_t next_seq) const {
+bool QueueManager::should_enter_wait(uint32_t next_seq) const
+{
   if (event_queue_.empty()) {
     return false;
   }
   return event_queue_.front().trigger_seq <= next_seq;
 }
 
-int32_t QueueManager::parse_src_line(const std::string& s) {
+int32_t QueueManager::parse_src_line(const std::string & s)
+{
   if (s.empty()) {
     return -1;
   }
-  const char* start = s.c_str();
-  char* end = nullptr;
+  const char * start = s.c_str();
+  char * end = nullptr;
   long val = std::strtol(start, &end, 10);
   if (end == start) {
     return -1;

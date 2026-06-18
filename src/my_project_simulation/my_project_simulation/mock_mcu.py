@@ -5,6 +5,7 @@ import serial
 import threading
 import time
 
+
 class MockMcu(Node):
     def __init__(self):
         super().__init__('mock_mcu')
@@ -17,7 +18,7 @@ class MockMcu(Node):
         baudrate = self.get_parameter('baudrate').value
 
         self.get_logger().info(f"Connecting to virtual serial port: {port} at {baudrate}")
-        
+
         # State
         self.temp_cf = 25.0
         self.temp_resin = 25.0
@@ -40,7 +41,7 @@ class MockMcu(Node):
 
     def mcu_loop(self):
         last_stat_time = time.time()
-        stat_interval = 0.1 # 10Hz
+        stat_interval = 0.1  # 10Hz
 
         buffer = ""
 
@@ -76,15 +77,22 @@ class MockMcu(Node):
                     self.temp_resin = max(self.target_resin, self.temp_resin - rate)
 
                 # Send STAT
-                stat_msg = f"STAT temp_cf={self.temp_cf:.1f} target_cf={self.target_cf:.1f} temp_resin={self.temp_resin:.1f} target_resin={self.target_resin:.1f} fan_ok_cf={self.fan_ok_cf} fan_ok_resin={self.fan_ok_resin} tool={self.tool} err={self.err}\n"
+                stat_msg = (
+                    f"STAT temp_cf={self.temp_cf:.1f} target_cf={self.target_cf:.1f} "
+                    f"temp_resin={self.temp_resin:.1f} "
+                    f"target_resin={self.target_resin:.1f} "
+                    f"fan_ok_cf={self.fan_ok_cf} "
+                    f"fan_ok_resin={self.fan_ok_resin} "
+                    f"tool={self.tool} err={self.err}\n"
+                )
                 try:
                     self.ser.write(stat_msg.encode('ascii'))
                 except Exception as e:
                     self.get_logger().error(f"Serial write error: {e}")
-                
+
                 last_stat_time = now
 
-            time.sleep(0.005) # Small sleep to avoid 100% CPU
+            time.sleep(0.005)  # Small sleep to avoid 100% CPU
 
     def handle_line(self, line):
         self.get_logger().debug(f"MCU received: {line}")
@@ -96,7 +104,6 @@ class MockMcu(Node):
         if cmd == "EV":
             # EV <trigger_seq> <event_type> <arg>
             if len(parts) >= 3:
-                seq = parts[1]
                 ev_type = parts[2]
                 arg = parts[3] if len(parts) > 3 else "0"
 
@@ -123,6 +130,7 @@ class MockMcu(Node):
             self.ser.close()
         super().destroy_node()
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = MockMcu()
@@ -133,6 +141,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

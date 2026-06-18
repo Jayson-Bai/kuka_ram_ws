@@ -4,15 +4,16 @@ from . import bspline_curve as bc
 
 
 def surface_interpolation(D, p, q):
-    '''
-    Given a grid of (M x N) data points Dij and a degree (p, q),
+    """
+    Given a grid of (M x N) data points Dij and a degree (p, q).
+
     find a B-spline surface of degree (p, q) defined by (M x N)
     control points that passes all data points in the given order.
     :param D: data points
     :param p: degree of u direction
     :param q: degree of v direction
     :return: control points and knot vectors
-    '''
+    """
     D_X = D[0]
     D_Y = D[1]
     D_Z = D[2]
@@ -77,8 +78,9 @@ def surface_interpolation(D, p, q):
 
 
 def surface_approximation(D, p, q, E, F):
-    '''
-    Given a grid of (M x N) data points Dij, a degree (p, q), and e and f
+    """
+    Given a grid of (M x N) data points Dij, a degree (p, q), and e and f.
+
     satisfying M > E > p >= 1 and N > F > q >= 1, find a B-spline surface
     of degree (p, q) defined by (E x F) control points Pij that approximates
     the data point grid in the given order.
@@ -86,7 +88,7 @@ def surface_approximation(D, p, q, E, F):
     :param p: degree of u direction
     :param q: degree of v direction
     :return: control points
-    '''
+    """
     D_X = D[0]
     D_Y = D[1]
     D_Z = D[2]
@@ -150,14 +152,15 @@ def surface_approximation(D, p, q, E, F):
 
 
 def surface(P, p, q, piece_uv, knot_uv):
-    '''
+    """
     Calculate points on the surface.
+
     :param P: control points
     :param p: degree of u direction (u)
     :param q: degree of v direction (v)
     :param piece_uv: the number of points on u/v direction
     :return: data points on the surface
-    '''
+    """
     P_X = P[0]
     P_Y = P[1]
     P_Z = P[2]
@@ -166,9 +169,6 @@ def surface(P, p, q, piece_uv, knot_uv):
 
     param_u = np.linspace(0, 1, piece_uv[0])
     param_v = np.linspace(0, 1, piece_uv[1])
-
-    Nik_u = np.zeros((piece_uv[0], M)).tolist()
-    Nik_v = np.zeros((piece_uv[1], N)).tolist()
 
     D_tmp = [np.zeros((piece_uv[0], N)).tolist(),
              np.zeros((piece_uv[0], N)).tolist(),

@@ -16,7 +16,7 @@ target_compile_features(rsi_node PUBLIC cxx_std_17)
 target_include_directories(rsi_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
-  
+
 ament_target_dependencies(
   rsi_node
   rclcpp

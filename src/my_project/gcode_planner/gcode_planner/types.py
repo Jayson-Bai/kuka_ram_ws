@@ -37,6 +37,8 @@ class ExtrudeWait:
     delta_e: float
     feedrate: float
     line: int
+    layer: int = 0
+    subtype: str = "UNKNOWN"
     raw: Optional[str] = None
 
 
@@ -74,9 +76,8 @@ class MCommand:
 
 @dataclass
 class CurveCommand:
-    """
-    专用于角点处或全局拟合曲线
-    """
+    """专用于角点处或全局拟合曲线."""
+
     type: str  # "PRINT" / "TRAVEL"
     cmd: str   # "CURVE"
     start_pos: Position
@@ -93,14 +94,17 @@ class CurveCommand:
 @dataclass
 class GlobalCurveCommand(CurveCommand):
     """
-    全局 B 样条拟合指令
+    全局 B 样条拟合指令.
+
     constraints: List[Tuple[normalized_s, speed_limit]]
     normalized_s: 0.0 ~ 1.0, 对应曲线弧长位置
     speed_limit: mm/s, 该位置的最大通过速度
     """
+
     constraints: List[Tuple[float, float]] = field(default_factory=list)
     original_moves: List[MoveCommand] = field(default_factory=list)
 
 
-ParsedCommand = Union[MoveCommand, CurveCommand, GlobalCurveCommand, ExtrudeWait, ResetECommand, ToolChangeCommand, MCommand]
+ParsedCommand = Union[MoveCommand, CurveCommand, GlobalCurveCommand,
+                      ExtrudeWait, ResetECommand, ToolChangeCommand, MCommand]
 ParsedCommandList = List[ParsedCommand]

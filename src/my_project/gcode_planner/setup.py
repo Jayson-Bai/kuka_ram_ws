@@ -13,7 +13,7 @@ setup(
     ],
     install_requires=[
         'setuptools',
-        'numpy',  
+        'numpy',
         'rclpy',
     ],
     zip_safe=True,

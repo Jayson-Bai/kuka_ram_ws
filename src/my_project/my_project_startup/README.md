@@ -47,7 +47,7 @@ python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz --
 - `traj_low`：轨迹 backlog 低阈值告警线，默认 `500`
 - `traj_high`：轨迹 backlog 高阈值告警线，默认 `1500`
 - `xyzabc_decimals`：规划出的位姿小数保留位数，默认 `6`
-- `e_decimals`：挤出量小数保留位数，默认 `2`
+- `e_decimals`：挤出量小数保留位数，默认 `6`
 - `kuka_status_raw`：是否打印 KUKA 原始 XML 长度，默认 `false`
 - `summary_period_ms`：控制中心汇总发布周期（毫秒），默认 `200`
 

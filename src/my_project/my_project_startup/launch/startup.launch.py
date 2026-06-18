@@ -33,8 +33,10 @@ def generate_launch_description():
     robot_match_search_back = LaunchConfiguration("robot_match_search_back")
     robot_match_search_forward = LaunchConfiguration("robot_match_search_forward")
     robot_match_max_error_mm = LaunchConfiguration("robot_match_max_error_mm")
-    robot_match_uncertainty_min_band_mm = LaunchConfiguration("robot_match_uncertainty_min_band_mm")
-    robot_match_uncertainty_spacing_multiplier = LaunchConfiguration("robot_match_uncertainty_spacing_multiplier")
+    robot_match_uncertainty_min_band_mm = LaunchConfiguration(
+        "robot_match_uncertainty_min_band_mm")
+    robot_match_uncertainty_spacing_multiplier = LaunchConfiguration(
+        "robot_match_uncertainty_spacing_multiplier")
     robot_match_nozzle_lever_mm = LaunchConfiguration("robot_match_nozzle_lever_mm")
 
     # RSI node params
@@ -44,6 +46,7 @@ def generate_launch_description():
     local_port = LaunchConfiguration("local_port")
     abort_lift_mm = LaunchConfiguration("abort_lift_mm")
     abort_lift_speed_mm_s = LaunchConfiguration("abort_lift_speed_mm_s")
+    fast_first_reply = LaunchConfiguration("fast_first_reply")
 
     # UART node params
     port = LaunchConfiguration("port")
@@ -62,6 +65,7 @@ def generate_launch_description():
             "local_port": local_port,
             "abort_lift_mm": abort_lift_mm,
             "abort_lift_speed_mm_s": abort_lift_speed_mm_s,
+            "fast_first_reply": fast_first_reply,
         }],
     )
 
@@ -127,7 +131,8 @@ def generate_launch_description():
             "robot_match_search_forward": robot_match_search_forward,
             "robot_match_max_error_mm": robot_match_max_error_mm,
             "robot_match_uncertainty_min_band_mm": robot_match_uncertainty_min_band_mm,
-            "robot_match_uncertainty_spacing_multiplier": robot_match_uncertainty_spacing_multiplier,
+            "robot_match_uncertainty_spacing_multiplier":
+                robot_match_uncertainty_spacing_multiplier,
             "robot_match_nozzle_lever_mm": robot_match_nozzle_lever_mm,
         }],
     )
@@ -191,7 +196,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "e_decimals",
-            default_value="2",
+            default_value="6",
             description="挤出量小数保留位数。",
         ),
         DeclareLaunchArgument(
@@ -281,8 +286,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "robot_match_nozzle_lever_mm",
-            default_value="100.0",
-            description="TCP 未实测前用于姿态误差等效换算的默认臂长（毫米）。",
+            default_value="401.68",
+            description="TCP 姿态误差等效臂长（毫米），默认按 KUKA 工具 XYZ=(-2.99,-1.27,401.67) 计算。",
         ),
         DeclareLaunchArgument(
             "sen_type",
@@ -303,6 +308,11 @@ def generate_launch_description():
             "local_port",
             default_value="49152",
             description="RSI 本地监听端口。",
+        ),
+        DeclareLaunchArgument(
+            "fast_first_reply",
+            default_value="true",
+            description="是否仅对首个 KUKA UDP 包快速回包，不推进挤出/轨迹链路。",
         ),
         DeclareLaunchArgument(
             "port",

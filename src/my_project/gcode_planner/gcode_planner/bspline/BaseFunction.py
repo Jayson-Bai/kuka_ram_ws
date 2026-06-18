@@ -1,12 +1,13 @@
 def BaseFunction(i, k, u, knot):
-    '''
+    """
     Calculate base function using Cox-deBoor function.
+
     :param i: index of base function
     :param k: order (degree + 1)
     :param u: parameter
     :param knot: knot vector
     :return: base function
-    '''
+    """
     Nik_u = 0
     if k == 1:
         if u >= knot[i] and u < knot[i + 1]:

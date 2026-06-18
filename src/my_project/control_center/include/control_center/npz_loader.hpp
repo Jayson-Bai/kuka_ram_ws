@@ -7,9 +7,11 @@
 #include <unordered_map>
 #include <vector>
 
-namespace control_center {
+namespace control_center
+{
 
-struct NpzRow {
+struct NpzRow
+{
   uint32_t seq{};
   float x{};
   float y{};
@@ -27,7 +29,8 @@ struct NpzRow {
   int32_t trigger_seq{};
 };
 
-struct NpzChunk {
+struct NpzChunk
+{
   std::vector<uint32_t> seq;
   std::vector<float> x;
   std::vector<float> y;
@@ -46,21 +49,24 @@ struct NpzChunk {
   size_t size{0};
 };
 
-class NpzLoader {
+class NpzLoader
+{
 public:
-  explicit NpzLoader(const std::string& path, size_t preload_chunks = 2);
+  explicit NpzLoader(const std::string & path, size_t preload_chunks = 2);
 
-  bool ok() const { return ok_; }
-  const std::string& error() const { return error_; }
+  bool ok() const {return ok_;}
+  const std::string & error() const {return error_;}
 
   bool has_next() const;
-  bool next_row(NpzRow& out);
+  bool next_row(NpzRow & out);
   void seek(uint32_t target_seq);
 
-  const std::unordered_map<uint8_t, std::string>& move_type_vocab() const {
+  const std::unordered_map<uint8_t, std::string> & move_type_vocab() const
+  {
     return move_type_vocab_;
   }
-  const std::unordered_map<uint8_t, std::string>& event_type_vocab() const {
+  const std::unordered_map<uint8_t, std::string> & event_type_vocab() const
+  {
     return event_type_vocab_;
   }
 
@@ -69,10 +75,10 @@ private:
   void ensure_preload();
   bool load_next_chunk();
 
-  std::vector<std::string> resolve_files(const std::string& path) const;
-  std::vector<std::string> resolve_from_manifest(const std::string& path) const;
-  std::vector<std::string> resolve_from_base(const std::string& path) const;
-  NpzChunk load_chunk(const std::string& file);
+  std::vector<std::string> resolve_files(const std::string & path) const;
+  std::vector<std::string> resolve_from_manifest(const std::string & path) const;
+  std::vector<std::string> resolve_from_base(const std::string & path) const;
+  NpzChunk load_chunk(const std::string & file);
 
   std::unordered_map<uint8_t, std::string> move_type_vocab_;
   std::unordered_map<uint8_t, std::string> event_type_vocab_;

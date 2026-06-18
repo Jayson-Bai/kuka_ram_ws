@@ -8,13 +8,16 @@ import os
 import signal
 import json
 import threading
+import time
 
-from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus
+from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus, TrajectoryPoint
 
 from std_msgs.msg import String as StringMsg
 import re
 from pathlib import Path
 
+
+_DEFAULT_NPZ_PATH = "/home/jayson/kuka_ram_ws/data/output_npz/test.npz"
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
@@ -27,7 +30,7 @@ LAUNCH_PARAMS = [
     ("traj_low", "500", "轨迹积压低阈值", "中心节点"),
     ("traj_high", "1500", "轨迹积压高阈值", "中心节点"),
     ("xyzabc_decimals", "6", "位姿小数精度", "中心节点"),
-    ("e_decimals", "2", "挤出小数精度", "中心节点"),
+    ("e_decimals", "6", "挤出小数精度", "中心节点"),
     ("kuka_status_raw", "false", "打印 KUKA 原始 XML 长度", "中心节点"),
     ("summary_period_ms", "200", "控制中心发布周期（ms）", "中心节点"),
     ("sen_type", "PythonDemo", "RSI XML SEN 类型", "RSI 节点"),
@@ -54,11 +57,17 @@ LAUNCH_PARAMS = [
     ("robot_match_max_error_mm", "1.0", "机械臂匹配最大空间误差（mm）", "延迟监控"),
     ("robot_match_uncertainty_min_band_mm", "0.10", "匹配不确定度最小误差带（mm）", "延迟监控"),
     ("robot_match_uncertainty_spacing_multiplier", "3.0", "匹配不确定度轨迹间距倍率", "延迟监控"),
-    ("robot_match_nozzle_lever_mm", "100.0", "默认 TCP 姿态等效臂长（mm）", "延迟监控"),
+    ("robot_match_nozzle_lever_mm", "401.68", "TCP 姿态误差等效臂长（mm）", "延迟监控"),
 ]
 
 _LAUNCH_DEFAULTS = {p[0]: p[1] for p in LAUNCH_PARAMS}
 _LAUNCH_GROUPS_ORDER = ["中心节点", "RSI 节点", "UART 节点", "系统管理器", "延迟监控"]
+_MODE_PAGE_SELECT = "select"
+_MODE_PAGE_TEST = "test"
+_MODE_PAGE_PRINT = "print"
+_SYSTEM_STATUS_MIN_HEIGHT = 84
+_SYSTEM_STATUS_TARGET_HEIGHT = 145
+_LOG_BOX_MIN_HEIGHT = 0
 
 
 class _LaunchSettingsDialog(QtWidgets.QDialog):
@@ -198,8 +207,6 @@ class _LaunchSettingsDialog(QtWidgets.QDialog):
 
         self.setStyleSheet("QWidget { background: #f7f7f7; }")
 
-
-
     def _reset_defaults(self):
         for name, default_val in _LAUNCH_DEFAULTS.items():
             widget = self._inputs.get(name)
@@ -240,15 +247,43 @@ class _AutoScaleLabel(QtWidgets.QLabel):
         rect = self.rect()
         if rect.height() > 0:
             font = self.font()
-            pixel_size = max(12, int(rect.height() * 0.55))
+            pixel_size = max(12, min(32, int(rect.height() * 0.42)))
             font.setPixelSize(pixel_size)
             self.setFont(font)
 
 
+class _AdaptiveHeightGroupBox(QtWidgets.QGroupBox):
+    def __init__(self, title="", min_height=0, target_height=0, parent=None):
+        super().__init__(title, parent)
+        self._min_height = int(min_height)
+        self._target_height = max(self._min_height, int(target_height))
+        self.setMinimumHeight(self._min_height)
+        self.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+
+    def set_target_height(self, height):
+        height = max(self._min_height, int(height))
+        if self._target_height != height:
+            self._target_height = height
+            self.updateGeometry()
+
+    def sizeHint(self):
+        hint = super().sizeHint()
+        hint.setHeight(self._target_height)
+        return hint
+
+    def minimumSizeHint(self):
+        hint = super().minimumSizeHint()
+        hint.setHeight(self._min_height)
+        return hint
+
 
 _OFFSET_CONFIG_DIR = os.path.expanduser("~/.config/my_project")
 _OFFSET_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "tool_offset.json")
-_OFFSET_DEFAULTS = {"tool_offset_x": 0.64, "tool_offset_y": -1.29, "tool_offset_z": 0.17}
+_OFFSET_DEFAULTS = {
+    "tool_offset_x": 0.64,
+    "tool_offset_y": -1.29,
+    "tool_offset_z": 0.17,
+    "resin_z_print_compensation_mm": 0.0}
 _NPZ_OFFSET_TOLERANCE_MM = 0.005
 _NPZ_RELATED_LAUNCH_PARAMS = (
     "npz_path",
@@ -269,8 +304,22 @@ _PID_PARAM_LABELS = {
     "max_integral": "max_integral", "min_integral": "min_integral",
 }
 _PID_DEFAULTS = {
-    "cf": {"kp": 2.0, "ki": 0.85, "kd": 40.0, "max_output": 100.0, "min_output": 82.0, "max_integral": 95.0, "min_integral": 0.0},
-    "resin": {"kp": 1.782, "ki": 0.6, "kd": 150.0, "max_output": 100.0, "min_output": 63.18, "max_integral": 105.3, "min_integral": 0.0},
+    "cf": {
+        "kp": 2.0,
+        "ki": 0.85,
+        "kd": 40.0,
+        "max_output": 100.0,
+        "min_output": 82.0,
+        "max_integral": 95.0,
+        "min_integral": 0.0},
+    "resin": {
+        "kp": 1.782,
+        "ki": 0.6,
+        "kd": 150.0,
+        "max_output": 100.0,
+        "min_output": 63.18,
+        "max_integral": 105.3,
+        "min_integral": 0.0},
 }
 
 
@@ -279,18 +328,31 @@ def _load_offset_config():
         with open(_OFFSET_CONFIG_PATH, "r") as f:
             data = json.load(f)
         return {
-            "tool_offset_x": float(data.get("tool_offset_x", _OFFSET_DEFAULTS["tool_offset_x"])),
-            "tool_offset_y": float(data.get("tool_offset_y", _OFFSET_DEFAULTS["tool_offset_y"])),
-            "tool_offset_z": float(data.get("tool_offset_z", _OFFSET_DEFAULTS["tool_offset_z"])),
+            "tool_offset_x": float(
+                data.get("tool_offset_x", _OFFSET_DEFAULTS["tool_offset_x"])
+            ),
+            "tool_offset_y": float(
+                data.get("tool_offset_y", _OFFSET_DEFAULTS["tool_offset_y"])
+            ),
+            "tool_offset_z": float(
+                data.get("tool_offset_z", _OFFSET_DEFAULTS["tool_offset_z"])
+            ),
+            "resin_z_print_compensation_mm": float(
+                data.get(
+                    "resin_z_print_compensation_mm",
+                    _OFFSET_DEFAULTS["resin_z_print_compensation_mm"],
+                )
+            ),
         }
     except Exception:
         return dict(_OFFSET_DEFAULTS)
 
 
-def _save_offset_config(x, y, z):
+def _save_offset_config(x, y, z, resin_z_print_compensation_mm=0.0):
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
     with open(_OFFSET_CONFIG_PATH, "w") as f:
-        json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z}, f, indent=2)
+        json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z,
+                  "resin_z_print_compensation_mm": resin_z_print_compensation_mm}, f, indent=2)
 
 
 def _format_tool_offset(offset):
@@ -301,14 +363,6 @@ def _resolve_npz_launch_path_from_dir(npz_dir):
     root = Path(npz_dir)
     if not root.is_dir():
         return None
-
-    manifests = sorted(root.glob("*_manifest.json"))
-    if manifests:
-        return str(manifests[0])
-
-    manifests = sorted(root.rglob("*_manifest.json"))
-    if manifests:
-        return str(manifests[0])
 
     single_files = sorted(
         p for p in root.glob("*.npz")
@@ -353,17 +407,41 @@ def _offset_sidecar_candidates(npz_source):
     return candidates
 
 
-def _read_npz_tool_offset(npz_source):
+def _read_npz_export_metadata(npz_source):
     for offset_file in _offset_sidecar_candidates(npz_source):
         if not offset_file.is_file():
             continue
         with open(offset_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         saved_offset = data.get("tool_offset")
-        if not saved_offset or len(saved_offset) != 3:
-            return None, str(offset_file)
-        return tuple(float(v) for v in saved_offset), str(offset_file)
-    return None, None
+        offset = None
+        if saved_offset and len(saved_offset) == 3:
+            offset = tuple(float(v) for v in saved_offset)
+        resin_z = data.get("resin_z_print_compensation_mm")
+        resin_z_value = None if resin_z is None else float(resin_z)
+        return offset, resin_z_value, str(offset_file)
+    return None, None, None
+
+
+def _read_npz_tool_offset(npz_source):
+    saved_offset, _resin_z, offset_file = _read_npz_export_metadata(npz_source)
+    return saved_offset, offset_file
+
+
+def _format_rsi_xml_for_display(xml_text):
+    text = (xml_text or "").strip()
+    if not text:
+        return ""
+    try:
+        import xml.dom.minidom
+        parsed = xml.dom.minidom.parseString(text.encode("utf-8"))
+        pretty = parsed.toprettyxml(indent="  ")
+        lines = [line for line in pretty.splitlines() if line.strip()]
+        if lines and lines[0].startswith("<?xml"):
+            lines = lines[1:]
+        return "\n".join(lines)
+    except Exception:
+        return text
 
 
 class _PanelDialog(QtWidgets.QDialog):
@@ -484,6 +562,46 @@ class _ZoomableGraphicsView(QtWidgets.QGraphicsView):
             return
         self.scale(zoom, zoom)
         self.zoom_changed.emit(self.transform().m11())
+
+
+class _LogDetailDialog(QtWidgets.QDialog):
+    def __init__(self, title_text, log_text, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setWindowTitle(title_text)
+        self.resize(820, 520)
+
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(8)
+
+        header = QtWidgets.QHBoxLayout()
+        title = QtWidgets.QLabel(title_text)
+        title.setStyleSheet("font-size: 15px; font-weight: 700; color: #2b2b2b;")
+        btn_close = QtWidgets.QPushButton("关闭")
+        btn_close.setFixedWidth(54)
+        btn_close.setCursor(QtCore.Qt.PointingHandCursor)
+        btn_close.clicked.connect(self.accept)
+        header.addWidget(title, 1)
+        header.addWidget(btn_close)
+        layout.addLayout(header)
+
+        self._text = QtWidgets.QPlainTextEdit()
+        self._text.setReadOnly(True)
+        self._text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._text.setPlainText(log_text or "尚未收到日志。")
+        self._text.setStyleSheet(
+            "QPlainTextEdit {"
+            "  background: #1e1e1e;"
+            "  color: #d4d4d4;"
+            "  font-family: 'Courier New', 'Noto Mono', monospace;"
+            "  font-size: 12px;"
+            "  border: 1px solid #3c3c3c;"
+            "  border-radius: 4px;"
+            "  padding: 6px;"
+            "}"
+        )
+        layout.addWidget(self._text, 1)
 
 
 class _LayerViewerDialog(QtWidgets.QDialog):
@@ -631,16 +749,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
     scale_submit = QtCore.pyqtSignal(float)
     command_submit = QtCore.pyqtSignal(str)
     uart_command_submit = QtCore.pyqtSignal(str)
+    print_test_rsi_command_submit = QtCore.pyqtSignal(str)
+    print_test_load_npz_submit = QtCore.pyqtSignal(str)
+    current_correction_received = QtCore.pyqtSignal(object)
+    print_test_status = QtCore.pyqtSignal(str, str)
+    print_test_controls_enabled = QtCore.pyqtSignal(bool)
     export_finished = QtCore.pyqtSignal(bool, str)  # (success, message)
     export_progress = QtCore.pyqtSignal(str)  # status text
     export_progress_val = QtCore.pyqtSignal(int)  # percentage (0-100)
     rsi_xml_received = QtCore.pyqtSignal(str)  # RSI 发出 XML 日志
     uart_log_received = QtCore.pyqtSignal(str)  # UART 原始日志
 
+    _DIAGNOSTIC_LOG_LIMIT = 200000
+
     def __init__(self):
         super().__init__()
         self._extrude_scale_current = 1.0
+        self._current_tool_id = 0
         self._last_npz_dir = None
+        self._print_test_current_correction = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        self._print_test_seen_correction = False
+        self._print_test_busy = False
+        self._print_test_target = None
+        self._print_test_params = None
+        self._print_test_resin_temp = None
+        self._uart_log_history = []
+        self._diagnostic_log_history = []
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._build_ui()
@@ -648,24 +782,142 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.latency_received.connect(self._update_latency)
         self.rsi_xml_received.connect(self._on_rsi_xml)
         self.uart_log_received.connect(self._on_uart_log)
+        self.current_correction_received.connect(self._on_current_correction)
+        self.print_test_status.connect(self._set_print_test_status)
+        self.print_test_controls_enabled.connect(self._set_print_test_controls_enabled)
         self.export_progress_val.connect(self._on_export_progress_val)
-        
+
         self._align_timer = QtCore.QTimer(self)
         self._align_timer.timeout.connect(self._dynamic_align)
         self._align_timer.start(50)
 
     def _dynamic_align(self):
-        if not hasattr(self, '_system_box'): return
-        h1 = self._col1_layout.sizeHint().height()
-        h0_widgets = [self._kuka_box, self._rsi_log_box, self._traj_box]
-        h0_rest = sum(w.height() for w in h0_widgets)
-        h0_rest += self._col0_layout.spacing() * len(h0_widgets)
-        target_h = h1 - h0_rest
-        if target_h > 40 and abs(self._system_box.height() - target_h) > 1:
-            self._system_box.setFixedHeight(target_h)
+        if not hasattr(self, '_system_box'):
+            return
+        if self._active_mode == _MODE_PAGE_SELECT:
+            return
+        if not (self._rsi_log_box.isVisible() and self._uart_log_box.isVisible()):
+            return
+        if not (self._kuka_box.isVisible() and self._traj_box.isVisible()):
+            return
+        margins = self._content_layout.contentsMargins()
+
+        def _top_in_content(widget):
+            return widget.mapTo(self._mode_content_page, QtCore.QPoint(0, 0)).y()
+
+        target_top = _top_in_content(self._uart_log_box)
+        viewport = self._content_scroll.viewport() if hasattr(
+            self, '_content_scroll') else self._mode_content_page
+        target_bottom = viewport.height() - margins.bottom() - 1
+
+        log_h = max(_LOG_BOX_MIN_HEIGHT, target_bottom - target_top + 1)
+
+        def _set_box_target_height(widget, height):
+            if hasattr(widget, "set_target_height"):
+                widget.set_target_height(height)
+
+        _set_box_target_height(self._rsi_log_box, log_h)
+        _set_box_target_height(self._uart_log_box, log_h)
+
+    def _build_mode_select_page(self):
+        page = QtWidgets.QWidget()
+        page.setObjectName("modeSelectPage")
+        page_layout = QtWidgets.QVBoxLayout(page)
+        page_layout.setContentsMargins(24, 24, 24, 24)
+        page_layout.setSpacing(20)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.setSpacing(24)
+        self._btn_mode_test = QtWidgets.QPushButton("测试模式")
+        self._btn_mode_test.setObjectName("btnModeTest")
+        self._btn_mode_test.setMinimumSize(220, 120)
+        self._btn_mode_test.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._btn_mode_print = QtWidgets.QPushButton("正式打印")
+        self._btn_mode_print.setObjectName("btnModePrint")
+        self._btn_mode_print.setMinimumSize(220, 120)
+        self._btn_mode_print.setCursor(QtCore.Qt.PointingHandCursor)
+
+        btn_row.addStretch(1)
+        btn_row.addWidget(self._btn_mode_test)
+        btn_row.addWidget(self._btn_mode_print)
+        btn_row.addStretch(1)
+
+        page_layout.addStretch(1)
+        page_layout.addLayout(btn_row)
+        page_layout.addStretch(1)
+        return page
+
+    def _set_active_mode(self, mode):
+        self._active_mode = mode
+        mode_sections = {
+            "test": [
+                self._system_box,
+                self._kuka_box,
+                self._traj_box,
+                self._rsi_log_box,
+                self._ph_overview_box,
+                self._ph_tools_box,
+                self._uart_log_box,
+                self._launch_box,
+                self._print_test_box,
+            ],
+            "print": [
+                self._system_box,
+                self._kuka_box,
+                self._traj_box,
+                self._rsi_log_box,
+                self._ph_overview_box,
+                self._ph_tools_box,
+                self._uart_log_box,
+                self._export_box,
+                self._launch_box,
+                self._control_box,
+                self._latency_box,
+            ],
+        }
+        all_sections = {section for sections in mode_sections.values() for section in sections}
+        for section in all_sections:
+            section.setVisible(False)
+        for section in mode_sections.get(mode, []):
+            section.setVisible(True)
+
+        if mode == _MODE_PAGE_TEST:
+            self._title_label.setText("测试模式")
+            self._launch_box.setTitle("启动通信")
+        else:
+            self._title_label.setText("正式打印")
+            self._launch_box.setTitle("启动")
+        self._mode_stack.setCurrentWidget(self._content_scroll)
+
+    def _show_mode_select(self):
+        self._active_mode = _MODE_PAGE_SELECT
+        self._mode_stack.setCurrentWidget(self._mode_select_page)
+
+    def active_mode(self):
+        return self._active_mode
 
     def _build_ui(self):
-        layout = QtWidgets.QGridLayout(self)
+        root_layout = QtWidgets.QVBoxLayout(self)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+
+        self._mode_stack = QtWidgets.QStackedWidget()
+        root_layout.addWidget(self._mode_stack)
+        self._mode_select_page = self._build_mode_select_page()
+        self._mode_content_page = QtWidgets.QWidget()
+
+        self._content_scroll = QtWidgets.QScrollArea()
+        self._content_scroll.setWidgetResizable(True)
+        self._content_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self._content_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        self._content_scroll.setWidget(self._mode_content_page)
+
+        self._mode_stack.addWidget(self._mode_select_page)
+        self._mode_stack.addWidget(self._content_scroll)
+
+        layout = QtWidgets.QGridLayout(self._mode_content_page)
+        self._content_layout = layout
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(6)
@@ -693,11 +945,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
             label_metrics.horizontalAdvance(text) for text in cf_resin_label_titles
         )
 
-        title = QtWidgets.QLabel("系统控制面板")
-        title.setObjectName("titleLabel")
-        title.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
-        title.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
-        layout.addWidget(title, 0, 0, 1, 3)
+        header = QtWidgets.QHBoxLayout()
+        header.setSpacing(8)
+        self._title_label = QtWidgets.QLabel("系统控制面板")
+        self._title_label.setObjectName("titleLabel")
+        self._title_label.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self._title_label.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Preferred)
+        self._btn_mode_back = QtWidgets.QPushButton("返回")
+        self._btn_mode_back.setObjectName("btnModeBack")
+        self._btn_mode_back.setMinimumHeight(28)
+        self._btn_mode_back.setCursor(QtCore.Qt.PointingHandCursor)
+        header.addWidget(self._title_label, 1)
+        header.addWidget(self._btn_mode_back)
+        layout.addLayout(header, 0, 0, 1, 3)
 
         def add_group(
             group_title,
@@ -711,7 +973,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             group_box = QtWidgets.QGroupBox(group_title)
             if object_name:
                 group_box.setObjectName(object_name)
-            
+
             form = QtWidgets.QFormLayout(group_box)
             form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
             form.setFormAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
@@ -743,28 +1005,31 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         col0_layout = QtWidgets.QVBoxLayout()
         col0_layout.setSpacing(6)
+        col0_layout.setAlignment(QtCore.Qt.AlignTop)
         self._col0_layout = col0_layout
         col1_layout = QtWidgets.QVBoxLayout()
         col1_layout.setSpacing(6)
+        col1_layout.setAlignment(QtCore.Qt.AlignTop)
         self._col1_layout = col1_layout
         col2_layout = QtWidgets.QVBoxLayout()
         col2_layout.setSpacing(6)
 
         system_box = QtWidgets.QGroupBox("系统状态")
         system_box.setObjectName("groupSystem")
-        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        system_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         self._system_box = system_box
+        self._system_box.setFixedHeight(_SYSTEM_STATUS_TARGET_HEIGHT)
         system_layout = QtWidgets.QVBoxLayout(system_box)
         system_layout.setSpacing(0)
         system_layout.setContentsMargins(4, 12, 4, 12)
-        
+
         sys_val = _AutoScaleLabel("离线")
         sys_val.setObjectName("valueLabel")
         sys_val.setAlignment(QtCore.Qt.AlignCenter)
         sys_val.setMinimumHeight(40)
-        
+
         system_layout.addWidget(sys_val, 1)
-        
+
         self._labels["System State"] = sys_val
         col0_layout.addWidget(system_box)
 
@@ -794,7 +1059,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             kuka_layout.addWidget(axis_widget, i // 3, i % 3)
             self._labels[f"KUKA {axis}"] = axis_value
         col0_layout.addWidget(kuka_box)
-        
+
         traj_box = QtWidgets.QGroupBox("RSI 节点")
         self._traj_box = traj_box
         traj_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
@@ -834,19 +1099,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
         col0_layout.addWidget(traj_box)
 
         # ======== RSI 日志区域 ========
-        rsi_log_box = QtWidgets.QGroupBox("RSI 日志")
+        rsi_log_box = _AdaptiveHeightGroupBox("RSI 日志", _LOG_BOX_MIN_HEIGHT, _LOG_BOX_MIN_HEIGHT)
         rsi_log_box.setObjectName("groupRsiLog")
         rsi_log_box.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
         )
         rsi_log_layout = QtWidgets.QVBoxLayout(rsi_log_box)
         rsi_log_layout.setContentsMargins(4, 8, 4, 4)
         rsi_log_layout.setSpacing(2)
 
+        rsi_log_header = QtWidgets.QHBoxLayout()
+        rsi_log_header.setSpacing(6)
+        self._rsi_log_summary = QtWidgets.QLabel("等待 XML")
+        self._rsi_log_summary.setObjectName("fieldLabel")
+        self._btn_rsi_log_detail = QtWidgets.QPushButton("放大查看")
+        self._btn_rsi_log_detail.setObjectName("btnRsiLogDetail")
+        self._btn_rsi_log_detail.setMinimumHeight(24)
+        self._btn_rsi_log_detail.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_rsi_log_detail.setEnabled(False)
+        rsi_log_header.addWidget(self._rsi_log_summary, 1)
+        rsi_log_header.addWidget(self._btn_rsi_log_detail)
+        rsi_log_layout.addLayout(rsi_log_header)
+
         self._rsi_log_text = QtWidgets.QPlainTextEdit()
         self._rsi_log_text.setReadOnly(True)
-        self._rsi_log_text.setMaximumBlockCount(30)
-        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._rsi_log_text.setMaximumBlockCount(80)
+        self._rsi_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
         self._rsi_log_text.setStyleSheet(
             "QPlainTextEdit {"
             "  background: #1e1e1e;"
@@ -860,25 +1138,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
         rsi_log_layout.addWidget(self._rsi_log_text)
 
-        self._rsi_log_text.setMaximumHeight(100)
+        self._rsi_log_text.setMinimumHeight(0)
 
         self._rsi_log_last_xml = ""
+        self._rsi_log_latest_display = ""
         self._rsi_log_dup_count = 0
         col0_layout.addWidget(rsi_log_box)
         self._rsi_log_box = rsi_log_box
 
         # ======== Column 1: Printhead ========
-        
+
         ph_overview_box = QtWidgets.QGroupBox("Uart 节点")
-        ph_overview_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        ph_overview_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Maximum)
         ph_overview_layout = QtWidgets.QVBoxLayout(ph_overview_box)
         ph_overview_layout.setSpacing(6)
-        
+
         events_summary_box = QtWidgets.QGroupBox("事件概览")
-        events_summary_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
+        events_summary_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Maximum)
         events_summary_layout = QtWidgets.QHBoxLayout(events_summary_box)
         events_summary_layout.setSpacing(12)
-        
+
         lbl1 = QtWidgets.QLabel("下一序号")
         lbl1.setObjectName("fieldLabel")
         val1 = QtWidgets.QLabel("-")
@@ -887,7 +1170,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         val1.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         events_summary_layout.addWidget(lbl1)
         events_summary_layout.addWidget(val1)
-        
+
         lbl2 = QtWidgets.QLabel("待处理")
         lbl2.setObjectName("fieldLabel")
         val2 = QtWidgets.QLabel("-")
@@ -895,15 +1178,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         val2.setMinimumWidth(value_min_width)
         val2.setAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         events_summary_layout.addStretch(1)
-        
+
         events_summary_layout.addWidget(lbl2)
         events_summary_layout.addWidget(val2)
         events_summary_layout.addStretch(1)
         ph_overview_layout.addWidget(events_summary_box)
-        
+
         self._labels["Next Event Seq"] = val1
         self._labels["Events Pending"] = val2
-        
+
         events_row = QtWidgets.QHBoxLayout()
         events_row.setSpacing(8)
         add_group("当前事件", [
@@ -921,14 +1204,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         events_row.setStretch(0, 1)
         events_row.setStretch(1, 1)
         ph_overview_layout.addLayout(events_row)
-        
+
         col1_layout.addWidget(ph_overview_box)
-        
+        self._ph_overview_box = ph_overview_box
+
         ph_tools_box = QtWidgets.QGroupBox("工具管理")
-        ph_tools_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        ph_tools_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Preferred)
         ph_tools_layout = QtWidgets.QVBoxLayout(ph_tools_box)
         ph_tools_layout.setSpacing(8)
-        
+
         tool_row = QtWidgets.QHBoxLayout()
         tool_row.setSpacing(8)
 
@@ -962,7 +1248,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         tool_row.addStretch(1)
 
         ph_tools_layout.addLayout(tool_row)
-        
+
         extrude_row_widget = QtWidgets.QWidget()
         extrude_row_widget.setFixedHeight(26)
         extrude_inner = QtWidgets.QHBoxLayout(extrude_row_widget)
@@ -995,26 +1281,31 @@ class _UiStatusWidget(QtWidgets.QWidget):
         extrude_inner.addSpacing(8)
         extrude_inner.addWidget(self._extrude_scale_status, 1)
         ph_tools_layout.addWidget(extrude_row_widget)
-        
+
         head_panels_row = QtWidgets.QHBoxLayout()
         head_panels_row.setSpacing(12)
-        
+
         for head_id, head_name in (("cf", "碳纤维"), ("resin", "树脂")):
             master_panel = QtWidgets.QGroupBox(head_name)
             master_panel.setObjectName(f"groupMaster{head_id}")
-            master_panel.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Maximum)
+            master_panel.setSizePolicy(
+                QtWidgets.QSizePolicy.Expanding,
+                QtWidgets.QSizePolicy.Maximum)
             master_layout = QtWidgets.QVBoxLayout(master_panel)
             master_layout.setSpacing(6)
-            
-            status_box = add_group("概况", cf_labels if head_id == "cf" else resin_labels, add_to_layout=False,
+
+            status_box = add_group(
+                "概况",
+                cf_labels if head_id == "cf" else resin_labels,
+                add_to_layout=False,
                 label_min_width=cf_resin_label_min_width,
                 value_alignment=QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
             master_layout.addWidget(status_box)
-            
+
             ctrl_box = QtWidgets.QGroupBox("控制")
             ctrl_layout = QtWidgets.QVBoxLayout(ctrl_box)
             ctrl_layout.setSpacing(6)
-            
+
             fan_row = QtWidgets.QHBoxLayout()
             fan_row.setSpacing(8)
             fan_label = QtWidgets.QLabel("风扇")
@@ -1034,7 +1325,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             fan_row.addWidget(btn_fan_on)
             fan_row.addWidget(btn_fan_off)
             ctrl_layout.addLayout(fan_row)
-            
+
             temp_row = QtWidgets.QHBoxLayout()
             temp_row.setSpacing(8)
             temp_label = QtWidgets.QLabel("温度")
@@ -1136,29 +1427,43 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
             master_layout.addWidget(ctrl_box)
             head_panels_row.addWidget(master_panel)
-            
+
             setattr(self, f"_btn_fan_on_{head_id}", btn_fan_on)
             setattr(self, f"_btn_fan_off_{head_id}", btn_fan_off)
             setattr(self, f"_temp_input_{head_id}", temp_input)
             setattr(self, f"_btn_temp_apply_{head_id}", btn_temp_apply)
-            
+
         ph_tools_layout.addLayout(head_panels_row)
         col1_layout.addWidget(ph_tools_box)
+        self._ph_tools_box = ph_tools_box
 
         # ======== UART 日志区域 ========
-        uart_log_box = QtWidgets.QGroupBox("UART 日志")
+        uart_log_box = _AdaptiveHeightGroupBox("UART 日志", _LOG_BOX_MIN_HEIGHT, _LOG_BOX_MIN_HEIGHT)
         uart_log_box.setObjectName("groupUartLog")
         uart_log_box.setSizePolicy(
-            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum
+            QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred
         )
         uart_log_layout = QtWidgets.QVBoxLayout(uart_log_box)
         uart_log_layout.setContentsMargins(4, 8, 4, 4)
         uart_log_layout.setSpacing(2)
 
+        uart_log_header = QtWidgets.QHBoxLayout()
+        uart_log_header.setSpacing(6)
+        self._uart_log_summary = QtWidgets.QLabel("等待日志")
+        self._uart_log_summary.setObjectName("fieldLabel")
+        self._btn_uart_log_detail = QtWidgets.QPushButton("放大查看")
+        self._btn_uart_log_detail.setObjectName("btnUartLogDetail")
+        self._btn_uart_log_detail.setMinimumHeight(24)
+        self._btn_uart_log_detail.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_uart_log_detail.setEnabled(False)
+        uart_log_header.addWidget(self._uart_log_summary, 1)
+        uart_log_header.addWidget(self._btn_uart_log_detail)
+        uart_log_layout.addLayout(uart_log_header)
+
         self._uart_log_text = QtWidgets.QPlainTextEdit()
         self._uart_log_text.setReadOnly(True)
-        self._uart_log_text.setMaximumBlockCount(30)
-        self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
+        self._uart_log_text.setMaximumBlockCount(80)
+        self._uart_log_text.setLineWrapMode(QtWidgets.QPlainTextEdit.WidgetWidth)
         self._uart_log_text.setStyleSheet(
             "QPlainTextEdit {"
             "  background: #1e1e1e;"
@@ -1171,10 +1476,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "}"
         )
         uart_log_layout.addWidget(self._uart_log_text)
-        self._uart_log_text.setMaximumHeight(100)
+        self._uart_log_text.setMinimumHeight(0)
+        self._uart_log_latest_display = ""
 
         col1_layout.addWidget(uart_log_box)
-        col1_layout.addStretch(1)
+        self._uart_log_box = uart_log_box
 
         # ======== Print Control 区域 ========
         control_box = QtWidgets.QGroupBox("打印控制")
@@ -1290,9 +1596,38 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout = QtWidgets.QVBoxLayout(export_box)
         export_layout.setSpacing(6)
 
+        # Resin Z print compensation
+        resin_z_subtitle = QtWidgets.QLabel("树脂轴 Z 打印补偿")
+        resin_z_subtitle.setStyleSheet(
+            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+        export_layout.addWidget(resin_z_subtitle)
+
+        resin_z_desc = QtWidgets.QLabel("正式打印导出时，在轨迹开头插入一段 Z 方向空走补偿；负值表示开始前先向下运动。")
+        resin_z_desc.setObjectName("fieldLabel")
+        resin_z_desc.setWordWrap(True)
+        export_layout.addWidget(resin_z_desc)
+
+        offset_cfg = _load_offset_config()
+        resin_z_row = QtWidgets.QHBoxLayout()
+        resin_z_row.setSpacing(4)
+        resin_z_label = QtWidgets.QLabel("补偿 (mm)")
+        resin_z_label.setObjectName("fieldLabel")
+        self._resin_z_print_comp_spin = QtWidgets.QDoubleSpinBox()
+        self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
+        self._resin_z_print_comp_spin.setDecimals(2)
+        self._resin_z_print_comp_spin.setSingleStep(0.1)
+        self._resin_z_print_comp_spin.setValue(offset_cfg["resin_z_print_compensation_mm"])
+        self._resin_z_print_comp_spin.setMinimumHeight(28)
+        self._resin_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
+        resin_z_row.addWidget(resin_z_label)
+        resin_z_row.addWidget(self._resin_z_print_comp_spin)
+        resin_z_row.addStretch(1)
+        export_layout.addLayout(resin_z_row)
+
         # Subtitle: Tool Offset
         offset_subtitle = QtWidgets.QLabel("工具偏移")
-        offset_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+        offset_subtitle.setStyleSheet(
+            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         export_layout.addWidget(offset_subtitle)
 
         # Tool Offset Description & Input Fields (placed inside GCode Export)
@@ -1304,13 +1639,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_desc.setWordWrap(True)
         export_layout.addWidget(offset_desc)
 
-        offset_cfg = _load_offset_config()
         offset_grid = QtWidgets.QHBoxLayout()
         offset_grid.setSpacing(8)
         self._offset_spins = {}
         for axis, default_val in [("X", offset_cfg["tool_offset_x"]),
-                                   ("Y", offset_cfg["tool_offset_y"]),
-                                   ("Z", offset_cfg["tool_offset_z"])]:
+                                  ("Y", offset_cfg["tool_offset_y"]),
+                                  ("Z", offset_cfg["tool_offset_z"])]:
             axis_w = QtWidgets.QWidget()
             axis_lay = QtWidgets.QVBoxLayout(axis_w)
             axis_lay.setContentsMargins(0, 0, 0, 0)
@@ -1343,7 +1677,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         # Subtitle: GCode File
         gcode_subtitle = QtWidgets.QLabel("GCode 文件")
-        gcode_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
+        gcode_subtitle.setStyleSheet(
+            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
         export_layout.addWidget(gcode_subtitle)
 
         # GCode file selector
@@ -1392,7 +1727,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("max_fit_points_per_segment", "20000", "每段最大拟合点数"),
             ("export_sleep_ms", "0", "导出节流休眠（ms）"),
             ("export_yield_every", "0", "导出 yield 间隔"),
-            ("split_by_layer_type", "true", "按层+类型拆分 NPZ"),
+            ("split_by_layer_type", "false", "按层+类型拆分 NPZ"),
             ("plot_layer_xy", "true", "每层生成 XY 路径图"),
             ("plot_stride", "5", "绘图采样步长"),
         ]
@@ -1444,7 +1779,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addLayout(view_row)
 
         npz_dir_subtitle = QtWidgets.QLabel("选择已导出的NPZ文件")
-        npz_dir_subtitle.setStyleSheet("font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
+        npz_dir_subtitle.setStyleSheet(
+            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
         export_layout.addWidget(npz_dir_subtitle)
 
         npz_dir_row = QtWidgets.QHBoxLayout()
@@ -1486,6 +1822,148 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_select_npz_dir.clicked.connect(self._on_select_npz_dir)
         self._btn_clear_npz_dir.clicked.connect(self._on_clear_npz_dir)
 
+        # ======== Print Test 区域 ========
+        print_test_box = QtWidgets.QGroupBox("打印测试（树脂）")
+        print_test_box.setObjectName("groupPrintTest")
+        print_test_box.setSizePolicy(
+            QtWidgets.QSizePolicy.Preferred,
+            QtWidgets.QSizePolicy.Maximum)
+        print_test_layout = QtWidgets.QVBoxLayout(print_test_box)
+        print_test_layout.setSpacing(6)
+
+        test_form = QtWidgets.QGridLayout()
+        test_form.setHorizontalSpacing(8)
+        test_form.setVerticalSpacing(4)
+        self._test_temp_input = QtWidgets.QLineEdit("250")
+        self._test_layer_height_min_input = QtWidgets.QLineEdit("0.5")
+        self._test_layer_height_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_speed_input = QtWidgets.QLineEdit("10.0")
+        self._test_scale_min_input = QtWidgets.QLineEdit("0.8")
+        self._test_scale_max_input = QtWidgets.QLineEdit("1.2")
+        self._test_prime_length_input = QtWidgets.QLineEdit("5.0")
+        self._test_prime_speed_input = QtWidgets.QLineEdit("2.0")
+        self._test_retract_length_input = QtWidgets.QLineEdit("3.0")
+        self._test_retract_speed_input = QtWidgets.QLineEdit("8.0")
+
+        range_inputs = (
+            self._test_layer_height_min_input,
+            self._test_layer_height_max_input,
+            self._test_scale_min_input,
+            self._test_scale_max_input,
+        )
+        for inp in (self._test_temp_input, self._test_speed_input, *range_inputs):
+            inp.setMaximumWidth(64)
+            validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, inp)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            inp.setValidator(validator)
+        for inp in (
+            self._test_prime_length_input,
+            self._test_prime_speed_input,
+            self._test_retract_length_input,
+            self._test_retract_speed_input,
+        ):
+            inp.setMaximumWidth(64)
+            validator = QtGui.QDoubleValidator(0.0, 1000.0, 3, inp)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            inp.setValidator(validator)
+
+        def _range_widget(min_input, max_input, unit_text=None):
+            widget = QtWidgets.QWidget()
+            layout = QtWidgets.QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            layout.addWidget(min_input)
+            layout.addWidget(QtWidgets.QLabel("-"))
+            layout.addWidget(max_input)
+            if unit_text:
+                unit_label = QtWidgets.QLabel(unit_text)
+                unit_label.setObjectName("fieldLabel")
+                layout.addWidget(unit_label)
+            layout.addStretch(1)
+            return widget
+
+        def _value_widget(input_widget, unit_text=None):
+            widget = QtWidgets.QWidget()
+            layout = QtWidgets.QHBoxLayout(widget)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            layout.addWidget(input_widget)
+            if unit_text:
+                unit_label = QtWidgets.QLabel(unit_text)
+                unit_label.setObjectName("fieldLabel")
+                layout.addWidget(unit_label)
+            layout.addStretch(1)
+            return widget
+
+        for row, (label, widget) in enumerate((
+            ("目标温度", _value_widget(self._test_temp_input)),
+            ("层高", _range_widget(
+                self._test_layer_height_min_input,
+                self._test_layer_height_max_input,
+                "mm",
+            )),
+            ("速度", _value_widget(self._test_speed_input, "mm/s")),
+            ("挤出倍率", _range_widget(
+                self._test_scale_min_input,
+                self._test_scale_max_input,
+            )),
+            ("预挤出耗材长度", _value_widget(self._test_prime_length_input, "mm E")),
+            ("预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
+            ("回抽耗材长度", _value_widget(self._test_retract_length_input, "mm E")),
+            ("回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
+        )):
+            lbl = QtWidgets.QLabel(label)
+            lbl.setObjectName("fieldLabel")
+            test_form.addWidget(lbl, row, 0)
+            test_form.addWidget(widget, row, 1)
+        print_test_layout.addLayout(test_form)
+
+        self._test_correction_label = QtWidgets.QLabel("RSI 修正量: 未收到")
+        self._test_correction_label.setObjectName("fieldLabel")
+        self._test_correction_label.setWordWrap(True)
+        print_test_layout.addWidget(self._test_correction_label)
+
+        self._btn_test_prepare = QtWidgets.QPushButton("进入测试准备")
+        self._btn_test_prepare.setMinimumHeight(30)
+        self._btn_test_prepare.setCursor(QtCore.Qt.PointingHandCursor)
+        print_test_layout.addWidget(self._btn_test_prepare)
+
+        z_row_up = QtWidgets.QHBoxLayout()
+        z_row_down = QtWidgets.QHBoxLayout()
+        self._test_z_buttons = []
+        for text_label, delta in (("上升 0.1", 0.1), ("上升 1", 1.0), ("上升 5", 5.0)):
+            btn = QtWidgets.QPushButton(text_label)
+            btn.setEnabled(False)
+            btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
+            z_row_up.addWidget(btn)
+            self._test_z_buttons.append(btn)
+        for text_label, delta in (("下降 0.1", -0.1), ("下降 1", -1.0), ("下降 5", -5.0)):
+            btn = QtWidgets.QPushButton(text_label)
+            btn.setEnabled(False)
+            btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
+            z_row_down.addWidget(btn)
+            self._test_z_buttons.append(btn)
+        print_test_layout.addLayout(z_row_up)
+        print_test_layout.addLayout(z_row_down)
+
+        self._btn_test_confirm_height = QtWidgets.QPushButton("确认高度并打印测试线")
+        self._btn_test_confirm_height.setMinimumHeight(30)
+        self._btn_test_confirm_height.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_test_confirm_height.setEnabled(False)
+        print_test_layout.addWidget(self._btn_test_confirm_height)
+
+        self._btn_export_uart_log = QtWidgets.QPushButton("导出诊断日志")
+        self._btn_export_uart_log.setMinimumHeight(36)
+        self._btn_export_uart_log.setCursor(QtCore.Qt.PointingHandCursor)
+
+        self._test_status = QtWidgets.QLabel("未进入测试。")
+        self._test_status.setObjectName("fieldLabel")
+        self._test_status.setWordWrap(True)
+        print_test_layout.addWidget(self._test_status)
+
+        self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
+        self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
+        self._btn_export_uart_log.clicked.connect(self._on_export_diagnostic_log)
 
         # ======== Launch Control 区域 ========
         launch_box = QtWidgets.QGroupBox("启动")
@@ -1530,14 +2008,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
+        self._export_box = export_box
+        self._launch_box = launch_box
+        self._print_test_box = print_test_box
+        self._control_box = control_box
+        self._latency_box = latency_box
+
         # Add all boxes to col2_layout in the desired order
         col2_layout.addWidget(export_box)
         col2_layout.addWidget(launch_box)
+        col2_layout.addWidget(print_test_box)
         col2_layout.addWidget(control_box)
         col2_layout.addWidget(latency_box)
         col2_layout.addStretch(1)
-
-        col0_layout.addStretch(1)
+        col2_layout.addWidget(self._btn_export_uart_log)
 
         layout.addLayout(col0_layout, 1, 0)
         layout.addLayout(col1_layout, 1, 1)
@@ -1547,7 +2031,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         layout.setRowStretch(1, 1)
 
         self.setStyleSheet(
-            "QWidget { background: #f7f7f7; font-family: 'WenQuanYi Micro Hei', 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif; }"
+            "QWidget { background: #f7f7f7; "
+            "font-family: 'WenQuanYi Micro Hei', 'Noto Sans CJK SC', "
+            "'Microsoft YaHei', sans-serif; }"
             "QGroupBox {"
             "  font-weight: 600;"
             "  margin-top: 4px;"
@@ -1565,6 +2051,50 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  font-size: 16px;"
             "  font-weight: 700;"
             "  color: #2b2b2b;"
+            "}"
+            "QPushButton#btnModeTest, QPushButton#btnModePrint {"
+            "  font-weight: 700;"
+            "  font-size: 22px;"
+            "  border: 1px solid #1a73e8;"
+            "  border-radius: 8px;"
+            "  background: #ffffff;"
+            "  color: #1a73e8;"
+            "  padding: 18px 28px;"
+            "}"
+            "QPushButton#btnModeTest:hover, QPushButton#btnModePrint:hover {"
+            "  background: #e8f0fe;"
+            "  border-color: #1558b0;"
+            "}"
+            "QPushButton#btnModeBack {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 4px 14px;"
+            "}"
+            "QPushButton#btnModeBack:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnRsiLogDetail, QPushButton#btnUartLogDetail {"
+            "  font-weight: 600;"
+            "  font-size: 12px;"
+            "  border: 1px solid #c0c0c0;"
+            "  border-radius: 5px;"
+            "  background: #ffffff;"
+            "  color: #333333;"
+            "  padding: 3px 10px;"
+            "}"
+            "QPushButton#btnRsiLogDetail:hover, QPushButton#btnUartLogDetail:hover {"
+            "  background: #f0f0f0;"
+            "  border-color: #999999;"
+            "}"
+            "QPushButton#btnRsiLogDetail:disabled, QPushButton#btnUartLogDetail:disabled {"
+            "  background: #eeeeee;"
+            "  color: #aaaaaa;"
+            "  border-color: #dddddd;"
             "}"
             "QLabel#fieldLabel { color: #666666; }"
             "QLabel#valueLabel {"
@@ -1855,8 +2385,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  background: #eeeeee;"
             "  color: #aaaaaa;"
             "  border-color: #dddddd;"
-            "}"
-        )
+            "}")
+
+        self._btn_mode_test.clicked.connect(lambda: self._set_active_mode(_MODE_PAGE_TEST))
+        self._btn_mode_print.clicked.connect(lambda: self._set_active_mode(_MODE_PAGE_PRINT))
+        self._btn_mode_back.clicked.connect(self._show_mode_select)
+        self._btn_rsi_log_detail.clicked.connect(self._show_rsi_log_detail)
+        self._btn_uart_log_detail.clicked.connect(self._show_uart_log_detail)
+        self._show_mode_select()
 
         self._extrude_scale_apply.clicked.connect(self._on_extrude_scale_apply)
         self._extrude_scale_input.returnPressed.connect(self._on_extrude_scale_apply)
@@ -1938,6 +2474,64 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def current_extrude_scale(self):
         return self._extrude_scale_current
 
+    def current_tool_id(self):
+        return self._current_tool_id
+
+    def _format_diagnostic_time(self, epoch):
+        local = time.localtime(epoch)
+        ms = int((epoch - int(epoch)) * 1000)
+        return time.strftime("%Y-%m-%d %H:%M:%S", local) + f".{ms:03d}"
+
+    def _append_diagnostic(self, source, kind, detail):
+        epoch = time.time()
+        record = {
+            "time_epoch": epoch,
+            "time": self._format_diagnostic_time(epoch),
+            "source": str(source),
+            "kind": str(kind),
+            "detail": detail,
+        }
+        self._diagnostic_log_history.append(record)
+        overflow = len(self._diagnostic_log_history) - self._DIAGNOSTIC_LOG_LIMIT
+        if overflow > 0:
+            del self._diagnostic_log_history[:overflow]
+
+    def _trajectory_diagnostic(self, traj):
+        return {
+            "seq": int(getattr(traj, "seq", 0)),
+            "tool_id": int(getattr(traj, "tool_id", 0)),
+            "x": float(getattr(traj, "x", 0.0)),
+            "y": float(getattr(traj, "y", 0.0)),
+            "z": float(getattr(traj, "z", 0.0)),
+            "a": float(getattr(traj, "a", 0.0)),
+            "b": float(getattr(traj, "b", 0.0)),
+            "c": float(getattr(traj, "c", 0.0)),
+            "e": float(getattr(traj, "e", 0.0)),
+        }
+
+    def _event_diagnostic(self, event):
+        return {
+            "event_type": str(getattr(event, "event_type", "") or ""),
+            "payload": str(getattr(event, "payload", "") or ""),
+            "event_src_line": int(getattr(event, "event_src_line", 0)),
+            "trigger_seq": int(getattr(event, "trigger_seq", 0)),
+        }
+
+    def _printhead_diagnostic(self, ps):
+        return {
+            "ready_for_motion": bool(getattr(ps, "ready_for_motion", False)),
+            "ready_event_seq": int(getattr(ps, "ready_event_seq", 0)),
+            "ready_event_type": str(getattr(ps, "ready_event_type", "") or ""),
+            "fan_ok_cf": bool(getattr(ps, "fan_ok_cf", False)),
+            "fan_ok_resin": bool(getattr(ps, "fan_ok_resin", False)),
+            "current_temp_cf": float(getattr(ps, "current_temp_cf", 0.0)),
+            "target_temp_cf": float(getattr(ps, "target_temp_cf", 0.0)),
+            "current_temp_resin": float(getattr(ps, "current_temp_resin", 0.0)),
+            "target_temp_resin": float(getattr(ps, "target_temp_resin", 0.0)),
+            "current_tool": int(getattr(ps, "current_tool", 0)),
+            "error_code": int(getattr(ps, "error_code", 0)),
+            "raw": str(getattr(ps, "raw", "") or ""),
+        }
 
     def _show_latency_detail(self):
         self._latency_diag_widget.adjustSize()
@@ -1946,6 +2540,29 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._latency_diag_widget.activateWindow()
 
     def _update_latency(self, msg: ExtruderLatencyStatus):
+        self._append_diagnostic("latency", "snapshot", {
+            "arm_seq": int(msg.arm_seq),
+            "last_eack_seq": int(msg.last_eack_seq),
+            "stat_last_e_seq": int(msg.stat_last_e_seq),
+            "has_eack": bool(msg.has_eack),
+            "has_stat": bool(msg.has_stat),
+            "seq_lag": int(msg.seq_lag),
+            "cycle_lag_ms": float(msg.cycle_lag_ms),
+            "ack_delay_ms": float(msg.ack_delay_ms),
+            "linux_mcu_delay_ms": float(msg.linux_mcu_delay_ms),
+            "has_robot_match": bool(msg.has_robot_match),
+            "actual_robot_seq": int(msg.actual_robot_seq),
+            "robot_match_error_mm": float(msg.robot_match_error_mm),
+            "mcu_robot_delay_ms": float(msg.mcu_robot_delay_ms),
+            "eack_count": int(msg.eack_count),
+            "old_seq_warn_count": int(msg.old_seq_warn_count),
+            "gap_warn_count": int(msg.gap_warn_count),
+            "last_tool_id": int(msg.last_tool_id),
+            "last_extrude_abs": float(msg.last_extrude_abs),
+            "last_mcu_us": int(msg.last_mcu_us),
+            "last_warn": str(msg.last_warn or ""),
+            "last_raw": str(msg.last_raw or ""),
+        })
         link_labels = getattr(self, "_latency_link_labels", {})
         diag_labels = getattr(self, "_latency_diag_labels", {})
         if not link_labels:
@@ -2002,8 +2619,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 mcu_robot_color = "#b15e00"
         set_link(
             "mcu_robot",
-            fmt_unc(msg.mcu_robot_delay_ms, robot_unc) if has_robot and has_eack else "-",
-            f"P95 |偏移| {fmt_ms(msg.mcu_robot_abs_p95_ms)}" if has_robot and has_eack else "P95 |偏移| -",
+            fmt_unc(
+                msg.mcu_robot_delay_ms,
+                robot_unc) if has_robot and has_eack else "-",
+            (
+                f"P95 |偏移| {fmt_ms(msg.mcu_robot_abs_p95_ms)}"
+                if has_robot and has_eack
+                else "P95 |偏移| -"
+            ),
             mcu_robot_color,
         )
 
@@ -2039,12 +2662,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         set_diag("linux_mcu_p99", fmt_ms(msg.linux_mcu_p99_ms) if has_eack else "-")
         set_diag("linux_robot_p99", fmt_ms(msg.linux_robot_p99_ms) if has_robot else "-")
-        set_diag("mcu_robot_avg", fmt_signed_ms(msg.mcu_robot_avg_ms) if has_robot and has_eack else "-")
-        set_diag("mcu_robot_p99", fmt_ms(msg.mcu_robot_abs_p99_ms) if has_robot and has_eack else "-")
+        set_diag("mcu_robot_avg", fmt_signed_ms(msg.mcu_robot_avg_ms)
+                 if has_robot and has_eack else "-")
+        set_diag("mcu_robot_p99", fmt_ms(msg.mcu_robot_abs_p99_ms)
+                 if has_robot and has_eack else "-")
         set_diag("robot_seq", str(msg.actual_robot_seq) if has_robot else "-")
         set_diag("seqs", f"发送 {msg.arm_seq} / EACK {msg.last_eack_seq if has_eack else '-'}")
         if finite(msg.robot_match_error_mm):
-            set_diag("match_error", f"{msg.robot_match_error_mm:.2f} / {msg.robot_match_max_error_mm:.2f} mm")
+            set_diag(
+                "match_error",
+                f"{msg.robot_match_error_mm:.2f} / {msg.robot_match_max_error_mm:.2f} mm")
         else:
             set_diag("match_error", "-")
         set_diag("uncertainty", f"±{msg.robot_match_uncertainty_ms:.0f} ms" if has_robot else "-")
@@ -2053,26 +2680,72 @@ class _UiStatusWidget(QtWidgets.QWidget):
         warn_color = "#b42318" if msg.last_warn else "#666666"
         set_diag(
             "warn",
-            f"EACK {msg.eack_count} / old {msg.old_seq_warn_count} / gap {msg.gap_warn_count} / {warn_text}",
+            (
+                f"EACK {msg.eack_count} / old {msg.old_seq_warn_count} / "
+                f"gap {msg.gap_warn_count} / {warn_text}"
+            ),
             warn_color,
         )
 
     def _update_ui(self, msg: UiStatus):
+        self._append_diagnostic("ui_status", "snapshot", {
+            "state": str(msg.state or ""),
+            "last_warn": str(msg.last_warn or ""),
+            "last_error": str(msg.last_error or ""),
+            "ready_for_motion": bool(msg.ready_for_motion),
+            "kuka_status_valid": bool(msg.kuka_status_valid),
+            "kuka_status_age_s": float(msg.kuka_status_age_s),
+            "rsi_heartbeat_valid": bool(msg.rsi_heartbeat_valid),
+            "rsi_heartbeat_age_s": float(msg.rsi_heartbeat_age_s),
+            "printhead_status_valid": bool(msg.printhead_status_valid),
+            "printhead_status_age_s": float(msg.printhead_status_age_s),
+            "printhead_status": self._printhead_diagnostic(msg.printhead_status),
+            "traj_next_seq": int(msg.traj_next_seq),
+            "traj_backlog": int(msg.traj_backlog),
+            "event_next_seq": int(msg.event_next_seq),
+            "event_pending": int(msg.event_pending),
+            "current_traj_valid": bool(msg.current_traj_valid),
+            "next_traj_valid": bool(msg.next_traj_valid),
+            "current_event_valid": bool(msg.current_event_valid),
+            "next_event_valid": bool(msg.next_event_valid),
+            "current_traj": self._trajectory_diagnostic(msg.current_traj),
+            "next_traj": self._trajectory_diagnostic(msg.next_traj),
+            "current_event": self._event_diagnostic(msg.current_event),
+            "next_event": self._event_diagnostic(msg.next_event),
+            "print_test_busy": bool(self._print_test_busy),
+            "print_test_seen_correction": bool(self._print_test_seen_correction),
+            "print_test_target": (
+                list(self._print_test_target)
+                if self._print_test_target is not None
+                else None
+            ),
+            "print_test_resin_temp": (
+                list(self._print_test_resin_temp)
+                if self._print_test_resin_temp is not None
+                else None
+            ),
+        })
         state_str = msg.state or "-"
         state_color = self._STATE_COLORS.get(state_str, "#a0a0a0")
         self._set_value("System State", state_str, state_color)
         self._update_control_buttons(msg.state or "")
 
-
         if msg.printhead_status_valid:
             ps = msg.printhead_status
+            self._current_tool_id = int(ps.current_tool)
             self._current_tool_value.setText(self._format_tool(ps.current_tool))
 
             using_color = "#1b6e3c"
             cf_state = "使用中" if ps.current_tool == 1 else "空闲"
             resin_state = "使用中" if ps.current_tool == 2 else "空闲"
-            self._set_value("Carbon Fiber State", cf_state, using_color if cf_state == "使用中" else "#2b2b2b")
-            self._set_value("Resin State", resin_state, using_color if resin_state == "使用中" else "#2b2b2b")
+            self._set_value(
+                "Carbon Fiber State",
+                cf_state,
+                using_color if cf_state == "使用中" else "#2b2b2b")
+            self._set_value(
+                "Resin State",
+                resin_state,
+                using_color if resin_state == "使用中" else "#2b2b2b")
 
             cf_fan_color = "#1b6e3c" if ps.fan_ok_cf else "#b42318"
             self._set_value("Carbon Fiber Fan OK", "开" if ps.fan_ok_cf else "关", cf_fan_color)
@@ -2083,7 +2756,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_value("Resin Fan OK", "开" if ps.fan_ok_resin else "关", resin_fan_color)
             self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
+            self._print_test_resin_temp = (ps.current_temp_resin, ps.target_temp_resin)
         else:
+            self._current_tool_id = 0
             missing_keys = [
                 "Carbon Fiber State",
                 "Carbon Fiber Fan OK",
@@ -2269,15 +2944,254 @@ class _UiStatusWidget(QtWidgets.QWidget):
         pid_status.setText("已恢复默认值。")
         pid_status.setStyleSheet("color: #1a73e8;")
 
+    # ---- Print test ----
+
+    def _set_print_test_status(self, text, color=None):
+        self._append_diagnostic(
+            "ui", "print_test_status", {
+                "text": str(text), "color": str(
+                    color or "")})
+        self._test_status.setText(text)
+        if color:
+            self._test_status.setStyleSheet(f"color: {color};")
+        else:
+            self._test_status.setStyleSheet("")
+
+    def _parse_print_test_params(self):
+        from gcode_planner.print_test_generator import (
+            TEST_MATRIX_MAX_LINES,
+            expand_test_values,
+        )
+
+        temp = float(self._test_temp_input.text().strip())
+        speed = float(self._test_speed_input.text().strip())
+        layer_heights = expand_test_values(
+            f"{self._test_layer_height_min_input.text()}-"
+            f"{self._test_layer_height_max_input.text()}",
+            label="层高",
+        )
+        scales = expand_test_values(
+            f"{self._test_scale_min_input.text()}-"
+            f"{self._test_scale_max_input.text()}",
+            label="挤出倍率",
+        )
+        prime_length = float(self._test_prime_length_input.text().strip())
+        prime_speed = float(self._test_prime_speed_input.text().strip())
+        retract_length = float(self._test_retract_length_input.text().strip())
+        retract_speed = float(self._test_retract_speed_input.text().strip())
+        line_count = len(layer_heights) * len(scales)
+        if temp < 0.0:
+            raise ValueError("目标温度不能为负。")
+        if speed <= 0.0:
+            raise ValueError("速度必须大于 0。")
+        if prime_length < 0.0 or retract_length < 0.0:
+            raise ValueError("预挤出/回抽耗材长度不能为负。")
+        if prime_speed <= 0.0 or retract_speed <= 0.0:
+            raise ValueError("预挤出/回抽速度必须大于 0。")
+        if line_count > TEST_MATRIX_MAX_LINES:
+            raise ValueError(
+                f"测试线数量为 {line_count}，超过最大 {TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
+            )
+        return {
+            "temp": temp,
+            "layer_heights": layer_heights,
+            "speed": speed,
+            "scales": scales,
+            "line_count": line_count,
+            "prime_length": prime_length,
+            "prime_speed": prime_speed,
+            "retract_length": retract_length,
+            "retract_speed": retract_speed,
+        }
+
+    def _on_print_test_prepare(self):
+        try:
+            params = self._parse_print_test_params()
+        except Exception as exc:
+            self._set_print_test_status(f"参数无效: {exc}", "#b42318")
+            return
+        self._print_test_params = params
+        self._uart_log_history.clear()
+        self._diagnostic_log_history.clear()
+        self._append_diagnostic("ui", "diagnostic_reset", {"reason": "print_test_prepare"})
+        self._uart_log_text.clear()
+        self._uart_log_latest_display = ""
+        self._uart_log_summary.setText("测试日志已清空")
+        self.scale_submit.emit(1.0)
+        self.uart_command_submit.emit("EV 0 fan_resin 1\n")
+        self.uart_command_submit.emit(f"EV 0 heat_resin {params['temp']}\n")
+        self.print_test_rsi_command_submit.emit("RESET")
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._set_print_test_status(
+            f"已进入测试准备：固定树脂喷头，矩阵 {params['line_count']} 条线，"
+            "UART 挤出倍率已设为 1.0。请启动/准备 KUKA RSI，"
+            "收到修正量后可做 Z 微调。",
+            "#1b6e3c",
+        )
+
+    def _set_print_test_controls_enabled(self, enabled):
+        for btn in getattr(self, "_test_z_buttons", []):
+            btn.setEnabled(enabled and not self._print_test_busy)
+        self._btn_test_confirm_height.setEnabled(enabled and not self._print_test_busy)
+
+    def _on_current_correction(self, msg):
+        self._append_diagnostic("rsi", "current_correction", {
+            "seq": int(getattr(msg, "seq", 0)),
+            "tool_id": int(getattr(msg, "tool_id", 0)),
+            "x": float(msg.x),
+            "y": float(msg.y),
+            "z": float(msg.z),
+            "a": float(msg.a),
+            "b": float(msg.b),
+            "c": float(msg.c),
+            "e": float(getattr(msg, "e", 0.0)),
+        })
+        self._print_test_current_correction = (msg.x, msg.y, msg.z, msg.a, msg.b, msg.c)
+        self._print_test_seen_correction = True
+        self._test_correction_label.setText(
+            "RSI 修正量: "
+            f"X={msg.x:.3f} Y={msg.y:.3f} Z={msg.z:.3f} "
+            f"A={msg.a:.3f} B={msg.b:.3f} C={msg.c:.3f}"
+        )
+        if self._print_test_params is not None and not self._print_test_busy:
+            self._set_print_test_controls_enabled(True)
+        if self._print_test_busy and self._print_test_target is not None:
+            target = self._print_test_target
+            err = max(abs(v - t)
+                      for v, t in zip(self._print_test_current_correction[:6], target[:6]))
+            if err <= 0.03:
+                self._print_test_busy = False
+                self._print_test_target = None
+                self._set_print_test_controls_enabled(True)
+                self._set_print_test_status("测试动作已到达目标，RSI 正在保持最后一帧。", "#1b6e3c")
+
+    def _on_print_test_z(self, delta_z):
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        start = self._print_test_current_correction
+        target_z = start[2] + float(delta_z)
+        target = (start[0], start[1], target_z, start[3], start[4], start[5])
+        self._run_print_test_job("z", start, target_z=target_z, target_pose=target)
+
+    def _on_print_test_confirm_height(self):
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        temp_target = float(self._print_test_params.get("temp", 0.0))
+        if self._print_test_resin_temp is None:
+            self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
+            return
+        current_temp, _target_temp = self._print_test_resin_temp
+        if current_temp < temp_target - 5.0:
+            self._set_print_test_status(
+                f"树脂温度未到达: 当前 {current_temp:.1f} / 目标 {temp_target:.1f}",
+                "#b42318",
+            )
+            return
+        start = self._print_test_current_correction
+        line_count = int(self._print_test_params.get("line_count", 1))
+        layer_heights = self._print_test_params.get("layer_heights", [0.0])
+        last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
+        final_x = start[0] + 300.0 if line_count % 2 == 1 else start[0]
+        target = (
+            final_x,
+            start[1] + max(0, line_count - 1) * 10.0,
+            start[2] + last_layer_height + 10.0,
+            start[3],
+            start[4],
+            start[5],
+        )
+        self._run_print_test_job("line", start, target_pose=target)
+
+    def _run_print_test_job(self, job_type, start_pose, target_pose, target_z=None):
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
+        params = self._print_test_params or {}
+        self._print_test_busy = True
+        self._print_test_target = target_pose
+        self._set_print_test_controls_enabled(False)
+        self._set_print_test_status("正在生成临时测试 NPZ...", "#b15e00")
+
+        def _worker():
+            try:
+                from gcode_planner.gcode_parser import parse_gcode_lines
+                from gcode_planner.npz_exporter import export_npz
+                from gcode_planner.print_test_generator import (
+                    format_gcode,
+                    generate_test_matrix_gcode,
+                    generate_z_adjust_gcode,
+                )
+                base_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test")
+                stamp = time.strftime("%Y%m%d_%H%M%S")
+                job_dir = os.path.join(base_dir, stamp)
+                os.makedirs(job_dir, exist_ok=True)
+                if job_type == "z":
+                    lines = generate_z_adjust_gcode(
+                        start_pose=start_pose,
+                        target_z=target_z,
+                        speed_mm_s=min(float(params.get("speed", 10.0)), 10.0),
+                    )
+                    stem = "z_adjust"
+                else:
+                    lines = generate_test_matrix_gcode(
+                        start_pose=start_pose,
+                        layer_heights_mm=params["layer_heights"],
+                        extrusion_scales=params["scales"],
+                        speed_mm_s=float(params["speed"]),
+                        line_length_mm=300.0,
+                        y_spacing_mm=10.0,
+                        finish_lift_mm=10.0,
+                        prime_length_mm=float(params.get("prime_length", 0.0)),
+                        retract_length_mm=float(params.get("retract_length", 0.0)),
+                        prime_speed_mm_s=float(params.get("prime_speed", 2.0)),
+                        retract_speed_mm_s=float(params.get("retract_speed", 8.0)),
+                    )
+                    stem = "test_matrix"
+                gcode_path = os.path.join(job_dir, f"{stem}.gcode")
+                npz_path = os.path.join(job_dir, f"{stem}.npz")
+                with open(gcode_path, "w", encoding="utf-8") as f:
+                    f.write(format_gcode(lines))
+                parsed = parse_gcode_lines(lines)
+                export_npz(
+                    parsed,
+                    npz_path,
+                    dt=0.004,
+                    chunk_size=5000000,
+                    default_feed_mm_s=float(params.get("speed", 10.0)),
+                    tool_offset=(0.0, 0.0, 0.0),
+                    enable_extrude_wait=True,
+                )
+                self.print_test_rsi_command_submit.emit("RESET")
+                time.sleep(0.05)
+                self.print_test_load_npz_submit.emit(npz_path)
+                self.print_test_status.emit(f"已下发测试动作: {npz_path}", "#1b6e3c")
+            except Exception as exc:
+                self._print_test_busy = False
+                self._print_test_target = None
+                self.print_test_controls_enabled.emit(True)
+                self.print_test_status.emit(f"测试动作生成失败: {exc}", "#b42318")
+
+        threading.Thread(target=_worker, daemon=True).start()
+
     # ---- Offset persistence ----
 
     def _on_offset_changed(self, _value=None):
         x = self._offset_spins["X"].value()
         y = self._offset_spins["Y"].value()
         z = self._offset_spins["Z"].value()
+        resin_z = self.current_resin_z_print_compensation()
         try:
-            _save_offset_config(x, y, z)
-            self._offset_status.setText(f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}")
+            _save_offset_config(x, y, z, resin_z)
+            self._offset_status.setText(
+                f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}  树脂Z补偿={resin_z:.2f}")
             self._offset_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
             self._offset_status.setText(f"保存失败: {exc}")
@@ -2289,6 +3203,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._offset_spins["Y"].value(),
             self._offset_spins["Z"].value(),
         )
+
+    def current_resin_z_print_compensation(self):
+        return self._resin_z_print_comp_spin.value()
 
     # ---- GCode Export ----
 
@@ -2331,13 +3248,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "corner_retreat_ratio": float(self._planner_inputs["corner_retreat_ratio"].text()),
                 "density": int(self._planner_inputs["density"].text()),
                 "degree": int(self._planner_inputs["degree"].text()),
-                "max_fit_points_per_segment": int(self._planner_inputs["max_fit_points_per_segment"].text()),
+                "max_fit_points_per_segment": int(
+                    self._planner_inputs["max_fit_points_per_segment"].text()
+                ),
                 "export_sleep_ms": int(self._planner_inputs["export_sleep_ms"].text()),
                 "export_yield_every": int(self._planner_inputs["export_yield_every"].text()),
                 "split_by_layer_type": self._planner_inputs["split_by_layer_type"].isChecked(),
                 "plot_layer_xy": self._planner_inputs["plot_layer_xy"].isChecked(),
                 "plot_stride": int(self._planner_inputs["plot_stride"].text()),
             }
+            self._last_export_split_by_layer_type = params["split_by_layer_type"]
         except (ValueError, KeyError) as exc:
             self._export_status.setText(f"无效的规划器参数: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
@@ -2392,6 +3312,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     split_by_layer_type=params["split_by_layer_type"],
                     plot_layer_xy=params["plot_layer_xy"],
                     plot_stride=params["plot_stride"],
+                    enable_extrude_wait=True,
+                    resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
                 )
                 rows = stats.get("rows", 0)
                 parts = stats.get("parts", 0)
@@ -2424,7 +3346,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             if npz_path:
                 self._last_npz_dir = os.path.splitext(npz_path)[0]
                 self._selected_npz_dir = self._last_npz_dir
-                self._selected_npz_launch_path = _resolve_npz_launch_path_from_dir(self._last_npz_dir)
+                self._selected_npz_launch_path = (
+                    npz_path
+                    if not getattr(self, "_last_export_split_by_layer_type", False)
+                    else None
+                )
                 self._selected_npz_dir_input.setText(self._last_npz_dir)
                 self._btn_view_layers.setEnabled(True)
         else:
@@ -2441,7 +3367,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _npz_launch_relation_text(self):
         return (
-            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 manifest/npz 传给它。\n"
+            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 flat NPZ 或 _part 分片入口传给它。\n"
             "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 只影响加载、预取和队列阈值，"
             "不会改变 NPZ 文件内容。"
         )
@@ -2458,8 +3384,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 changed.append((name, current, default))
         return changed
 
-    def _npz_dir_selection_warnings(self, saved_offset):
+    def _npz_dir_selection_warnings(self, saved_offset, saved_resin_z_print_compensation):
         current_offset = self.get_tool_offset()
+        current_resin_z = self.current_resin_z_print_compensation()
         warnings = []
 
         if saved_offset is None:
@@ -2472,6 +3399,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             if mismatch:
                 warnings.append("NPZ 中的工具偏移与当前界面设置不一致。")
 
+        if saved_resin_z_print_compensation is None:
+            warnings.append("未找到或无法读取树脂轴 Z 打印补偿，无法确认该 NPZ 是否使用了当前界面补偿值。")
+        elif abs(saved_resin_z_print_compensation - current_resin_z) > _NPZ_OFFSET_TOLERANCE_MM:
+            warnings.append("NPZ 中的树脂轴 Z 打印补偿与当前界面设置不一致。")
+
         changed_launch_params = self._changed_npz_related_launch_params()
         if changed_launch_params:
             details = ", ".join(
@@ -2482,12 +3414,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         return warnings
 
-    def _confirm_npz_dir_selection(self, npz_dir, launch_path, saved_offset, offset_file, warnings):
+    def _confirm_npz_dir_selection(
+            self,
+            npz_dir,
+            launch_path,
+            saved_offset,
+            saved_resin_z_print_compensation,
+            offset_file,
+            warnings):
         current_offset = self.get_tool_offset()
+        current_resin_z = self.current_resin_z_print_compensation()
         detail = [
             f"NPZ 文件夹: {npz_dir}",
             f"启动将使用: {launch_path}",
             f"当前界面工具偏移: {_format_tool_offset(current_offset)}",
+            f"当前界面树脂轴 Z 打印补偿: {current_resin_z:.2f} mm",
         ]
 
         if saved_offset is None:
@@ -2496,6 +3437,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             detail.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
             if offset_file:
                 detail.append(f"偏移文件: {offset_file}")
+
+        if saved_resin_z_print_compensation is None:
+            detail.append("NPZ 保存的树脂轴 Z 打印补偿: 未知")
+        else:
+            detail.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
 
         detail.append("")
         detail.append("检测到以下相关参数变化/风险:")
@@ -2527,21 +3473,29 @@ class _UiStatusWidget(QtWidgets.QWidget):
             _show_warning(
                 self,
                 "NPZ 文件夹无效",
-                "所选文件夹中未找到 *_manifest.json 或可识别的 .npz 文件。",
+                "所选文件夹中未找到可用于正式打印的 flat NPZ 或 _part 分片。",
             )
             return
 
         try:
-            saved_offset, offset_file = _read_npz_tool_offset(launch_path)
+            (
+                saved_offset,
+                saved_resin_z_print_compensation,
+                offset_file,
+            ) = _read_npz_export_metadata(launch_path)
         except Exception as exc:
-            saved_offset, offset_file = None, None
+            saved_offset, saved_resin_z_print_compensation, offset_file = None, None, None
             self._export_status.setText(f"读取 NPZ 偏移信息失败: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
 
-        warnings = self._npz_dir_selection_warnings(saved_offset)
+        warnings = self._npz_dir_selection_warnings(saved_offset, saved_resin_z_print_compensation)
         if warnings and not self._confirm_npz_dir_selection(
-            npz_dir, launch_path, saved_offset, offset_file, warnings
-        ):
+                npz_dir,
+                launch_path,
+                saved_offset,
+                saved_resin_z_print_compensation,
+                offset_file,
+                warnings):
             return
 
         self._selected_npz_dir = npz_dir
@@ -2587,22 +3541,76 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._btn_stop.setEnabled(True)
 
     def _on_rsi_xml(self, xml_text):
-        import time, re
+        import time
+        import re
+        ipoc_match = re.search(r"<IPOC>([^<]*)</IPOC>", xml_text or "")
+        self._append_diagnostic("rsi", "sent_xml", {
+            "ipoc": ipoc_match.group(1) if ipoc_match else "",
+            "xml": str(xml_text or ""),
+        })
         xml_stripped = re.sub(r'<IPOC>[^<]*</IPOC>', '<IPOC>...</IPOC>', xml_text)
         if xml_stripped == self._rsi_log_last_xml:
             return
         self._rsi_log_last_xml = xml_stripped
+        display_text = _format_rsi_xml_for_display(xml_text)
+        self._rsi_log_latest_display = display_text
+        self._btn_rsi_log_detail.setEnabled(True)
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
-        lines = xml_text.strip().split("\n")
-        for line in lines:
-            self._rsi_log_text.appendPlainText(f"[{ts}] {line}")
+        self._rsi_log_summary.setText(f"最近 XML: {ts}")
+        self._rsi_log_text.appendPlainText(f"[{ts}] RSI sent XML")
+        self._rsi_log_text.appendPlainText(display_text)
+
+    def _show_rsi_log_detail(self):
+        dialog = _LogDetailDialog("RSI XML 放大查看", self._rsi_log_latest_display, self)
+        dialog.exec_()
 
     def _on_uart_log(self, line_text):
         import time
         t = time.localtime()
         ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
-        self._uart_log_text.appendPlainText(f"[{ts}] {line_text}")
+        display_text = str(line_text or "")
+        direction = display_text[:2] if display_text.startswith(("RX ", "TX ")) else ""
+        payload = display_text[3:].lstrip() if display_text.startswith(
+            ("RX ", "TX ")) else display_text
+        self._append_diagnostic("uart", "raw", {
+            "direction": direction,
+            "line": display_text,
+            "payload": payload,
+        })
+        if payload.startswith("EWARN"):
+            return
+        entry = f"[{ts}] {display_text}"
+        self._uart_log_history.append(entry)
+        self._uart_log_latest_display = display_text
+        self._btn_uart_log_detail.setEnabled(True)
+        self._uart_log_summary.setText(f"最近日志: {ts}")
+        self._uart_log_text.appendPlainText(entry)
+
+    def _on_export_diagnostic_log(self):
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+        out_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test/diagnostic_logs")
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl")
+        records = self._diagnostic_log_history or [
+            {
+                "time_epoch": time.time(),
+                "time": self._format_diagnostic_time(time.time()),
+                "source": "ui",
+                "kind": "empty",
+                "detail": {"message": "当前测试没有诊断日志"},
+            }
+        ]
+        with open(path, "w", encoding="utf-8") as f:
+            for record in records:
+                f.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
+                f.write("\n")
+        self._set_print_test_status(f"诊断日志已导出: {path}", "#1b6e3c")
+
+    def _show_uart_log_detail(self):
+        detail_text = "\n".join(self._uart_log_history) or self._uart_log_latest_display
+        dialog = _LogDetailDialog("UART 日志放大查看", detail_text, self)
+        dialog.exec_()
 
 
 class MyProjectUiPlugin(Plugin):
@@ -2624,10 +3632,18 @@ class MyProjectUiPlugin(Plugin):
         self._uart_cmd_pub = self._node.create_publisher(
             StringMsg, "/uart/manual_command", 10
         )
+        self._print_test_rsi_cmd_pub = self._node.create_publisher(
+            StringMsg, "/print_test/rsi_command", 10
+        )
+        self._print_test_load_pub = self._node.create_publisher(
+            StringMsg, "/print_test/load_npz", 10
+        )
         self._widget = _UiStatusWidget()
         self._widget.scale_submit.connect(self._on_scale_submit)
         self._widget.command_submit.connect(self._on_command_submit)
         self._widget.uart_command_submit.connect(self._on_uart_command_submit)
+        self._widget.print_test_rsi_command_submit.connect(self._on_print_test_rsi_command)
+        self._widget.print_test_load_npz_submit.connect(self._on_print_test_load_npz)
         context.add_widget(self._widget)
 
         # Launch state
@@ -2636,9 +3652,9 @@ class MyProjectUiPlugin(Plugin):
         self._widget._launch_params = self._launch_params
         self._launch_process = None
         self._pending_launch = False
-        
+
         # GCode path starts empty; user can choose one when exporting or auto-matching NPZ.
-        
+
         # Sync changes from main UI to launch params
         self._widget._gcode_path_input.textChanged.connect(self._on_gcode_path_changed_sync)
         # Connect export signals to launch flow
@@ -2662,6 +3678,9 @@ class MyProjectUiPlugin(Plugin):
         self._node.create_subscription(
             StringMsg, "/uart/raw", self._on_uart_log_msg, 10
         )
+        self._node.create_subscription(
+            TrajectoryPoint, "/rsi/current_correction", self._on_current_correction, 10
+        )
 
         self._spin_timer = QtCore.QTimer(self._widget)
         self._spin_timer.timeout.connect(self._spin_once)
@@ -2683,15 +3702,44 @@ class MyProjectUiPlugin(Plugin):
     def _on_uart_log_msg(self, msg: StringMsg):
         self._widget.uart_log_received.emit(msg.data)
 
+    def _on_current_correction(self, msg: TrajectoryPoint):
+        self._widget.current_correction_received.emit(msg)
+
+    def _publish_uart_manual_command(self, cmd: str):
+        msg = StringMsg()
+        msg.data = cmd
+        self._uart_cmd_pub.publish(msg)
+
+    def _send_current_tool_heat_off(self):
+        tool_id = self._widget.current_tool_id()
+        if tool_id == 1:
+            commands = ["EV 0 heat_cf 0\n", "EV 0 heat_resin 0\n"]
+        elif tool_id == 2:
+            commands = ["EV 0 heat_resin 0\n", "EV 0 heat_cf 0\n"]
+        else:
+            commands = ["EV 0 heat_cf 0\n", "EV 0 heat_resin 0\n"]
+        for command in commands:
+            self._publish_uart_manual_command(command)
+
     def _on_command_submit(self, cmd: str):
+        if cmd == "ABORT":
+            self._send_current_tool_heat_off()
         msg = StringMsg()
         msg.data = cmd
         self._cmd_pub.publish(msg)
 
     def _on_uart_command_submit(self, cmd: str):
+        self._publish_uart_manual_command(cmd)
+
+    def _on_print_test_rsi_command(self, cmd: str):
         msg = StringMsg()
         msg.data = cmd
-        self._uart_cmd_pub.publish(msg)
+        self._print_test_rsi_cmd_pub.publish(msg)
+
+    def _on_print_test_load_npz(self, path: str):
+        msg = StringMsg()
+        msg.data = path
+        self._print_test_load_pub.publish(msg)
 
     def _on_scale_submit(self, value: float):
         if not self._param_client.service_is_ready():
@@ -2729,7 +3777,6 @@ class MyProjectUiPlugin(Plugin):
         except Exception:
             if self._spin_timer.isActive():
                 self._spin_timer.stop()
-
 
     # ---- Launch control ----
 
@@ -2785,51 +3832,84 @@ class MyProjectUiPlugin(Plugin):
 
     def _check_npz_and_offset_match(self, npz_launch_path):
         if not npz_launch_path:
-            return False, "missing", None, None
+            return False, "missing", None, None, None
 
         p = Path(npz_launch_path)
         is_manifest = p.name.endswith("_manifest.json")
         if is_manifest and not p.is_file():
-            return False, "missing", None, None
+            return False, "missing", None, None, None
         if p.suffix == ".npz" and not p.is_file():
             part_probe = p.with_name(p.stem + "_part0000.npz")
             if not part_probe.is_file():
-                return False, "missing", None, None
+                return False, "missing", None, None, None
 
         try:
-            saved_offset, offset_file = _read_npz_tool_offset(npz_launch_path)
+            (
+                saved_offset,
+                saved_resin_z_print_compensation,
+                offset_file,
+            ) = _read_npz_export_metadata(npz_launch_path)
         except Exception:
-            return False, "mismatch", None, None
+            return False, "mismatch", None, None, None
 
         if saved_offset is None:
-            return False, "no_offset", None, offset_file
+            return False, "no_offset", None, saved_resin_z_print_compensation, offset_file
 
         cur_offset = self._widget.get_tool_offset()
         for val_saved, val_cur in zip(saved_offset, cur_offset):
             if abs(val_saved - val_cur) > _NPZ_OFFSET_TOLERANCE_MM:
-                return False, "mismatch", saved_offset, offset_file
+                return (
+                    False,
+                    "mismatch",
+                    saved_offset,
+                    saved_resin_z_print_compensation,
+                    offset_file,
+                )
 
-        return True, "ok", saved_offset, offset_file
+        cur_resin_z = self._widget.current_resin_z_print_compensation()
+        if saved_resin_z_print_compensation is None:
+            return False, "no_offset", saved_offset, saved_resin_z_print_compensation, offset_file
+        if abs(saved_resin_z_print_compensation - cur_resin_z) > _NPZ_OFFSET_TOLERANCE_MM:
+            return (
+                    False,
+                    "mismatch",
+                    saved_offset,
+                    saved_resin_z_print_compensation,
+                    offset_file,
+                )
 
-    def _launch_npz_notice(self, npz_launch_path, source, saved_offset, offset_file, status):
+        return True, "ok", saved_offset, saved_resin_z_print_compensation, offset_file
+
+    def _launch_npz_notice(
+            self,
+            npz_launch_path,
+            source,
+            saved_offset,
+            saved_resin_z_print_compensation,
+            offset_file,
+            status):
         cur_offset = self._widget.get_tool_offset()
+        cur_resin_z = self._widget.current_resin_z_print_compensation()
         source_text = "手动选择的 NPZ 文件夹" if source == "selected" else "按 GCode 自动匹配的 NPZ"
         lines = [
             f"NPZ 来源: {source_text}",
             f"启动 npz_path: {npz_launch_path}",
             f"当前界面工具偏移: {_format_tool_offset(cur_offset)}",
+            f"当前界面树脂轴 Z 打印补偿: {cur_resin_z:.2f} mm",
         ]
         if saved_offset is not None:
             lines.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+        if saved_resin_z_print_compensation is not None:
+            lines.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
         if offset_file:
             lines.append(f"偏移文件: {offset_file}")
 
         if status == "ok":
-            lines.append("工具偏移校验通过。")
+            lines.append("工具偏移和树脂轴 Z 打印补偿校验通过。")
         elif status == "no_offset":
-            lines.append("警告: 未找到或无法读取工具偏移 sidecar，无法确认偏移是否一致。")
+            lines.append("警告: 未找到或无法读取工具偏移或树脂轴 Z 打印补偿 sidecar，无法确认参数是否一致。")
         elif status == "mismatch":
-            lines.append("警告: NPZ 中的工具偏移与当前界面设置不一致。")
+            lines.append("警告: NPZ 中的工具偏移或树脂轴 Z 打印补偿与当前界面设置不一致。")
 
         related_values = []
         for name in _NPZ_RELATED_LAUNCH_PARAMS:
@@ -2842,13 +3922,20 @@ class MyProjectUiPlugin(Plugin):
         lines.extend([
             "",
             "启动设置中与 NPZ 直接相关的是 npz_path。",
-            "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 会影响 NPZ 加载、预取和队列阈值；xyzabc_decimals/e_decimals 会影响轨迹数值发布精度。",
+            (
+                "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 会影响"
+                " NPZ 加载、预取和队列阈值；xyzabc_decimals/e_decimals"
+                " 会影响轨迹数值发布精度。"
+            ),
             "这些参数不会改写 NPZ 文件内容。",
             "当前相关启动参数: " + ", ".join(related_values),
             "",
             "是否继续启动？",
         ])
         return "\n".join(lines)
+
+    def _test_mode_bootstrap_npz_path(self):
+        return self._launch_params.get("npz_path") or _DEFAULT_NPZ_PATH
 
     def _on_launch(self):
         if (
@@ -2859,6 +3946,10 @@ class MyProjectUiPlugin(Plugin):
 
         npz_launch_path, source = self._current_npz_launch_path()
         if not npz_launch_path:
+            if self._widget.active_mode() == _MODE_PAGE_TEST:
+                if self._do_launch(self._test_mode_bootstrap_npz_path()):
+                    self._widget._launch_status.setText("测试模式节点已启动（等待 KUKA 首包/临时 NPZ）")
+                return
             gcode_path = self._launch_params.get("gcode_path", "").strip()
             if not gcode_path or not os.path.isfile(gcode_path):
                 self._widget._launch_status.setText("启动失败: 未选择有效 GCode 或 NPZ 文件夹。")
@@ -2874,7 +3965,13 @@ class MyProjectUiPlugin(Plugin):
             )
             return
 
-        ok, status, saved_offset, offset_file = self._check_npz_and_offset_match(npz_launch_path)
+        (
+            ok,
+            status,
+            saved_offset,
+            saved_resin_z_print_compensation,
+            offset_file,
+        ) = self._check_npz_and_offset_match(npz_launch_path)
         if status == "missing":
             _show_warning(
                 self._widget,
@@ -2892,7 +3989,13 @@ class MyProjectUiPlugin(Plugin):
         reply = _ask_yes_no(
             self._widget,
             title,
-            self._launch_npz_notice(npz_launch_path, source, saved_offset, offset_file, status),
+            self._launch_npz_notice(
+                npz_launch_path,
+                source,
+                saved_offset,
+                saved_resin_z_print_compensation,
+                offset_file,
+                status),
             default_button,
         )
         if reply != QtWidgets.QMessageBox.Yes:
@@ -2932,6 +4035,7 @@ class MyProjectUiPlugin(Plugin):
             self._widget._launch_status.setStyleSheet(
                 "color: #1b6e3c; font-weight: 700; font-size: 13px;"
             )
+            return True
         except Exception as exc:
             self._widget._btn_launch.setEnabled(True)
             self._widget._launch_status.setText(f"启动失败: {exc}")
@@ -2939,7 +4043,11 @@ class MyProjectUiPlugin(Plugin):
                 "color: #b42318; font-weight: 700; font-size: 13px;"
             )
 
+            return False
+
     def _on_stop_launch(self):
+        self._send_current_tool_heat_off()
+        time.sleep(0.1)
         if (
             self._launch_process is not None
             and self._launch_process.poll() is None
@@ -2983,6 +4091,8 @@ class MyProjectUiPlugin(Plugin):
 
     def shutdown_plugin(self):
         self._shutting_down = True
+        self._send_current_tool_heat_off()
+        time.sleep(0.1)
         if self._launch_check_timer.isActive():
             self._launch_check_timer.stop()
         if self._spin_timer.isActive():
@@ -2999,4 +4109,3 @@ class MyProjectUiPlugin(Plugin):
             except OSError:
                 self._launch_process.terminate()
             self._launch_process = None
-        self._node.destroy_node()

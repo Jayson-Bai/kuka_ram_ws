@@ -1,5 +1,6 @@
 """
-gcode_planner 的 npz 导出器（分片）：
+gcode_planner 的 npz 导出器（分片）.
+
 - 解析后的指令 + 插值采样点，输出 npz 分片（二进制列存），与 RSI/uart 消费逻辑对齐。
 - 事件来自 ToolChangeCommand、指定的 MCommand，以及 G92 重置挤出（ResetECommand）。
 - 事件行复用事件发生前的上一帧位姿（保持不动），event_flag=1。
@@ -22,6 +23,8 @@ from .types import (
     ToolChangeCommand,
     MCommand,
     ResetECommand,
+    ExtrudeWait,
+    Position,
 )
 from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
@@ -71,10 +74,13 @@ def export_npz(
     plot_layer_xy: bool = False,
     plot_stride: int = 5,
     tool_offset: tuple = (0.0, 0.0, 0.0),
-    progress_callback = None,
+    progress_callback=None,
+    enable_extrude_wait: bool = False,
+    resin_z_print_compensation_mm: float = 0.0,
 ) -> dict:
     """
-    导出 npz（分片）。
+    导出 npz（分片）.
+
     - 按 4ms 采样（要求上游或本函数已将运动转换为 GlobalCurveCommand）。
     - 事件对齐：事件指令出现后，标记落在随后的第一个采样点行。
     - 速度规划由 sample_global_curve 内部的七阶多项式完成，此处不做额外处理。
@@ -120,6 +126,7 @@ def export_npz(
     current_subtype: Optional[str] = None
     last_pose: Optional[CsvRow] = None
     last_feedrate_mm_min: Optional[float] = None
+    resin_z_offset: float = 0.0
 
     # 预先定义 vocab，确保分片一致
     import numpy as np
@@ -199,12 +206,17 @@ def export_npz(
             c = np.array([r.c for r in chunk], dtype=np.float32)
             e = np.array([r.e for r in chunk], dtype=np.float32)
             tool_id = np.array([r.tool_id for r in chunk], dtype=np.uint8)
-            move_type = np.array([move_type_map.get(r.move_type, 255) for r in chunk], dtype=np.uint8)
+            move_type = np.array([move_type_map.get(r.move_type, 255)
+                                 for r in chunk], dtype=np.uint8)
             src_line = np.array([r.src_line for r in chunk], dtype="S32")
             event_flag = np.array([r.event_flag for r in chunk], dtype=np.uint8)
-            event_type = np.array([event_type_map.get(r.event_type, 255) for r in chunk], dtype=np.uint8)
+            event_type = np.array([event_type_map.get(r.event_type, 255)
+                                  for r in chunk], dtype=np.uint8)
             payload = np.array([str(r.payload) for r in chunk], dtype="S32")
-            trigger_seq = np.array([r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk], dtype=np.int32)
+            trigger_seq = np.array(
+                [r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk],
+                dtype=np.int32,
+            )
 
             np.savez_compressed(
                 out_path,
@@ -247,6 +259,9 @@ def export_npz(
     occ_counters = {}
     finalized_keys = set()
     plotted_layers = set()
+    flat_preview_points = {}
+    flat_preview_counts = {}
+    flat_preview_stride = max(1, int(plot_stride))
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
         if not split_by_layer_type:
@@ -259,7 +274,8 @@ def export_npz(
         if key not in writers:
             safe_subtype = _sanitize(subtype)
             layer_dir = os.path.join(base_root, f"layer_{layer:04d}")
-            base_path = os.path.join(layer_dir, f"{base_name}_layer_{layer:04d}_type_{safe_subtype}_occ_{occ:04d}")
+            base_path = os.path.join(
+                layer_dir, f"{base_name}_layer_{layer:04d}_type_{safe_subtype}_occ_{occ:04d}")
             writers[key] = _Writer(base_path)
             entry = {
                 "layer": layer,
@@ -301,10 +317,8 @@ def export_npz(
     def _finalize_layers_before(layer_limit: int):
         if not split_by_layer_type:
             return
-        target_keys = sorted(
-            [key for key in writers.keys() if isinstance(key, tuple) and len(key) == 3 and key[0] < layer_limit],
-            key=lambda item: (item[0], item[1], item[2]),
-        )
+        target_keys = sorted([key for key in writers.keys() if isinstance(key, tuple) and len(
+            key) == 3 and key[0] < layer_limit], key=lambda item: (item[0], item[1], item[2]), )
         for key in target_keys:
             _finalize_writer(key)
 
@@ -346,6 +360,19 @@ def export_npz(
         if processed_rows % export_yield_every == 0:
             time.sleep(export_sleep_ms / 1000.0)
 
+    def _record_flat_preview_point(layer: int, row: CsvRow):
+        if split_by_layer_type or not plot_layer_xy:
+            return
+        if row.move_type not in ("PRINT", "PRINT_FIT"):
+            return
+        count = flat_preview_counts.get(layer, 0)
+        flat_preview_counts[layer] = count + 1
+        if count % flat_preview_stride != 0:
+            return
+        xs, ys = flat_preview_points.setdefault(layer, ([], []))
+        xs.append(row.x)
+        ys.append(row.y)
+
     def _append_sample(gc: GlobalCurveCommand, layer: int, subtype: str, occ: int):
         nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map, last_pose
         t0 = time.perf_counter()
@@ -356,7 +383,8 @@ def export_npz(
             "sample_pose_s": 0.0,
             "sample_extrude_s": 0.0,
         }
-        feed_mm_min = gc.feedrate if (gc.feedrate is not None and gc.feedrate > 0) else last_feedrate_mm_min
+        feed_mm_min = gc.feedrate if (
+            gc.feedrate is not None and gc.feedrate > 0) else last_feedrate_mm_min
         if feed_mm_min is None or feed_mm_min <= 0:
             target_velocity = default_feed_mm_s
         else:
@@ -364,12 +392,18 @@ def export_npz(
         if gc.feedrate is not None and gc.feedrate > 0:
             last_feedrate_mm_min = gc.feedrate
         has_any = False
-        move_lines: List[int] = [m.line for m in gc.original_moves] if gc.original_moves else [gc.line]
+        move_lines: List[int] = [
+            m.line for m in gc.original_moves] if gc.original_moves else [
+            gc.line]
         if len(move_lines) > 1:
             src_lines = f"{move_lines[0]}-{move_lines[-1]}"
         else:
             src_lines = str(move_lines[0])
-        for pt in sample_global_curve_iter(gc, dt=dt, target_velocity=target_velocity, profile=sample_profile):
+        for pt in sample_global_curve_iter(
+                gc,
+                dt=dt,
+                target_velocity=target_velocity,
+                profile=sample_profile):
             has_any = True
             row = CsvRow(
                 seq=seq,
@@ -380,7 +414,7 @@ def export_npz(
                 b=pt.pos.b,
                 c=pt.pos.c,
                 e=pt.e,
-                tool_id=gc.type == "TRAVEL" and current_tool or gc.type == "PRINT" and current_tool or current_tool,
+                tool_id=current_tool,
                 move_type=gc.type,
                 src_line=src_lines,
                 event_flag=0,
@@ -389,6 +423,7 @@ def export_npz(
                 trigger_seq=None,
             )
             _writer_for(layer, subtype, occ).add(row)
+            _record_flat_preview_point(layer, row)
             processed_rows += 1
             _maybe_yield()
             seq += 1
@@ -404,6 +439,7 @@ def export_npz(
             return
 
     current_occ: Optional[int] = None
+    resin_z_compensation_appended = False
 
     def _move_length(move: MoveCommand) -> float:
         dx = move.pos.x - move.start_pos.x
@@ -420,18 +456,28 @@ def export_npz(
             start_pos=first.start_pos,
             pos=last.pos,
             e_val=last.e_val,
-            delta_e=sum(m.delta_e for m in moves),
-            feedrate=first.feedrate if (first.feedrate is not None and first.feedrate > 0) else last.feedrate,
+            delta_e=sum(
+                m.delta_e for m in moves),
+            feedrate=first.feedrate if (
+                first.feedrate is not None and first.feedrate > 0) else last.feedrate,
             line=first.line,
             layer=first.layer,
             subtype=first.subtype,
-            raw=(first.raw or "") + " | compact_endpoint_comp",
+            raw=(
+                first.raw or "") +
+            " | compact_endpoint_comp",
             target_v_in=first.target_v_in,
             target_v_out=last.target_v_out,
             is_pure_state_change=False,
         )
 
-    def _make_linear_move_like(start_pos, end_pos, template: MoveCommand, delta_e: float, e_val: float, raw_suffix: str) -> MoveCommand:
+    def _make_linear_move_like(
+            start_pos,
+            end_pos,
+            template: MoveCommand,
+            delta_e: float,
+            e_val: float,
+            raw_suffix: str) -> MoveCommand:
         return MoveCommand(
             type=template.type,
             cmd=template.cmd,
@@ -464,7 +510,8 @@ def export_npz(
         if not positive:
             return 0.8
         mid = len(positive) // 2
-        median = positive[mid] if len(positive) % 2 == 1 else 0.5 * (positive[mid - 1] + positive[mid])
+        median = positive[mid] if len(positive) % 2 == 1 else 0.5 * \
+            (positive[mid - 1] + positive[mid])
         return min(2.5, max(0.8, median * 0.05))
 
     def _should_force_linear_segment(moves: List[MoveCommand], short_threshold: float) -> bool:
@@ -498,7 +545,10 @@ def export_npz(
                 start_idx = start_short
 
         end_short = 0
-        while end_short < (end_idx - start_idx) and lengths[end_idx - end_short - 1] <= short_threshold:
+        while end_short < (end_idx -
+                           start_idx) and lengths[end_idx -
+                                                  end_short -
+                                                  1] <= short_threshold:
             end_short += 1
         tail_part = None
         if end_short >= 3:
@@ -511,7 +561,8 @@ def export_npz(
             if start_idx < len(lengths) - 1:
                 first_len = lengths[start_idx]
                 next_len = lengths[start_idx + 1]
-                if first_len <= short_threshold and next_len >= max(first_len * 8.0, short_threshold * 3.0):
+                if first_len <= short_threshold and next_len >= max(
+                        first_len * 8.0, short_threshold * 3.0):
                     parts.append((moves[start_idx:start_idx + 1], True))
                     start_idx += 1
 
@@ -519,8 +570,10 @@ def export_npz(
             if end_idx - 1 > start_idx:
                 last_len = lengths[end_idx - 1]
                 prev_len = lengths[end_idx - 2]
-                if last_len <= short_threshold and prev_len >= max(last_len * 8.0, short_threshold * 3.0):
-                    tail_part = (moves[end_idx - 1:end_idx], True) if tail_part is None else tail_part
+                if last_len <= short_threshold and prev_len >= max(
+                        last_len * 8.0, short_threshold * 3.0):
+                    tail_part = (moves[end_idx - 1:end_idx],
+                                 True) if tail_part is None else tail_part
                     end_idx -= 1
 
         middle = moves[start_idx:end_idx]
@@ -740,7 +793,8 @@ def export_npz(
             )
             timings["fit_s"] += time.perf_counter() - t0
             _accumulate_fit_profile(planner.last_fit_profile)
-            gc_list = [_make_gc(move) for move in work_buffer] if (gc is None or _curve_is_pathological(gc, work_buffer)) else [gc]
+            gc_list = [_make_gc(move) for move in work_buffer] if (
+                gc is None or _curve_is_pathological(gc, work_buffer)) else [gc]
         else:
             gc_list = []
             for segment_moves, force_linear in _partition_moves_for_export(work_buffer):
@@ -774,6 +828,87 @@ def export_npz(
         current_layer = None
         current_subtype = None
         current_occ = None
+
+    def _append_resin_z_print_compensation(layer: int, line: int):
+        nonlocal resin_z_compensation_appended, resin_z_offset
+        if resin_z_compensation_appended:
+            return
+        resin_z_compensation_appended = True
+        if abs(resin_z_print_compensation_mm) <= 1e-9:
+            return
+        base = last_pose
+        if base is None:
+            base = CsvRow(seq=0, x=0.0, y=0.0, z=0.0, a=0.0, b=0.0, c=0.0,
+                          e=0.0, tool_id=0, move_type="TRAVEL", src_line="0",
+                          event_flag=0, event_type="", payload="", trigger_seq=None)
+        start_p = Position(base.x, base.y, base.z, base.a, base.b, base.c)
+        end_p = Position(base.x, base.y, base.z + resin_z_print_compensation_mm,
+                         base.a, base.b, base.c)
+        occ = _ensure_segment(layer, "TRAVEL")
+        gc = GlobalCurveCommand(
+            type="TRAVEL",
+            cmd="SPLINE",
+            start_pos=start_p,
+            control_points=[end_p, end_p, end_p],
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=line,
+            raw="resin_z_print_compensation",
+            constraints=[],
+            original_moves=[],
+        )
+        _append_sample(gc, layer, "TRAVEL", occ)
+        resin_z_offset = resin_z_print_compensation_mm
+
+    def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
+        nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
+        hold_row = last_pose or CsvRow(
+            seq=seq,
+            x=0.0,
+            y=0.0,
+            z=0.0,
+            a=0.0,
+            b=0.0,
+            c=0.0,
+            e=0.0,
+            tool_id=current_tool,
+            move_type="PRINT",
+            src_line=str(cmd.line),
+            event_flag=0,
+            event_type="",
+            payload="",
+            trigger_seq=None,
+        )
+        start_e = hold_row.e
+        steps = max(1, int(math.ceil(max(float(cmd.wait_sec), dt) / dt)))
+        writer = _writer_for(layer, subtype, occ)
+        for i in range(1, steps + 1):
+            ratio = i / steps
+            row = CsvRow(
+                seq=seq,
+                x=hold_row.x,
+                y=hold_row.y,
+                z=hold_row.z,
+                a=hold_row.a,
+                b=hold_row.b,
+                c=hold_row.c,
+                e=start_e + cmd.delta_e * ratio,
+                tool_id=current_tool,
+                move_type="PRINT",
+                src_line=str(cmd.line),
+                event_flag=0,
+                event_type="",
+                payload="",
+                trigger_seq=None,
+            )
+            writer.add(row)
+            processed_rows += 1
+            _maybe_yield()
+            seq += 1
+            last_pose = row
+        if cmd.feedrate > 0:
+            last_feedrate_mm_min = cmd.feedrate
 
     def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose_map, last_pose
@@ -820,21 +955,45 @@ def export_npz(
         last_pose = hold_row
 
     total_cmds = len(parsed_commands)
+
+    # ---- 树脂 Z 打印补偿：在循环开始前就执行，后续所有 GCode 统一偏置 ----
+    _append_resin_z_print_compensation(0, 0)
+    # ---- 补偿结束 ----
+
     for idx, cmd in enumerate(parsed_commands):
         if progress_callback and total_cmds > 0 and idx % 200 == 0:
             progress_callback(idx / total_cmds)
+
         # ---- 偏置补偿：对 Tool 1 的所有轨迹应用坐标偏置 ----
-        if current_tool == 1 and (abs(tool_offset[0]) > 1e-9 or abs(tool_offset[1]) > 1e-9 or abs(tool_offset[2]) > 1e-9):
+        ox = oy = oz = 0.0
+        if current_tool == 1 and (
+                abs(tool_offset[0]) > 1e-9
+                or abs(tool_offset[1]) > 1e-9
+                or abs(tool_offset[2]) > 1e-9
+        ):
             ox, oy, oz = tool_offset
+        if abs(resin_z_offset) > 1e-9:
+            oz += resin_z_offset
+        if abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9:
             from .types import Position as _Pos
             if isinstance(cmd, MoveCommand):
-                cmd.start_pos = _Pos(cmd.start_pos.x + ox, cmd.start_pos.y + oy, cmd.start_pos.z + oz,
-                                     cmd.start_pos.a, cmd.start_pos.b, cmd.start_pos.c)
+                cmd.start_pos = _Pos(
+                    cmd.start_pos.x + ox,
+                    cmd.start_pos.y + oy,
+                    cmd.start_pos.z + oz,
+                    cmd.start_pos.a,
+                    cmd.start_pos.b,
+                    cmd.start_pos.c)
                 cmd.pos = _Pos(cmd.pos.x + ox, cmd.pos.y + oy, cmd.pos.z + oz,
                                cmd.pos.a, cmd.pos.b, cmd.pos.c)
             elif isinstance(cmd, GlobalCurveCommand):
-                cmd.start_pos = _Pos(cmd.start_pos.x + ox, cmd.start_pos.y + oy, cmd.start_pos.z + oz,
-                                     cmd.start_pos.a, cmd.start_pos.b, cmd.start_pos.c)
+                cmd.start_pos = _Pos(
+                    cmd.start_pos.x + ox,
+                    cmd.start_pos.y + oy,
+                    cmd.start_pos.z + oz,
+                    cmd.start_pos.a,
+                    cmd.start_pos.b,
+                    cmd.start_pos.c)
                 cmd.control_points = [
                     _Pos(cp.x + ox, cp.y + oy, cp.z + oz, cp.a, cp.b, cp.c)
                     for cp in cmd.control_points
@@ -856,49 +1015,47 @@ def export_npz(
                 if occ == 0:
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
 
-                # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
-                ox, oy, oz = tool_offset
-                has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
-                if has_offset:
-                    last_row = last_pose
-                    if last_row is not None:
-                        from .types import Position as _Pos
-                        if mapped_tool == 1:
-                            # 切到 CF (Tool 1): 正向补偿
-                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                           last_row.a, last_row.b, last_row.c)
-                            end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
-                                         last_row.a, last_row.b, last_row.c)
-                        else:
-                            # 切到 Resin (Tool 2): 反向补偿
-                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                           last_row.a, last_row.b, last_row.c)
-                            end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
-                                         last_row.a, last_row.b, last_row.c)
-                        # 构造 fallback_linear GlobalCurveCommand（走标准七阶 S 曲线插值）
-                        offset_gc = GlobalCurveCommand(
-                            type="TRAVEL",
-                            cmd="SPLINE",
-                            start_pos=start_p,
-                            control_points=[end_p, end_p, end_p],
-                            e_val=last_row.e,
-                            delta_e=0.0,
-                            feedrate=default_feed_mm_s * 60.0,
-                            line=cmd.line,
-                            raw="fallback_linear",
-                            constraints=[],
-                            original_moves=[],
-                        )
-                        _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
-                # ---- 偏置补偿结束 ----
+                if mapped_tool != current_tool:
+                    # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
+                    ox, oy, oz = tool_offset
+                    has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
+                    if has_offset:
+                        last_row = last_pose
+                        if last_row is not None:
+                            from .types import Position as _Pos
+                            if mapped_tool == 1:
+                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                               last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
+                                             last_row.a, last_row.b, last_row.c)
+                            else:
+                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                               last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
+                                             last_row.a, last_row.b, last_row.c)
+                            offset_gc = GlobalCurveCommand(
+                                type="TRAVEL",
+                                cmd="SPLINE",
+                                start_pos=start_p,
+                                control_points=[end_p, end_p, end_p],
+                                e_val=last_row.e,
+                                delta_e=0.0,
+                                feedrate=default_feed_mm_s * 60.0,
+                                line=cmd.line,
+                                raw="fallback_linear",
+                                constraints=[],
+                                original_moves=[],
+                            )
+                            _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
+                    # ---- 偏置补偿结束 ----
 
-                current_tool = mapped_tool
-                _emit_event(_PendingEvent(
-                    event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
-                    payload=str(mapped_tool),
-                    src_line=cmd.line,
-                    tool_id=mapped_tool,
-                ), cmd.layer, cmd.subtype, occ)
+                    current_tool = mapped_tool
+                    _emit_event(_PendingEvent(
+                        event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
+                        payload=str(mapped_tool),
+                        src_line=cmd.line,
+                        tool_id=mapped_tool,
+                    ), cmd.layer, cmd.subtype, occ)
             elif isinstance(cmd, ResetECommand):
                 occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
                 if occ == 0:
@@ -918,16 +1075,33 @@ def export_npz(
                     _emit_event(ev, cmd.layer, cmd.subtype, occ)
             continue
 
+        if isinstance(cmd, ExtrudeWait):
+            if not enable_extrude_wait:
+                continue
+            flush_moves()
+            layer = getattr(cmd, "layer", 0)
+            subtype = getattr(cmd, "subtype", "UNKNOWN") or "UNKNOWN"
+            occ = occ_counters.get((layer, subtype), 0)
+            if occ == 0:
+                occ = _ensure_segment(layer, subtype)
+            _append_extrude_wait(cmd, layer, subtype, occ)
+            continue
+
         # 轨迹分段收集
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
                 continue
+            if resin_z_compensation_appended and current_type is None and last_pose is not None:
+                from .types import Position as _Pos
+                cmd.start_pos = _Pos(last_pose.x, last_pose.y, last_pose.z,
+                                     last_pose.a, last_pose.b, last_pose.c)
             if current_type is None:
                 current_type = cmd.type
                 current_layer = cmd.layer
                 current_subtype = cmd.subtype
                 current_occ = _ensure_segment(cmd.layer, cmd.subtype)
-            if (cmd.type != current_type) or (cmd.layer != current_layer) or (cmd.subtype != current_subtype):
+            if (cmd.type != current_type) or (cmd.layer !=
+                                              current_layer) or (cmd.subtype != current_subtype):
                 flush_moves()
                 current_type = cmd.type
                 current_layer = cmd.layer
@@ -960,6 +1134,11 @@ def export_npz(
         for key in list(writers.keys()):
             _finalize_writer(key)
 
+    if plot_layer_xy and not split_by_layer_type and flat_preview_points:
+        t0_plot = time.perf_counter()
+        _plot_flat_layer_previews(flat_preview_points, base_root)
+        timings["plot_s"] += time.perf_counter() - t0_plot
+
     if split_by_layer_type and manifest:
         t0 = time.perf_counter()
         manifest_path = os.path.join(base_root, f"{base_name}_manifest.json")
@@ -980,13 +1159,42 @@ def export_npz(
     try:
         offset_file = base_no_ext + ".offset.json"
         with open(offset_file, "w", encoding="utf-8") as f:
-            json.dump({"tool_offset": list(tool_offset)}, f, ensure_ascii=False, indent=2)
+            json.dump({"tool_offset": list(tool_offset), "resin_z_print_compensation_mm": float(
+                resin_z_print_compensation_mm)}, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         print(f"[Warning] Failed to write offset sidecar json: {exc}")
 
     timings["rows"] = processed_rows
     timings["total_s"] = time.perf_counter() - t_total_start
     return timings
+
+
+def _plot_flat_layer_previews(layer_points: dict, base_root: str) -> None:
+    try:
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+    except Exception:
+        return
+
+    from pathlib import Path
+
+    out_dir = Path(base_root) / "layer_previews"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for layer, points in sorted(layer_points.items()):
+        xs, ys = points
+        if not xs:
+            continue
+        layer_num = int(layer)
+        fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+        ax.plot(xs, ys, linewidth=0.8, color="#2b2b2b")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel("X (mm)")
+        ax.set_ylabel("Y (mm)")
+        ax.set_title(f"Layer {layer_num:04d} XY Path")
+        ax.grid(True, linewidth=0.3, alpha=0.5)
+        fig.savefig(str(out_dir / f"layer_{layer_num:04d}.png"), bbox_inches="tight")
+        plt.close(fig)
 
 
 def _plot_single_layer(entries, base_root: str, stride: int = 5) -> None:
@@ -1109,9 +1317,13 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
         move_type = np.array([move_type_map.get(r.move_type, 255) for r in chunk], dtype=np.uint8)
         src_line = np.array([r.src_line for r in chunk], dtype="S32")
         event_flag = np.array([r.event_flag for r in chunk], dtype=np.uint8)
-        event_type = np.array([event_type_map.get(r.event_type, 255) for r in chunk], dtype=np.uint8)
+        event_type = np.array([event_type_map.get(r.event_type, 255)
+                              for r in chunk], dtype=np.uint8)
         payload = np.array([str(r.payload) for r in chunk], dtype="S32")
-        trigger_seq = np.array([r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk], dtype=np.int32)
+        trigger_seq = np.array(
+            [r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk],
+            dtype=np.int32,
+        )
 
         out_path = (
             f"{part_base}_part{part:04d}.npz"
@@ -1145,7 +1357,7 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
 
 
 def _map_gcode_tool(gcode_tool: int) -> int:
-    """将 GCode 中的 T0/T1 映射到内部工具号：1=纤维(T0)，2=树脂(T1)。"""
+    """将 GCode 中的 T0/T1 映射到内部工具号：1=纤维(T0)，2=树脂(T1)."""
     if gcode_tool == 0:
         return 1
     if gcode_tool == 1:
@@ -1154,7 +1366,7 @@ def _map_gcode_tool(gcode_tool: int) -> int:
 
 
 def _mcommand_to_event(cmd: MCommand, current_tool: int) -> Optional[_PendingEvent]:
-    """M 指令映射到事件名/负载；未覆盖的返回 None。"""
+    """M 指令映射到事件名/负载；未覆盖的返回 None."""
     code = cmd.code.upper()
     params = cmd.params or {}
 
