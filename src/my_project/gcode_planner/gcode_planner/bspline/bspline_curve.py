@@ -67,8 +67,9 @@ def _banded_to_dense(lower_band):
 
 
 def curve_interpolation(D, N, k, param, knot):
-    '''
-    Given a set of N data points, D0, D1, ..., Dn and a degree k,
+    """
+    Given a set of N data points, D0, D1, ..., Dn and a degree k.
+
     find a B-spline curve of degree k defined by N control points
     that passes all data points in the given order.
     :param D: data points (N x 2)
@@ -77,13 +78,13 @@ def curve_interpolation(D, N, k, param, knot):
     :param param: parameters
     :param knot: knot vector
     :return: control points (N x 2)
-    '''
+    """
     Nik = np.zeros((N, N))
 
     for i in range(N):
         for j in range(N):
-            Nik[i][j] = bf.BaseFunction(j, k+1, param[i], knot)
-    Nik[N-1][N-1] = 1
+            Nik[i][j] = bf.BaseFunction(j, k + 1, param[i], knot)
+    Nik[N - 1][N - 1] = 1
     print(Nik)
     Nik_inv = np.linalg.inv(Nik)
     print(Nik_inv)
@@ -95,8 +96,9 @@ def curve_interpolation(D, N, k, param, knot):
 
 
 def curve_approximation(D, N, H, k, param, knot, profile=None):
-    '''
-    Given a set of N data points, D0, D1, ..., Dn, a degree k,
+    """
+    Given a set of N data points, D0, D1, ..., Dn, a degree k.
+
     and a number H, where N > H > k >= 1, find a B-spline curve
     of degree k defined by H control points that satisfies the
     following conditions:
@@ -109,7 +111,7 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
     :param param: parameters
     :param knot: knot vector
     :return: control points (H x 2)
-    '''
+    """
     t_total0 = time.perf_counter()
     P = []
     if H >= N or H <= k:
@@ -200,7 +202,8 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
     try:
         if cholesky_banded is not None and cho_solve_banded is not None:
             chol_band = cholesky_banded(M_band, lower=True, check_finite=False)
-            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True), Q_all, check_finite=False).transpose()
+            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True),
+                                                 Q_all, check_finite=False).transpose()
         else:
             M_dense = _banded_to_dense(M_band)
             P_all[:, 1:H - 1] = np.linalg.solve(M_dense, Q_all).transpose()
@@ -233,7 +236,8 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
             M_band[0, :] += 1e-10
         if cholesky_banded is not None and cho_solve_banded is not None:
             chol_band = cholesky_banded(M_band, lower=True, check_finite=False)
-            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True), Q_all, check_finite=False).transpose()
+            P_all[:, 1:H - 1] = cho_solve_banded((chol_band, True),
+                                                 Q_all, check_finite=False).transpose()
         else:
             M_dense = _banded_to_dense(M_band)
             P_all[:, 1:H - 1] = np.linalg.solve(M_dense, Q_all).transpose()
@@ -249,21 +253,22 @@ def curve_approximation(D, N, H, k, param, knot, profile=None):
 
 
 def curve(P, N, k, param, knot):
-    '''
+    """
     Calculate B-spline curve.
+
     :param P: Control points
     :param N: the number of control points
     :param k: degree
     :param param: parameters
     :param knot: knot vector
     :return: data point on the b-spline curve
-    '''
+    """
     Nik = np.zeros((len(param), N))
 
     for i in range(len(param)):
         for j in range(N):
-            Nik[i][j] = bf.BaseFunction(j, k+1, param[i], knot)
-    Nik[len(param)-1][N - 1] = 1
+            Nik[i][j] = bf.BaseFunction(j, k + 1, param[i], knot)
+    Nik[len(param) - 1][N - 1] = 1
     print(Nik)
     # D = np.dot(Nik, P)
     D = []

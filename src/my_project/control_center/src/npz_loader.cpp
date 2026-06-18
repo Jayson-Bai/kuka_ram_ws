@@ -9,11 +9,14 @@
 
 namespace fs = std::filesystem;
 
-namespace control_center {
+namespace control_center
+{
 
-namespace {
+namespace
+{
 
-std::string trim_cstr(const char* data, size_t max_len) {
+std::string trim_cstr(const char * data, size_t max_len)
+{
   size_t len = 0;
   while (len < max_len && data[len] != '\0') {
     ++len;
@@ -21,11 +24,12 @@ std::string trim_cstr(const char* data, size_t max_len) {
   return std::string(data, len);
 }
 
-std::vector<std::string> decode_fixed_strings(const cnpy::NpyArray& arr) {
+std::vector<std::string> decode_fixed_strings(const cnpy::NpyArray & arr)
+{
   std::vector<std::string> out;
   const size_t n = arr.num_vals;
   const size_t stride = arr.word_size;
-  const char* raw = arr.data<char>();
+  const char * raw = arr.data<char>();
   out.reserve(n);
   for (size_t i = 0; i < n; ++i) {
     out.emplace_back(trim_cstr(raw + i * stride, stride));
@@ -33,17 +37,19 @@ std::vector<std::string> decode_fixed_strings(const cnpy::NpyArray& arr) {
   return out;
 }
 
-template <typename T>
-std::vector<T> to_vec(const cnpy::NpyArray& arr) {
-  const T* data = arr.data<T>();
+template<typename T>
+std::vector<T> to_vec(const cnpy::NpyArray & arr)
+{
+  const T * data = arr.data<T>();
   return std::vector<T>(data, data + arr.num_vals);
 }
 
 void load_vocab(
-    const cnpy::npz_t& npz,
-    const std::string& keys_name,
-    const std::string& vals_name,
-    std::unordered_map<uint8_t, std::string>& out) {
+  const cnpy::npz_t & npz,
+  const std::string & keys_name,
+  const std::string & vals_name,
+  std::unordered_map<uint8_t, std::string> & out)
+{
   auto keys = decode_fixed_strings(npz.at(keys_name));
   auto vals = to_vec<uint8_t>(npz.at(vals_name));
   out.clear();
@@ -55,8 +61,9 @@ void load_vocab(
 
 }  // namespace
 
-NpzLoader::NpzLoader(const std::string& path, size_t preload_chunks)
-    : preload_chunks_(preload_chunks) {
+NpzLoader::NpzLoader(const std::string & path, size_t preload_chunks)
+: preload_chunks_(preload_chunks)
+{
   files_ = resolve_files(path);
   if (files_.empty()) {
     error_ = "no npz files found for: " + path;
@@ -66,15 +73,16 @@ NpzLoader::NpzLoader(const std::string& path, size_t preload_chunks)
   try {
     load_initial();
     ok_ = true;
-  } catch (const std::exception& e) {
+  } catch (const std::exception & e) {
     error_ = e.what();
     ok_ = false;
   }
 }
 
-bool NpzLoader::has_next() const {
+bool NpzLoader::has_next() const
+{
   if (!cache_.empty()) {
-    const auto& chunk = cache_.front();
+    const auto & chunk = cache_.front();
     if (chunk_row_idx_ < chunk.size) {
       return true;
     }
@@ -82,13 +90,14 @@ bool NpzLoader::has_next() const {
   return next_file_idx_ < files_.size();
 }
 
-bool NpzLoader::next_row(NpzRow& out) {
+bool NpzLoader::next_row(NpzRow & out)
+{
   if (cache_.empty() || chunk_row_idx_ >= cache_.front().size) {
     if (!load_next_chunk()) {
       return false;
     }
   }
-  const auto& c = cache_.front();
+  const auto & c = cache_.front();
   const size_t i = chunk_row_idx_++;
   out.seq = c.seq[i];
   out.x = c.x[i];
@@ -114,13 +123,14 @@ bool NpzLoader::next_row(NpzRow& out) {
   return true;
 }
 
-void NpzLoader::seek(uint32_t target_seq) {
+void NpzLoader::seek(uint32_t target_seq)
+{
   cache_.clear();
   chunk_row_idx_ = 0;
   next_file_idx_ = 0;
   ok_ = true;
   error_.clear();
-  
+
   while (next_file_idx_ < files_.size()) {
     if (!load_next_chunk()) {
       break;
@@ -130,7 +140,7 @@ void NpzLoader::seek(uint32_t target_seq) {
       continue;
     }
     if (cache_.back().seq.back() >= target_seq) {
-      const auto& c = cache_.back();
+      const auto & c = cache_.back();
       for (size_t i = 0; i < c.size; ++i) {
         if (c.seq[i] >= target_seq) {
           chunk_row_idx_ = i;
@@ -144,7 +154,8 @@ void NpzLoader::seek(uint32_t target_seq) {
   }
 }
 
-void NpzLoader::load_initial() {
+void NpzLoader::load_initial()
+{
   for (size_t i = 0; i < preload_chunks_; ++i) {
     if (!load_next_chunk()) {
       break;
@@ -152,7 +163,8 @@ void NpzLoader::load_initial() {
   }
 }
 
-void NpzLoader::ensure_preload() {
+void NpzLoader::ensure_preload()
+{
   while (cache_.size() < preload_chunks_) {
     if (!load_next_chunk()) {
       break;
@@ -160,27 +172,32 @@ void NpzLoader::ensure_preload() {
   }
 }
 
-bool NpzLoader::load_next_chunk() {
+bool NpzLoader::load_next_chunk()
+{
   if (next_file_idx_ >= files_.size()) {
     return false;
   }
-  const std::string& file = files_[next_file_idx_++];
+  const std::string & file = files_[next_file_idx_++];
   cache_.push_back(load_chunk(file));
   return true;
 }
 
-std::vector<std::string> NpzLoader::resolve_files(const std::string& path) const {
+std::vector<std::string> NpzLoader::resolve_files(const std::string & path) const
+{
   fs::path p(path);
   std::vector<std::string> out;
 
-  if (p.extension() == ".json" || p.filename().string().find("_manifest.json") != std::string::npos) {
+  if (p.extension() == ".json" ||
+    p.filename().string().find("_manifest.json") != std::string::npos)
+  {
     return resolve_from_manifest(path);
   }
 
   return resolve_from_base(path);
 }
 
-std::vector<std::string> NpzLoader::resolve_from_base(const std::string& path) const {
+std::vector<std::string> NpzLoader::resolve_from_base(const std::string & path) const
+{
   fs::path p(path);
   std::vector<std::string> out;
 
@@ -201,11 +218,11 @@ std::vector<std::string> NpzLoader::resolve_from_base(const std::string& path) c
     return out;
   }
 
-  for (const auto& entry : fs::directory_iterator(dir)) {
+  for (const auto & entry : fs::directory_iterator(dir)) {
     if (!entry.is_regular_file()) {
       continue;
     }
-    const auto& f = entry.path();
+    const auto & f = entry.path();
     if (f.extension() != ".npz") {
       continue;
     }
@@ -219,7 +236,8 @@ std::vector<std::string> NpzLoader::resolve_from_base(const std::string& path) c
   return out;
 }
 
-std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& path) const {
+std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string & path) const
+{
   fs::path manifest_path(path);
   if (manifest_path.extension() != ".json") {
     manifest_path.replace_extension(".json");
@@ -263,7 +281,7 @@ std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& pat
     if (bp.is_absolute() && !fs::exists(bp)) {
       // Fallback: manifest moved to another machine, rebuild relative path.
       std::vector<fs::path> tail;
-      for (const auto& p : bp.relative_path()) {
+      for (const auto & p : bp.relative_path()) {
         tail.push_back(p);
       }
       if (tail.size() >= 2) {
@@ -281,7 +299,8 @@ std::vector<std::string> NpzLoader::resolve_from_manifest(const std::string& pat
   return out;
 }
 
-NpzChunk NpzLoader::load_chunk(const std::string& file) {
+NpzChunk NpzLoader::load_chunk(const std::string & file)
+{
   cnpy::npz_t npz = cnpy::npz_load(file);
 
   if (move_type_vocab_.empty() && npz.count("move_type_vocab_keys")) {

@@ -20,7 +20,7 @@ from .types import (
 
 
 class MachineState:
-    """解析内部状态，纯 Python，无 ROS 依赖。"""
+    """解析内部状态，纯 Python，无 ROS 依赖."""
 
     def __init__(self):
         self.x = 0.0
@@ -121,7 +121,8 @@ class GCodeParser(Node):
         try:
             lines = load_gcode_lines(self.gcode_file_path)
             self.parsed_commands = parse_gcode_lines(lines)
-            self.get_logger().info(f"Parsed {len(self.parsed_commands)} commands from {self.gcode_file_path}")
+            self.get_logger().info(
+                f"Parsed {len(self.parsed_commands)} commands from {self.gcode_file_path}")
         except Exception as e:
             self.get_logger().error(f"Error reading/parsing GCode file: {e}")
             self.parsed_commands = []
@@ -188,7 +189,13 @@ def _handle_g92(parsed: ParsedCommandList, state: MachineState, params, line_idx
         )
 
 
-def _handle_move(parsed: ParsedCommandList, state: MachineState, params, line_idx, cmd_type, raw_line=None):
+def _handle_move(
+        parsed: ParsedCommandList,
+        state: MachineState,
+        params,
+        line_idx,
+        cmd_type,
+        raw_line=None):
     prev_pos = (state.x, state.y, state.z, state.a, state.b, state.c)
     if state.is_absolute_coord:
         target_x = params.get("X", state.x)
@@ -291,7 +298,12 @@ def _handle_move(parsed: ParsedCommandList, state: MachineState, params, line_id
     parsed.append(move_cmd)
 
 
-def _handle_tool_change(parsed: ParsedCommandList, state: MachineState, cmd_type, line_idx, raw_line=None):
+def _handle_tool_change(
+        parsed: ParsedCommandList,
+        state: MachineState,
+        cmd_type,
+        line_idx,
+        raw_line=None):
     try:
         tool_idx = int(cmd_type[1:])
     except (ValueError, IndexError):
@@ -309,7 +321,13 @@ def _handle_tool_change(parsed: ParsedCommandList, state: MachineState, cmd_type
     )
 
 
-def _handle_m_command(parsed: ParsedCommandList, state: MachineState, cmd_type, params, line_idx=None, raw_line=None):
+def _handle_m_command(
+        parsed: ParsedCommandList,
+        state: MachineState,
+        cmd_type,
+        params,
+        line_idx=None,
+        raw_line=None):
     cmd = MCommand(
         type="M_COMMAND",
         code=cmd_type,
@@ -357,7 +375,7 @@ def _select_default_gcode_file(input_dir):
 
 
 def default_data_root() -> str:
-    """默认 data 目录（相对当前文件向上推到 kuka_ram_ws/data）"""
+    """默认 data 目录（相对当前文件向上推到 kuka_ram_ws/data."""
     here = os.path.abspath(__file__)
     candidate = os.path.abspath(os.path.join(here, "../../../../../data"))
     return candidate

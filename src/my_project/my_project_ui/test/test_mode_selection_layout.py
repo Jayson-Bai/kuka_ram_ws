@@ -82,8 +82,12 @@ def test_stop_paths_send_current_tool_heat_off_before_shutdown():
 
     assert "def current_tool_id(self):" in src
     assert "def _send_current_tool_heat_off(self):" in src
-    assert "self._send_current_tool_heat_off()" in src.split("    def _on_command_submit", 1)[1].split("    def _on_uart_command_submit", 1)[0]
-    assert "self._send_current_tool_heat_off()" in src.split("    def _on_stop_launch", 1)[1].split("    def _check_launch_process", 1)[0]
+    assert "self._send_current_tool_heat_off()" in src.split(
+        "    def _on_command_submit", 1)[1].split(
+        "    def _on_uart_command_submit", 1)[0]
+    assert "self._send_current_tool_heat_off()" in src.split(
+        "    def _on_stop_launch", 1)[1].split(
+        "    def _check_launch_process", 1)[0]
     assert "self._send_current_tool_heat_off()" in src.split("    def shutdown_plugin", 1)[1]
     assert "EV 0 heat_cf 0\\n" in src
     assert "EV 0 heat_resin 0\\n" in src
@@ -95,7 +99,9 @@ def test_extrusion_precision_defaults_preserve_4ms_e_values():
     center_src = CENTER_NODE.read_text(encoding="utf-8")
 
     assert '("e_decimals", "6", "挤出小数精度", "中心节点")' in ui_src
-    e_decimals_section = startup_src.split("DeclareLaunchArgument(\n            \"e_decimals\"", 1)[1].split("        ),", 1)[0]
+    e_decimals_section = startup_src.split(
+        "DeclareLaunchArgument(\n            \"e_decimals\"", 1)[1].split(
+        "        ),", 1)[0]
     assert "default_value=\"6\"" in e_decimals_section
     assert "int e_decimals_{6};" in center_src
     assert 'declare_parameter<int>("e_decimals", 6)' in center_src
@@ -110,7 +116,6 @@ def test_print_mode_excludes_print_test_controls():
     assert "self._control_box" in print_section
     assert "self._latency_box" in print_section
     assert "self._print_test_box" not in print_section
-
 
 
 def test_print_test_range_inputs_use_separate_fields_and_units():
@@ -138,6 +143,10 @@ def test_latency_nozzle_lever_defaults_from_kuka_tool_data():
     startup_src = STARTUP_LAUNCH.read_text(encoding="utf-8")
 
     assert '("robot_match_nozzle_lever_mm", "401.68", "TCP 姿态误差等效臂长（mm）", "延迟监控")' in ui_src
-    lever_section = startup_src.split('DeclareLaunchArgument(\n            "robot_match_nozzle_lever_mm"', 1)[1].split("        ),", 1)[0]
+    lever_section = startup_src.split(
+        'DeclareLaunchArgument(\n            "robot_match_nozzle_lever_mm"',
+        1)[1].split(
+        "        ),",
+        1)[0]
     assert 'default_value="401.68"' in lever_section
     assert 'TCP 姿态误差等效臂长' in lever_section

@@ -47,13 +47,13 @@ class RSINode : public rclcpp::Node
 private:
   enum class State {RUN, WAIT, PAUSE, ABORT}; //状态机四种状态
 
-  //订阅 
+  //订阅
   rclcpp::Subscription<TrajectoryPoint>::SharedPtr traj_sub_; //轨迹点
   rclcpp::Subscription<PlannedEvent>::SharedPtr event_sub_; //事件
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr status_sub_; //打印头状态
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_; //系统命令
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_cmd_sub_; //测试模式命令
-  //发布 
+  //发布
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr kuka_pub_;  //收到kuka xml
   rclcpp::Publisher<KukaStatus>::SharedPtr kuka_status_pub_;  //解析后的KUKA状态
   rclcpp::Publisher<RsiHeartBeat>::SharedPtr heartbeat_pub_;  //RSI心跳
@@ -108,11 +108,11 @@ private:
   std::optional<uint32_t> last_event_seq_triggered_;
   bool fast_first_reply_{true};
   bool first_udp_reply_sent_{false};
-  
 
 public:
-  RSINode(): Node("rsi_node")
-  { 
+  RSINode()
+  : Node("rsi_node")
+  {
     sen_type_ = declare_parameter<std::string>("sen_type", "PythonDemo");  //与kuka的xml文件中规定一致
     decimal_precision_ = declare_parameter<int>("decimal_precision", 4);  //收发数据小数点位数，需在rsi上下文同步修改
     local_ip_ = declare_parameter<std::string>("local_ip", "192.168.1.1");  //ip
@@ -134,8 +134,8 @@ public:
     //订阅中心节点轨迹消息
     traj_sub_ = create_subscription<TrajectoryPoint>(
       "/planned_trajectory", //话题名
-      traj_qos, 
-      [this](TrajectoryPoint::SharedPtr msg) 
+      traj_qos,
+      [this](TrajectoryPoint::SharedPtr msg)
       {
         std::lock_guard<std::mutex> lock(traj_mutex_); //加锁保护共享数据，防止UDP线程同时读取
         traj_queue_.push_back(*msg); //消息内容拷贝入队尾
@@ -144,9 +144,9 @@ public:
 
     //订阅中心节点事件消息
     event_sub_ = create_subscription<PlannedEvent>(
-      "/planned_events", 
+      "/planned_events",
       event_qos,
-      [this](PlannedEvent::SharedPtr msg) 
+      [this](PlannedEvent::SharedPtr msg)
       {
         std::lock_guard<std::mutex> lk(event_mutex_);
         event_queue_.push_back(*msg);
@@ -208,16 +208,15 @@ public:
 
     //打开UDP
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0); //ipv4 udp套接字
-    if (sockfd_ < 0 ){
+    if (sockfd_ < 0) {
       RCLCPP_FATAL(get_logger(), "创建套接字失败。");
       throw std::runtime_error("socket");
     }
-    sockaddr_in local{}; 
-    local.sin_family = AF_INET; 
+    sockaddr_in local{};
+    local.sin_family = AF_INET;
     local.sin_port = htons(local_port_);
     inet_pton(AF_INET, local_ip_.c_str(), &local.sin_addr); //字符串IP转为二进制
-    if(bind(sockfd_, reinterpret_cast<sockaddr*>(&local),sizeof(local)) < 0 ) //绑定到本地IP+端口开始监听
-    {
+    if (bind(sockfd_, reinterpret_cast<sockaddr *>(&local), sizeof(local)) < 0) { //绑定到本地IP+端口开始监听
       RCLCPP_FATAL(get_logger(), "绑定失败 %s:%d", local_ip_.c_str(), local_port_);
       throw std::runtime_error("bind");
     }
@@ -227,12 +226,12 @@ public:
     udp_thread_ = std::thread(&RSINode::udp_loop, this);
   }
 
-~RSINode() override
-{
-  run_udp_.store(false);
-  if (sockfd_ >= 0) close(sockfd_);
-  if (udp_thread_.joinable()) udp_thread_.join();
-}
+  ~RSINode() override
+  {
+    run_udp_.store(false);
+    if (sockfd_ >= 0) {close(sockfd_);}
+    if (udp_thread_.joinable()) {udp_thread_.join();}
+  }
 
 private:
   void udp_loop()//核心循环，节拍 = kuka包
@@ -242,21 +241,23 @@ private:
     sockaddr_in remote{};
     socklen_t remote_len = sizeof(remote);
 
-    while (rclcpp::ok() && run_udp_.load()) //循环条件：ROS运行且run_udp_ = true
-    {
+    while (rclcpp::ok() && run_udp_.load()) { //循环条件：ROS运行且run_udp_ = true
       // 阻塞接收UDP
-      ssize_t n = recvfrom(sockfd_, buf, BUF_SIZE - 1, 0, reinterpret_cast<sockaddr*>(&remote), &remote_len);
+      ssize_t n = recvfrom(
+        sockfd_, buf, BUF_SIZE - 1, 0, reinterpret_cast<sockaddr *>(&remote),
+        &remote_len);
 
-      if (n <= 0) continue;
+      if (n <= 0) {continue;}
       buf[n] = '\0';
       std::string recv_str(buf); //数据转字符串
 
-      if (fast_first_reply_ && !first_udp_reply_sent_)
-      {
+      if (fast_first_reply_ && !first_udp_reply_sent_) {
         std::string ipoc = extract_ipoc(recv_str);
         TrajectoryPoint to_send = *last_sent_;
         std::string reply = build_reply(ipoc, to_send);
-        sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+        sendto(
+          sockfd_, reply.c_str(),
+          reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
         first_udp_reply_sent_ = true;
         continue;
       }
@@ -265,12 +266,11 @@ private:
       //发布原始xml 字符串消息
       std_msgs::msg::String raw_msg;
       raw_msg.data = recv_str;
-      kuka_pub_ -> publish(raw_msg);     
+      kuka_pub_->publish(raw_msg);
 
       //解析KUKA位姿（XYZABC）
       auto kuka_pose = parse_kuka_xyzabc(recv_str);
-      if (kuka_pose)
-      {
+      if (kuka_pose) {
         KukaStatus status;
         status.stamp = now();
         status.x = kuka_pose->x;
@@ -284,7 +284,7 @@ private:
 
       //解IPOC
       std::string ipoc = extract_ipoc(recv_str);
-      
+
       //********默认发送上一帧********
       TrajectoryPoint to_send = *last_sent_;
 
@@ -292,43 +292,34 @@ private:
       State current_state = state_.load();
 
       //状态机 严格对齐seq
-      if (current_state == State::RUN)
-      {
-        if (should_enter_wait(next_seq_)) //事件触发了等待:判断trigger_seq是否到达当前traj序号
-        {
+      if (current_state == State::RUN) {
+        if (should_enter_wait(next_seq_)) { //事件触发了等待:判断trigger_seq是否到达当前traj序号
           current_wait_ = pop_next_event();
-          if (current_wait_)
-          {
+          if (current_wait_) {
             triggered_event_pub_->publish(*current_wait_);
             last_event_seq_triggered_ = current_wait_->trigger_seq;
             state_.store(State::WAIT);
           }
           //此时保持last_sent_
-        }
-        else
-        {
-          while (auto tp = pop_next_traj())
-          {
+        } else {
+          while (auto tp = pop_next_traj()) {
             if (next_seq_ == 0 && tp->seq > 0) {
               // 首包对齐：允许从第一条轨迹的序号起步
               next_seq_ = tp->seq;
             }
-            if(tp->seq < next_seq_) //队头比期望慢
-            {
+            if (tp->seq < next_seq_) { //队头比期望慢
               continue; // 旧数据直接丢弃，保持last_sent_
             }
-            if(tp->seq == next_seq_)//正常对齐情况
-            {
+            if (tp->seq == next_seq_) {//正常对齐情况
               to_send = *tp;
               last_sent_ = to_send;
               ++next_seq_;
               resync_sent_ = false;
-            }
-            else //队头比期望快
-            {
+            } else { //队头比期望快
               if ((last_event_seq_triggered_ && *last_event_seq_triggered_ == next_seq_) ||
-                  has_event_between(next_seq_, tp->seq) ||
-                  is_event_seq(next_seq_)) {
+                has_event_between(next_seq_, tp->seq) ||
+                is_event_seq(next_seq_))
+              {
                 // 序号缺口被事件占用，允许跳过
                 next_seq_ = tp->seq;
                 to_send = *tp;
@@ -337,12 +328,12 @@ private:
                 resync_sent_ = false;
               } else {
                 RCLCPP_WARN_THROTTLE(
-                    get_logger(),
-                    *get_clock(),
-                    2000,
-                    "RSI节点收发顺序错误：期望 %u，实际 %u，正在重发上一帧",
-                    next_seq_,
-                    tp->seq);
+                  get_logger(),
+                  *get_clock(),
+                  2000,
+                  "RSI节点收发顺序错误：期望 %u，实际 %u，正在重发上一帧",
+                  next_seq_,
+                  tp->seq);
                 // 清理队列缓存准备重新同步
                 {
                   std::lock_guard<std::mutex> lk(traj_mutex_);
@@ -350,11 +341,10 @@ private:
                 }
                 //触发 resync 请求
                 auto nowt = now();
-                if(!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) //限流
-                {
+                if (!resync_sent_ || (nowt - last_resync_time_).seconds() > 0.1) { //限流
                   std_msgs::msg::UInt32 req;
                   req.data = next_seq_; //从next_seq_开始重播
-                  resync_pub_ -> publish(req);
+                  resync_pub_->publish(req);
                   resync_sent_ = true;
                   last_resync_time_ = nowt;
                 }
@@ -364,33 +354,23 @@ private:
           }
           //队列空则继续last_sent_
         }
-      }
-      else if (current_state == State::WAIT)
-      {
-        if(is_wait_cleared()) // UART当前事件就绪后解除等待
-        {
+      } else if (current_state == State::WAIT) {
+        if (is_wait_cleared()) { // UART当前事件就绪后解除等待
           state_.store(State::RUN);
           current_wait_.reset();
         }
         // WAIT期间始终重发 last_sent_
-      }
-      else if (current_state == State::PAUSE)
-      {
+      } else if (current_state == State::PAUSE) {
         // PAUSE期间始终重发 last_sent_（冻结帧），保持KUKA存活
-      }
-      else if (current_state == State::ABORT)
-      {
+      } else if (current_state == State::ABORT) {
         // ABORT: 在last_sent_基础上逐帧Z轴抬升
-        if (abort_lift_remaining_.load() > 0)
-        {
+        if (abort_lift_remaining_.load() > 0) {
           to_send = *last_sent_;
           to_send.z += abort_step_mm_;
           to_send.e = last_sent_->e; // 挤出量冻结
           last_sent_ = to_send;
           abort_lift_remaining_.fetch_sub(1);
-        }
-        else
-        {
+        } else {
           // 抬升完成，切断UDP循环
           RCLCPP_WARN(get_logger(), "ABORT Z轴抬升完成(%.1fmm)，切断RSI通信", abort_lift_mm_);
           // 先发送最后一帧回复，然后退出循环
@@ -403,21 +383,23 @@ private:
           heartbeat_pub_->publish(hb);
 
           std::string reply = build_reply(ipoc, to_send);
-          sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+          sendto(
+            sockfd_, reply.c_str(),
+            reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
 
           run_udp_.store(false); // 退出UDP循环 → KUKA通信中断 → 安全制动
           continue;
         }
       }
-      
-      //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐 
+
+      //发布RSI心跳包  携带本周期实际使用的seq 供UART对齐
       RsiHeartBeat hb;
       hb.stamp = now();
       hb.ipoc = ipoc;
       hb.seq_used = to_send.seq;
       hb.tool_id = to_send.tool_id;
       hb.extrude_abs = to_send.e;
-      heartbeat_pub_ -> publish(hb);
+      heartbeat_pub_->publish(hb);
       current_correction_pub_->publish(to_send);
 
       //回复XML
@@ -427,51 +409,55 @@ private:
         sent_msg.data = reply;
         sent_xml_pub_->publish(sent_msg);
       }
-      sendto(sockfd_, reply.c_str(), reply.size(), 0, reinterpret_cast<sockaddr*>(&remote), remote_len);
+      sendto(
+        sockfd_, reply.c_str(),
+        reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
 
     }
   }
 
-  std::optional<TrajectoryPoint> pop_next_traj() 
+  std::optional<TrajectoryPoint> pop_next_traj()
   {
     std::lock_guard<std::mutex> lk(traj_mutex_);
-    if (traj_queue_.empty()) return std::nullopt;
+    if (traj_queue_.empty()) {return std::nullopt;}
     auto tp = traj_queue_.front();
     traj_queue_.pop_front();
     return tp;
   }
 
-  std::optional<PlannedEvent> pop_next_event() 
+  std::optional<PlannedEvent> pop_next_event()
   {
     std::lock_guard<std::mutex> lk(event_mutex_);
-    if (event_queue_.empty()) return std::nullopt;
+    if (event_queue_.empty()) {return std::nullopt;}
     auto ev = event_queue_.front();
     event_queue_.pop_front();
     return ev;
-  }  
+  }
 
   bool is_wait_cleared()
   {
     std::lock_guard<std::mutex> lk(ready_mutex_);
-    if (!ready_ack_.ready_for_motion) return false;
-    if (!current_wait_) return true; // 初始WAIT：仅需全局ready
-    if (ready_ack_.ready_event_seq != current_wait_->trigger_seq) return false;
+    if (!ready_ack_.ready_for_motion) {return false;}
+    if (!current_wait_) {
+      return true;                    // 初始WAIT：仅需全局ready
+    }
+    if (ready_ack_.ready_event_seq != current_wait_->trigger_seq) {return false;}
     return ready_ack_.ready_event_type == current_wait_->event_type;
   }
 
   bool should_enter_wait(uint32_t next_seq)//进入事件判断
   {
     std::lock_guard<std::mutex> lk(event_mutex_);
-    if (event_queue_.empty()) return false;
+    if (event_queue_.empty()) {return false;}
     //如果事件队头的trigger_seq已经到达或者超过当前轨迹序号，就进入等待
     return event_queue_.front().trigger_seq <= next_seq;
   }
 
   bool has_event_between(uint32_t from_seq, uint32_t to_seq)
   {
-    if (from_seq >= to_seq) return false;
+    if (from_seq >= to_seq) {return false;}
     std::lock_guard<std::mutex> lk(event_mutex_);
-    for (const auto& ev : event_queue_) {
+    for (const auto & ev : event_queue_) {
       if (ev.trigger_seq >= from_seq && ev.trigger_seq < to_seq) {
         return true;
       }
@@ -485,10 +471,9 @@ private:
     return event_seq_seen_.find(seq) != event_seq_seen_.end();
   }
 
-  void on_print_test_command(const std::string &cmd)
+  void on_print_test_command(const std::string & cmd)
   {
-    if (cmd == "RESET")
-    {
+    if (cmd == "RESET") {
       if (state_.load() == State::ABORT) {
         RCLCPP_WARN(get_logger(), "测试模式 RESET 被拒绝：RSI 已 ABORT");
         return;
@@ -512,42 +497,44 @@ private:
     }
   }
 
-  void on_system_command(const std::string &cmd)
+  void on_system_command(const std::string & cmd)
   {
-    if (cmd == "PAUSE")
-    {
+    if (cmd == "PAUSE") {
       State cur = state_.load();
-      if (cur == State::PAUSE || cur == State::ABORT) return; // 已暂停或已终止
+      if (cur == State::PAUSE || cur == State::ABORT) {
+        return;                                                // 已暂停或已终止
+      }
       pre_pause_state_.store(cur); // 记住暂停前的状态
       state_.store(State::PAUSE);
       RCLCPP_INFO(get_logger(), "RSI收到PAUSE命令，冻结轨迹推进");
-    }
-    else if (cmd == "RESUME")
-    {
-      if (state_.load() != State::PAUSE) return; // 仅从PAUSE状态恢复
+    } else if (cmd == "RESUME") {
+      if (state_.load() != State::PAUSE) {
+        return;                                   // 仅从PAUSE状态恢复
+      }
       state_.store(pre_pause_state_.load()); // 恢复暂停前的状态
       RCLCPP_INFO(get_logger(), "RSI收到RESUME命令，恢复轨迹推进");
-    }
-    else if (cmd == "ABORT")
-    {
-      if (state_.load() == State::ABORT) return; // 已在终止流程
+    } else if (cmd == "ABORT") {
+      if (state_.load() == State::ABORT) {
+        return;                                   // 已在终止流程
+      }
       int frames = static_cast<int>(abort_lift_mm_ / abort_step_mm_);
       abort_lift_remaining_.store(frames);
       state_.store(State::ABORT);
-      RCLCPP_WARN(get_logger(), "RSI收到ABORT命令，开始Z轴抬升 %.1fmm (%d帧)",
-                  abort_lift_mm_, frames);
+      RCLCPP_WARN(
+        get_logger(), "RSI收到ABORT命令，开始Z轴抬升 %.1fmm (%d帧)",
+        abort_lift_mm_, frames);
     }
   }
 
-  std::string extract_ipoc(const std::string &xml)//提取时间戳
+  std::string extract_ipoc(const std::string & xml)//提取时间戳
   {
     const std::string tag_open = "<IPOC>";
     const std::string tag_close = "</IPOC>";
     auto s = xml.find(tag_open);
-    if (s == std::string::npos) return "0";
+    if (s == std::string::npos) {return "0";}
     s += tag_open.size();
     auto e = xml.find(tag_close, s);
-    if (e == std::string::npos) return "0";
+    if (e == std::string::npos) {return "0";}
     return xml.substr(s, e - s);
   }
 
@@ -561,7 +548,7 @@ private:
     double c{0.0};
   };
 
-  std::optional<_PoseXYZABC> parse_kuka_xyzabc(const std::string &data_str)
+  std::optional<_PoseXYZABC> parse_kuka_xyzabc(const std::string & data_str)
   {
     _PoseXYZABC pose;
     const double nan = std::numeric_limits<double>::quiet_NaN();
@@ -577,15 +564,14 @@ private:
     static const std::regex attr_re(
       R"re(\b([XYZABC])\s*=\s*"([-+]?\d*\.?\d+)")re",
       std::regex::icase);
-    try
-    {
-      for (std::sregex_iterator it(data_str.begin(), data_str.end(), attr_re), end; it != end; ++it)
+    try {
+      for (std::sregex_iterator it(data_str.begin(), data_str.end(), attr_re), end; it != end;
+        ++it)
       {
         char key = static_cast<char>(std::toupper(static_cast<unsigned char>((*it)[1].str()[0])));
         double val = std::stod((*it)[2].str());
         found_any = true;
-        switch (key)
-        {
+        switch (key) {
           case 'X': pose.x = val; break;
           case 'Y': pose.y = val; break;
           case 'Z': pose.z = val; break;
@@ -595,9 +581,7 @@ private:
           default: break;
         }
       }
-    }
-    catch (...)
-    {
+    } catch (...) {
       return std::nullopt;
     }
 
@@ -607,11 +591,12 @@ private:
     return pose;
   }
 
-  std::string build_reply(const std::string &ipoc, const TrajectoryPoint &tp) 
+  std::string build_reply(const std::string & ipoc, const TrajectoryPoint & tp)
   {
     char xml[512];
 
-    snprintf(xml, sizeof(xml),
+    snprintf(
+      xml, sizeof(xml),
       "<Sen Type=\"%s\">\r\n"
       "<PosCorr X=\"%.*f\" Y=\"%.*f\" Z=\"%.*f\" A=\"%.*f\" B=\"%.*f\" C=\"%.*f\"/>\r\n"
       "<Stop>0</Stop>\r\n"
@@ -630,7 +615,7 @@ private:
 };
 
 
-int main(int argc, char **argv)
+int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<RSINode>());

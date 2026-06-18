@@ -26,7 +26,9 @@ def test_uart_log_matches_rsi_detail_view_pattern():
 def test_left_column_keeps_system_status_first_and_logs_stretch_to_shared_bottom():
     src = _source()
 
-    dynamic_align = src.split("    def _dynamic_align(self):", 1)[1].split("    def _build_mode_select_page", 1)[0]
+    dynamic_align = src.split(
+        "    def _dynamic_align(self):", 1)[1].split(
+        "    def _build_mode_select_page", 1)[0]
     assert "self._align_timer" in src
     assert "target_top = _top_in_content(self._uart_log_box)" in dynamic_align
     assert "target_bottom = viewport.height() - margins.bottom() - 1" in dynamic_align
@@ -39,29 +41,41 @@ def test_left_column_keeps_system_status_first_and_logs_stretch_to_shared_bottom
     assert "col0_layout.setAlignment(QtCore.Qt.AlignTop)" in src
     assert "col1_layout.setAlignment(QtCore.Qt.AlignTop)" in src
 
-    left_section = src.split("        system_box = QtWidgets.QGroupBox", 1)[1].split("        layout.addLayout(col0_layout, 1, 0)", 1)[0]
+    left_section = src.split(
+        "        system_box = QtWidgets.QGroupBox", 1)[1].split(
+        "        layout.addLayout(col0_layout, 1, 0)", 1)[0]
     assert "col0_layout.addStretch(1)" not in left_section
-    assert left_section.index("col0_layout.addWidget(system_box)") < left_section.index("col0_layout.addWidget(kuka_box)")
-    assert left_section.index("col0_layout.addWidget(kuka_box)") < left_section.index("col0_layout.addWidget(traj_box)")
-    assert left_section.index("col0_layout.addWidget(traj_box)") < left_section.index("col0_layout.addWidget(rsi_log_box)")
+    assert left_section.index("col0_layout.addWidget(system_box)") < left_section.index(
+        "col0_layout.addWidget(kuka_box)")
+    assert left_section.index("col0_layout.addWidget(kuka_box)") < left_section.index(
+        "col0_layout.addWidget(traj_box)")
+    assert left_section.index("col0_layout.addWidget(traj_box)") < left_section.index(
+        "col0_layout.addWidget(rsi_log_box)")
 
-    middle_section = src.split("        col1_layout = QtWidgets.QVBoxLayout()", 1)[1].split("        # ======== Print Control 区域", 1)[0]
+    middle_section = src.split("        col1_layout = QtWidgets.QVBoxLayout()", 1)[
+        1].split("        # ======== Print Control 区域", 1)[0]
     assert "col1_layout.addStretch(1)" not in middle_section
-    assert middle_section.index("col1_layout.addWidget(ph_overview_box)") < middle_section.index("col1_layout.addWidget(ph_tools_box)")
-    assert middle_section.index("col1_layout.addWidget(ph_tools_box)") < middle_section.index("col1_layout.addWidget(uart_log_box)")
+    assert middle_section.index("col1_layout.addWidget(ph_overview_box)") < middle_section.index(
+        "col1_layout.addWidget(ph_tools_box)")
+    assert middle_section.index("col1_layout.addWidget(ph_tools_box)") < middle_section.index(
+        "col1_layout.addWidget(uart_log_box)")
 
 
 def test_uart_log_export_button_is_standalone_at_right_column_bottom():
     src = _source()
 
-    print_test_section = src.split('        # ======== Print Test 区域 ========', 1)[1].split('        # ======== Launch Control 区域 ========', 1)[0]
-    col2_section = src.split('        # Add all boxes to col2_layout in the desired order', 1)[1].split('        layout.addLayout(col0_layout, 1, 0)', 1)[0]
+    print_test_section = src.split(
+        '        # ======== Print Test 区域 ========', 1)[1].split(
+        '        # ======== Launch Control 区域 ========', 1)[0]
+    col2_section = src.split('        # Add all boxes to col2_layout in the desired order', 1)[
+        1].split('        layout.addLayout(col0_layout, 1, 0)', 1)[0]
     assert 'QtWidgets.QPushButton("导出诊断日志")' in src
     assert "self._btn_export_uart_log.clicked.connect(self._on_export_diagnostic_log)" in src
     assert 'print_test_layout.addWidget(self._btn_export_uart_log)' not in print_test_section
     assert 'col2_layout.addStretch(1)' in col2_section
     assert 'col2_layout.addWidget(self._btn_export_uart_log)' in col2_section
-    assert col2_section.index('col2_layout.addStretch(1)') < col2_section.index('col2_layout.addWidget(self._btn_export_uart_log)')
+    assert col2_section.index('col2_layout.addStretch(1)') < col2_section.index(
+        'col2_layout.addWidget(self._btn_export_uart_log)')
 
 
 def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
@@ -80,12 +94,18 @@ def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
     assert ".jsonl" in src
     assert "诊断日志已导出" in src
 
-    uart_section = src.split("    def _on_uart_log(self, line_text):", 1)[1].split("    def _on_export_diagnostic_log", 1)[0]
+    uart_section = src.split(
+        "    def _on_uart_log(self, line_text):", 1)[1].split(
+        "    def _on_export_diagnostic_log", 1)[0]
     assert 'self._append_diagnostic("uart", "raw"' in uart_section
     assert 'payload.startswith("EWARN")' in uart_section
-    assert uart_section.index('self._append_diagnostic("uart", "raw"') < uart_section.index('payload.startswith("EWARN")')
+    assert uart_section.index(
+        'self._append_diagnostic("uart", "raw"'
+    ) < uart_section.index('payload.startswith("EWARN")')
 
-    update_ui_section = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split("    def _on_pause", 1)[0]
+    update_ui_section = src.split(
+        "    def _update_ui(self, msg: UiStatus):", 1)[1].split(
+        "    def _on_pause", 1)[0]
     for token in (
         '"ready_for_motion": bool(msg.ready_for_motion)',
         '"traj_backlog": int(msg.traj_backlog)',

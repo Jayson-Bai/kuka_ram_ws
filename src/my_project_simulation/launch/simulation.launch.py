@@ -6,6 +6,7 @@ from launch_ros.actions import Node
 from ament_index_python.packages import get_package_share_directory
 import os
 
+
 def generate_launch_description():
     startup_pkg_dir = get_package_share_directory('my_project_startup')
     startup_launch_path = os.path.join(startup_pkg_dir, 'launch', 'startup.launch.py')
@@ -20,9 +21,13 @@ def generate_launch_description():
     # Socat process to create virtual serial port pair
     # Using pty,raw,echo=0 to avoid terminal echoing
     socat_process = ExecuteProcess(
-        cmd=['socat', '-d', '-d', 'pty,raw,echo=0,link=/tmp/ttyV0', 'pty,raw,echo=0,link=/tmp/ttyV1'],
-        output='screen'
-    )
+        cmd=[
+            'socat',
+            '-d',
+            '-d',
+            'pty,raw,echo=0,link=/tmp/ttyV0',
+            'pty,raw,echo=0,link=/tmp/ttyV1'],
+        output='screen')
 
     # Launch rqt GUI
     rqt_process = ExecuteProcess(

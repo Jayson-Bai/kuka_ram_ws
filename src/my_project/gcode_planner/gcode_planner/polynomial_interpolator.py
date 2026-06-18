@@ -1,5 +1,6 @@
 """
-时间参数化器（七阶 S 曲线 + 球面插值）：
+时间参数化器（七阶 S 曲线 + 球面插值）.
+
 - 几何由 bspline_approximation 生成的 GlobalCurveCommand 提供，只负责沿弧长采样。
 - 目标匀速暂写死为 10 mm/s，入口/出口速度、加速度、jerk 全 0，对称加速/减速时间固定 2 s。
 - 若弧长太短无法形成匀速段，则自动降低峰值速度（等价于把位移缩放进同样的时间，保证不超速且 jerk 连续）。
@@ -30,7 +31,7 @@ class InterpolatedPoint:
 
 
 def _euler_xyz_to_quat(roll: float, pitch: float, yaw: float):
-    """欧拉角(弧度) -> 四元数，顺序 XYZ。"""
+    """欧拉角(弧度) -> 四元数，顺序 XYZ."""
     cr = math.cos(roll * 0.5)
     sr = math.sin(roll * 0.5)
     cp = math.cos(pitch * 0.5)
@@ -45,7 +46,7 @@ def _euler_xyz_to_quat(roll: float, pitch: float, yaw: float):
 
 
 def _quat_to_euler_xyz(q):
-    """四元数 -> 欧拉角(弧度)，顺序 XYZ。"""
+    """四元数 -> 欧拉角(弧度)，顺序 XYZ."""
     w, x, y, z = q
     sinr_cosp = 2 * (w * x + y * z)
     cosr_cosp = 1 - 2 * (x * x + y * y)
@@ -64,7 +65,7 @@ def _quat_to_euler_xyz(q):
 
 
 def _quat_slerp(q0, q1, t: float):
-    """球面插值，q0/q1 均为 (w,x,y,z)。"""
+    """球面插值，q0/q1 均为 (w,x,y,z)."""
     w0, x0, y0, z0 = q0
     w1, x1, y1, z1 = q1
     dot = w0 * w1 + x0 * x1 + y0 * y1 + z0 * z1
@@ -120,7 +121,12 @@ def _find_span(u: float, knots: List[float], degree: int, n_ctrl: int) -> int:
     return mid
 
 
-def _find_span_monotonic(u: float, knots: List[float], degree: int, n_ctrl: int, start_span: int) -> int:
+def _find_span_monotonic(
+    u: float,
+    knots: List[float],
+    degree: int,
+    n_ctrl: int,
+        start_span: int) -> int:
     if abs(u - knots[n_ctrl]) < 1e-9:
         return n_ctrl - 1
     span = max(degree, min(start_span, n_ctrl - 1))
@@ -236,8 +242,12 @@ def _is_linear_fallback_curve(curve: GlobalCurveCommand) -> bool:
     )
 
 
-def _lookup_u_from_s(s_norm: float, u_list: List[float], len_list: List[float], total_length: float) -> float:
-    """给定归一化弧长 s_norm (0~1)，返回对应的 B 样条参数 u。"""
+def _lookup_u_from_s(
+        s_norm: float,
+        u_list: List[float],
+        len_list: List[float],
+        total_length: float) -> float:
+    """给定归一化弧长 s_norm (0~1)，返回对应的 B 样条参数 u."""
     target_len = s_norm * total_length
     if target_len <= 1e-9:
         return u_list[0]
@@ -267,7 +277,7 @@ def _lookup_u_from_target_len_monotonic(
     total_length: float,
     start_idx: int,
 ):
-    """单调递增弧长的快速查找，返回 (u, idx)。"""
+    """单调递增弧长的快速查找，返回 (u, idx)."""
     if target_len <= 1e-9:
         return u_list[0], 0
     if target_len >= total_length - 1e-9:
@@ -292,13 +302,14 @@ def _lookup_u_from_target_len_monotonic(
 # -------------------------- 七阶 S 曲线剖面 --------------------------
 
 def _sept_poly_base(tau: float) -> float:
-    """归一化 0->1 七阶位置曲线，v/a/jerk 在两端为 0。"""
+    """归一化 0->1 七阶位置曲线，v/a/jerk 在两端为 0."""
     return (35.0 * tau**4) - (84.0 * tau**5) + (70.0 * tau**6) - (20.0 * tau**7)
 
 
 def _three_stage_sept_poly(t: float, total: float, t_acc: float, t_dec: float) -> float:
     """
-    三段式七阶 S 曲线：加速-匀速-减速，输出归一化路程 s(t)∈[0,1]。
+    三段式七阶 S 曲线：加速-匀速-减速，输出归一化路程 s(t)∈[0,1].
+
     若无匀速段，则退化为对称 S 曲线（总时长 t_acc+t_dec）。
     """
     if t <= 0.0:
@@ -332,7 +343,8 @@ def _three_stage_sept_poly(t: float, total: float, t_acc: float, t_dec: float) -
 
 def _compute_time_profile(length: float, target_v: float, t_acc: float, t_dec: float):
     """
-    根据弧长和目标匀速计算总时间与匀速时间。
+    根据弧长和目标匀速计算总时间与匀速时间.
+
     若长度过短，则匀速段为 0，总时间=t_acc+t_dec。
     """
     if length <= 0.0 or target_v <= 0.0:
@@ -358,7 +370,8 @@ def sample_global_curve_iter(
     profile: Optional[dict] = None,
 ):
     """
-    对一条全局 B 样条进行时间参数化并采样（生成器）。
+    对一条全局 B 样条进行时间参数化并采样（生成器）.
+
     - 入口/出口 v/a/jerk 均为 0，对称加/减速时间固定。
     - 匀速段无法满足时自动退化为对称 S 曲线（速度整体下降，不超速）。
     - 挤出按弧长比例分配，保持绝对挤出量不变。
@@ -475,7 +488,8 @@ def sample_global_curve_iter(
 
     # 构建弧长映射
     t0 = time.perf_counter()
-    u_list, len_list, total_length, knots = _build_arc_length_map(ctrl, degree=degree, samples=max(400, len(ctrl) * 10))
+    u_list, len_list, total_length, knots = _build_arc_length_map(
+        ctrl, degree=degree, samples=max(400, len(ctrl) * 10))
     if profile is not None:
         profile["sample_arc_map_s"] += time.perf_counter() - t0
     if total_length <= 1e-9:
@@ -595,10 +609,15 @@ def sample_global_curve(
     t_dec: float = 2.0,
     profile: Optional[dict] = None,
 ) -> List[InterpolatedPoint]:
-    """
-    对一条全局 B 样条进行时间参数化并采样（列表版，兼容旧调用）。
-    """
-    return list(sample_global_curve_iter(curve, dt=dt, target_velocity=target_velocity, t_acc=t_acc, t_dec=t_dec, profile=profile))
+    """对一条全局 B 样条进行时间参数化并采样（列表版，兼容旧调用）."""
+    return list(
+        sample_global_curve_iter(
+            curve,
+            dt=dt,
+            target_velocity=target_velocity,
+            t_acc=t_acc,
+            t_dec=t_dec,
+            profile=profile))
 
 
 __all__ = [

@@ -254,18 +254,20 @@ def generate_test_matrix_gcode(
             if prime_e > 0.0:
                 current_e += prime_e
                 lines.append(
-                    f"G1 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
-                    f"E{current_e:.6f} F{prime_feed:.3f}"
-                )
+                    f"G1 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                    f"A{a:.6f} B{b:.6f} C{c:.6f} "
+                    f"E{current_e:.6f} F{prime_feed:.3f}")
             current_e += delta_e
             lines.append(
-                f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+                f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                f"A{a:.6f} B{b:.6f} C{c:.6f} "
                 f"E{current_e:.6f} F{feed:.3f}"
             )
             if retract_e > 0.0:
                 current_e -= retract_e
                 lines.append(
-                    f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} A{a:.6f} B{b:.6f} C{c:.6f} "
+                    f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                    f"A{a:.6f} B{b:.6f} C{c:.6f} "
                     f"E{current_e:.6f} F{retract_feed:.3f}"
                 )
             if finish_lift > 0.0:

@@ -33,8 +33,10 @@ def generate_launch_description():
     robot_match_search_back = LaunchConfiguration("robot_match_search_back")
     robot_match_search_forward = LaunchConfiguration("robot_match_search_forward")
     robot_match_max_error_mm = LaunchConfiguration("robot_match_max_error_mm")
-    robot_match_uncertainty_min_band_mm = LaunchConfiguration("robot_match_uncertainty_min_band_mm")
-    robot_match_uncertainty_spacing_multiplier = LaunchConfiguration("robot_match_uncertainty_spacing_multiplier")
+    robot_match_uncertainty_min_band_mm = LaunchConfiguration(
+        "robot_match_uncertainty_min_band_mm")
+    robot_match_uncertainty_spacing_multiplier = LaunchConfiguration(
+        "robot_match_uncertainty_spacing_multiplier")
     robot_match_nozzle_lever_mm = LaunchConfiguration("robot_match_nozzle_lever_mm")
 
     # RSI node params
@@ -129,7 +131,8 @@ def generate_launch_description():
             "robot_match_search_forward": robot_match_search_forward,
             "robot_match_max_error_mm": robot_match_max_error_mm,
             "robot_match_uncertainty_min_band_mm": robot_match_uncertainty_min_band_mm,
-            "robot_match_uncertainty_spacing_multiplier": robot_match_uncertainty_spacing_multiplier,
+            "robot_match_uncertainty_spacing_multiplier":
+                robot_match_uncertainty_spacing_multiplier,
             "robot_match_nozzle_lever_mm": robot_match_nozzle_lever_mm,
         }],
     )

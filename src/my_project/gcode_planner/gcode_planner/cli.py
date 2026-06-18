@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-离线流水线 CLI：读取 GCode -> 解析 -> B 样条拟合/采样 -> 导出 npz 分片。
-"""
+"""离线流水线 CLI：读取 GCode -> 解析 -> B 样条拟合/采样 -> 导出 npz 分片."""
 
 import argparse
 import os
@@ -27,25 +25,47 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="GCode -> NPZ 离线导出（分片）")
     parser.add_argument("--gcode", type=str, help="GCode 文件路径，缺省则从 input_gcode_dir 挑首个 .gcode")
     parser.add_argument("--data-root", type=str, default=default_data_root(), help="默认数据根目录")
-    parser.add_argument("--input-gcode-dir", type=str, default="", help="GCode 输入目录（未指定 gcode 时使用）")
+    parser.add_argument(
+        "--input-gcode-dir",
+        type=str,
+        default="",
+        help="GCode 输入目录（未指定 gcode 时使用）")
     parser.add_argument("--output-dir", type=str, default="", help="npz 输出目录")
     parser.add_argument("--out", type=str, default="", help="输出 npz 文件路径（优先级最高）")
     parser.add_argument("--dt", type=float, default=0.004, help="采样周期秒，默认 4ms")
-    parser.add_argument("--default-feed-mm-s", type=float, default=10.0, help="无有效 F 时的默认速度 (mm/s)")
+    parser.add_argument(
+        "--default-feed-mm-s",
+        type=float,
+        default=10.0,
+        help="无有效 F 时的默认速度 (mm/s)")
     parser.add_argument("--corner-angle-deg", type=float, default=10.0, help="角点判定夹角阈值（度）")
     parser.add_argument("--corner-retreat-ratio", type=float, default=0.2, help="角点回退比例（0-0.49）")
     parser.add_argument("--density", type=int, default=0, help="数据点加密密度（>=0）")
     parser.add_argument("--degree", type=int, default=3, help="B样条阶次（默认3）")
-    parser.add_argument("--max-fit-points-per-segment", type=int, default=20000, help="单段拟合点数上限，防止 density 过高导致内存/CPU 爆炸")
+    parser.add_argument(
+        "--max-fit-points-per-segment",
+        type=int,
+        default=20000,
+        help="单段拟合点数上限，防止 density 过高导致内存/CPU 爆炸")
     parser.add_argument("--export-sleep-ms", type=int, default=0, help="导出节流：休眠毫秒数，默认 0")
     parser.add_argument("--export-yield-every", type=int, default=0, help="导出节流：每处理 N 条触发休眠，默认 0")
     parser.add_argument("--split-by-layer-type", action="store_true", help="按层+打印子类型分别导出 npz")
-    parser.add_argument("--plot-layer-xy", action="store_true", help="导出后按层生成 XY 路径图（仅对 split-by-layer-type 生效）")
+    parser.add_argument(
+        "--plot-layer-xy",
+        action="store_true",
+        help="导出后按层生成 XY 路径图（仅对 split-by-layer-type 生效）")
     parser.add_argument("--plot-stride", type=int, default=5, help="绘图抽样步长，默认 5")
-    parser.add_argument("--tool-offset-x", type=float, default=0.0, help="Tool 1 X offset from Tool 2 (mm)")
-    parser.add_argument("--tool-offset-y", type=float, default=0.0, help="Tool 1 Y offset from Tool 2 (mm)")
-    parser.add_argument("--tool-offset-z", type=float, default=0.0, help="Tool 1 Z offset from Tool 2 (mm)")
-    parser.add_argument("--resin-z-print-compensation-mm", type=float, default=0.0, help="Resin Z print compensation prepended as a Z travel before formal printing (mm)")
+    parser.add_argument("--tool-offset-x", type=float, default=0.0,
+                        help="Tool 1 X offset from Tool 2 (mm)")
+    parser.add_argument("--tool-offset-y", type=float, default=0.0,
+                        help="Tool 1 Y offset from Tool 2 (mm)")
+    parser.add_argument("--tool-offset-z", type=float, default=0.0,
+                        help="Tool 1 Z offset from Tool 2 (mm)")
+    parser.add_argument(
+        "--resin-z-print-compensation-mm",
+        type=float,
+        default=0.0,
+        help="Resin Z print compensation prepended as a Z travel before formal printing (mm)")
     args = parser.parse_args(argv)
 
     input_dir = args.input_gcode_dir or os.path.join(args.data_root, "input_gcode")
@@ -93,7 +113,11 @@ def main(argv=None):
     t3 = time.perf_counter()
     print("[信息] 导出完成: %s (npz, chunk<=5000000)" % output_path)
     print(
-        "[信息] 耗时统计: 读取GCode=%.3fs, 解析=%.3fs, 导出总计=%.3fs (拟合=%.3fs, 采样=%.3fs, 写入=%.3fs, 清单=%.3fs, 绘图=%.3fs, 行数=%d, 分片=%d)"
+        (
+            "[信息] 耗时统计: 读取GCode=%.3fs, 解析=%.3fs, "
+            "导出总计=%.3fs (拟合=%.3fs, 采样=%.3fs, 写入=%.3fs, "
+            "清单=%.3fs, 绘图=%.3fs, 行数=%d, 分片=%d)"
+        )
         % (
             t1 - t0,
             t2 - t1,
@@ -108,7 +132,11 @@ def main(argv=None):
         )
     )
     print(
-        "[信息] 拟合细分: 生成点=%.3fs, 密度加密=%.3fs, 准备数据=%.3fs, 参数化=%.3fs, 节点生成=%.3fs, 最小二乘=%.3fs, 后处理=%.3fs"
+        (
+            "[信息] 拟合细分: 生成点=%.3fs, 密度加密=%.3fs, "
+            "准备数据=%.3fs, 参数化=%.3fs, 节点生成=%.3fs, "
+            "最小二乘=%.3fs, 后处理=%.3fs"
+        )
         % (
             stats.get("fit_gen_points_s", 0.0),
             stats.get("fit_density_s", 0.0),
