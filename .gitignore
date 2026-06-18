@@ -30,3 +30,6 @@
 
 # Print test data
 /data/print_test/
+
+# Output NPZ data
+/data/output_npz/
