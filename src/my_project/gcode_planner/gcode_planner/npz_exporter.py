@@ -8,7 +8,7 @@ gcode_planner 的 npz 导出器（分片）.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import List, Optional
 import os
 import time
@@ -76,6 +76,7 @@ def export_npz(
     tool_offset: tuple = (0.0, 0.0, 0.0),
     progress_callback=None,
     enable_extrude_wait: bool = False,
+    enable_travel_extrude_overlap: bool = True,
     resin_z_print_compensation_mm: float = 0.0,
 ) -> dict:
     """
@@ -447,6 +448,47 @@ def export_npz(
         dz = move.pos.z - move.start_pos.z
         return math.sqrt(dx * dx + dy * dy + dz * dz)
 
+    def _can_overlap_on_travel(cmd) -> bool:
+        return (
+            isinstance(cmd, MoveCommand)
+            and cmd.type == "TRAVEL"
+            and not cmd.is_pure_state_change
+            and _move_length(cmd) > 1e-9
+        )
+
+    def _add_extrude_overlap_to_travel(
+            move: MoveCommand, delta_e: float, label: str) -> MoveCommand:
+        return replace(
+            move,
+            e_val=move.e_val + delta_e,
+            delta_e=move.delta_e + delta_e,
+            raw=(move.raw or "") + f" | overlap_{label}",
+        )
+
+    def _overlap_extrude_waits_on_travel(commands: ParsedCommandList) -> ParsedCommandList:
+        out: ParsedCommandList = []
+        total = len(commands)
+        for idx, cmd in enumerate(commands):
+            if not isinstance(cmd, ExtrudeWait) or abs(cmd.delta_e) <= 1e-9:
+                out.append(cmd)
+                continue
+
+            prev = out[-1] if out else None
+            next_cmd = commands[idx + 1] if idx + 1 < total else None
+            if cmd.delta_e > 0.0 and _can_overlap_on_travel(prev):
+                out[-1] = _add_extrude_overlap_to_travel(prev, cmd.delta_e, "prime")
+                continue
+            if (
+                cmd.delta_e < 0.0
+                and _can_overlap_on_travel(prev)
+                and isinstance(next_cmd, ResetECommand)
+            ):
+                out[-1] = _add_extrude_overlap_to_travel(prev, cmd.delta_e, "retract")
+                continue
+
+            out.append(cmd)
+        return out
+
     def _collapse_moves_to_single(moves: List[MoveCommand]) -> MoveCommand:
         first = moves[0]
         last = moves[-1]
@@ -526,6 +568,22 @@ def export_npz(
         return min_len <= short_threshold and max_len >= min_len * 8.0
 
     def _partition_moves_for_export(moves: List[MoveCommand]):
+        overlap_indices = [
+            idx for idx, move in enumerate(moves)
+            if move.type == "TRAVEL" and abs(move.delta_e) > 1e-9
+        ]
+        if overlap_indices:
+            parts = []
+            start = 0
+            for idx in overlap_indices:
+                if start < idx:
+                    parts.extend(_partition_moves_for_export(moves[start:idx]))
+                parts.append(([moves[idx]], True))
+                start = idx + 1
+            if start < len(moves):
+                parts.extend(_partition_moves_for_export(moves[start:]))
+            return parts
+
         if len(moves) <= 2:
             return [(moves, True)]
 
@@ -953,6 +1011,9 @@ def export_npz(
         seq += 1
         last_pose_map[(layer, subtype)] = hold_row
         last_pose = hold_row
+
+    if enable_extrude_wait and enable_travel_extrude_overlap:
+        parsed_commands = _overlap_extrude_waits_on_travel(parsed_commands)
 
     total_cmds = len(parsed_commands)
 
