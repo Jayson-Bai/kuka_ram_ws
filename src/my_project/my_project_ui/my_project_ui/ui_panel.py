@@ -610,6 +610,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
         self._npz_dir = npz_dir
         self._images: list[Path] = []
+        self._layer_numbers: list[int] = []
         self._index = 0
         self._zoom = 1.0
 
@@ -624,7 +625,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         preview_dir = Path(self._npz_dir) / "layer_previews"
         if not preview_dir.is_dir():
             return
-        pattern = re.compile(r"layer_(\d+)\.png$")
+        pattern = re.compile(r"layer_(-?\d+)\.png$")
         files = []
         for f in sorted(preview_dir.iterdir()):
             m = pattern.match(f.name)
@@ -632,6 +633,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
                 files.append((int(m.group(1)), f))
         files.sort(key=lambda x: x[0])
         self._images = [f[1] for f in files]
+        self._layer_numbers = [f[0] for f in files]
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
@@ -702,7 +704,9 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             self._btn_next.setEnabled(False)
             return
         total = len(self._images)
-        self._label_index.setText(f"层 {self._index + 1} / {total}")
+        layer_no = self._layer_numbers[self._index] if self._index < len(
+            self._layer_numbers) else self._index
+        self._label_index.setText(f"G-code层 {layer_no} ({self._index + 1} / {total})")
         self._btn_prev.setEnabled(self._index > 0)
         self._btn_next.setEnabled(self._index < total - 1)
 
