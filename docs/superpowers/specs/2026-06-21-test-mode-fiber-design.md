@@ -1,43 +1,43 @@
-# Test Mode Fiber Printing Design
+# 测试模式纤维打印设计
 
-Date: 2026-06-21
+日期：2026-06-21
 
-## Scope
+## 范围
 
-This design adds carbon fiber test printing to the existing test mode and updates the formal-print offset UI layout. Formal-print trajectory compensation is not implemented in this scope.
+本设计在现有测试模式中加入碳纤维打印能力，并调整正式打印里的喷头偏置 UI 布局。正式打印的轨迹补偿逻辑本轮不实现。
 
-In scope:
+本轮包含：
 
-- Test-mode resin Z height calibration with both existing Z jog buttons and direct signed numeric input.
-- Test-mode fiber X/Y/Z calibration with signed numeric inputs and an apply action.
-- Persistent head calibration file shared by test mode and the formal-print UI.
-- Test-mode resin-only, fiber-only, and resin-plus-fiber composite test print actions.
-- Test-mode scissor button that only sends a reserved UART command when the fiber head is active.
-- Test-mode tool-change safety moves for generated test NPZ jobs.
-- Formal-print UI re-layout for resin Z, fiber Z, and fiber X/Y offsets only.
+- 测试模式树脂 Z 打印高度标定：保留原有 Z 方向点动按钮，并增加带正负号的直接输入。
+- 测试模式纤维 X/Y/Z 标定：使用带正负号的输入框和应用动作。
+- 增加测试模式和正式打印 UI 共用的喷头标定 JSON 文件。
+- 增加测试模式树脂单独打印、纤维单独打印、树脂加纤维复合打印。
+- 增加测试模式 `剪切` 按钮；只有当前使用纤维头时才发送预留 UART 命令。
+- 在测试模式生成的临时 NPZ 作业中加入 tool change 安全移动。
+- 正式打印中只调整树脂 Z、纤维 Z、纤维 X/Y 的偏置 UI 布局。
 
-Out of scope:
+本轮不包含：
 
-- Applying the new compensation model to formal-print GCode/NPZ export.
-- Completing a partially printed resin matrix before fiber printing.
-- Runtime insertion of compensation inside `center_node`, `rsi_node`, or `uart_node`.
-- Final scissor UART protocol fields beyond a reserved command string.
+- 将新的补偿模型接入正式打印 GCode/NPZ 导出。
+- 点击开始纤维前自动补完尚未完成的树脂矩阵线。
+- 在 `center_node`、`rsi_node` 或 `uart_node` 运行时动态插入补偿轨迹。
+- 剪切 UART 最终协议字段；本轮只保留预留命令。
 
-## Existing System
+## 现有系统
 
-The test mode is implemented mostly in `my_project_ui/ui_panel.py`. It currently generates temporary GCode and NPZ files under `/home/jayson/kuka_ram_ws/data/print_test`, publishes a reset command to `/print_test/rsi_command`, and publishes the NPZ path to `/print_test/load_npz`. `center_node` dynamically loads that NPZ and pre-fills the existing RSI trajectory queue.
+测试模式主要实现在 `my_project_ui/ui_panel.py` 中。当前流程是 UI 生成临时 GCode 和 NPZ，保存到 `/home/jayson/kuka_ram_ws/data/print_test`，然后向 `/print_test/rsi_command` 发布 reset 命令，并向 `/print_test/load_npz` 发布 NPZ 路径。`center_node` 收到该路径后动态加载 NPZ，并预填充现有 RSI 轨迹队列。
 
-Manual test-mode Z adjustment already uses the same temporary NPZ path. The UI observes `/rsi/current_correction` and treats a test action as complete when the current correction is close to the target pose.
+现有测试模式 Z 调整已经使用同一套临时 NPZ 机制。UI 订阅 `/rsi/current_correction`，当当前 correction 接近目标位姿时，认为当前测试动作完成。
 
-The current resin test matrix generator lives in `gcode_planner/print_test_generator.py`. It creates a serpentine multi-line matrix with fixed default line length and Y spacing.
+当前树脂测试矩阵生成逻辑位于 `gcode_planner/print_test_generator.py`。它生成蛇形多线矩阵，当前默认线长和 Y 间距是固定值。
 
-## Calibration Data
+## 标定数据
 
-Calibration is stored in one current-state JSON file:
+标定数据保存为一个当前有效 JSON 文件：
 
 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json`
 
-The file is overwritten whenever the user starts a confirmed test print action or confirms a calibration step. It includes an update timestamp:
+当用户确认标定步骤，或点击任意“确认并开始打印”类动作时，该文件会被覆盖写入。文件包含更新时间：
 
 ```json
 {
@@ -53,187 +53,194 @@ The file is overwritten whenever the user starts a confirmed test print action o
 }
 ```
 
-All values are signed and entered as-is. The UI does not invert signs.
+所有数值都带正负号，按用户输入原样保存。UI 不做自动取反。
 
-The calibration values have two separate meanings:
+这些标定值有两个不同语义：
 
-- During calibration, each value is local to the current print head and is applied independently.
-- During generated composite test jobs, relative compensation is computed from the confirmed values:
+- 标定阶段：每个值只针对当前喷头自己生效，树脂和纤维互不换算、互不干扰。
+- 生成复合测试作业时：用已确认的四个值计算喷头切换前后的相对补偿：
   - `R = (0, 0, resin_z_print_compensation_mm)`
   - `F = (fiber_x_print_compensation_mm, fiber_y_print_compensation_mm, fiber_z_print_compensation_mm)`
-  - Resin to fiber compensation: `F - R`
-  - Fiber to resin compensation: `R - F`
+  - 树脂切纤维补偿：`F - R`
+  - 纤维切树脂补偿：`R - F`
 
-Example: resin Z is `-20`, fiber is `(5, 4, -25)`. Resin to fiber compensation is `(5, 4, -5)`.
+例子：树脂 Z 为 `-20`，纤维为 `(5, 4, -25)`，则树脂切纤维补偿为 `(5, 4, -5)`。
 
-## Test Mode UI
+## 测试模式 UI
 
-The current `打印测试（树脂）` area becomes a combined test-mode panel. It is organized into:
+当前 `打印测试（树脂）` 区域调整为综合测试模式面板，分为以下几组。
 
-- Global test parameters:
-  - Test speed.
-  - Line length.
-  - Y spacing.
-  - Tool-change safe lift, default `10mm`.
-- Resin parameters:
-  - Resin target temperature.
-  - Resin layer height range.
-  - Resin extrusion scale range.
-  - Resin prime length and speed.
-  - Resin retract length and speed.
-  - Resin Z print compensation input.
-- Fiber parameters:
-  - Fiber target temperature.
-  - Fiber layer height range.
-  - Fiber extrusion scale range.
-  - Fiber prime length and speed.
-  - Fiber retract length and speed.
-  - Fiber X/Y/Z print compensation inputs.
-- Actions:
-  - `进入测试准备`
-  - `确认树脂打印高度`
-  - `继续调整纤维头`
-  - `开始测试树脂打印`
-  - `应用纤维偏置`
-  - `确认纤维头偏置`
-  - `直接打印纤维`
-  - `复合打印`
-  - `剪切`
+全局测试参数：
 
-The scissor button is separate from the calibration flow. It only checks the current tool before publishing a UART command.
+- 测试速度。
+- 线长。
+- Y 间距。
+- tool change 安全抬升高度，默认 `10mm`。
 
-## Test Mode Flow
+树脂参数：
 
-### Preparation
+- 树脂目标温度。
+- 树脂层高范围。
+- 树脂挤出倍率范围。
+- 树脂预挤出长度和速度。
+- 树脂回抽长度和速度。
+- 树脂 Z 打印补偿输入。
 
-When the user clicks `进入测试准备`:
+纤维参数：
 
-1. The UI loads the current calibration JSON if it exists.
-2. The UI sends the resin fan and resin heat commands using the resin target temperature.
-3. The UI ensures the resin head is selected. If `PrintHeadStatus.current_tool == 2`, no tool switch is sent. Otherwise the UI must first generate a temporary travel NPZ back to RSI zero correction, wait for arrival, send `EV 0 tool_change_resin 2\n`, and wait until `PrintHeadStatus.current_tool == 2`.
-4. The UI sends `RESET` to `/print_test/rsi_command`.
-5. Resin Z controls become available after `/rsi/current_correction` has been received.
+- 纤维目标温度。
+- 纤维层高范围。
+- 纤维挤出倍率范围。
+- 纤维预挤出长度和速度。
+- 纤维回抽长度和速度。
+- 纤维 X/Y/Z 打印补偿输入。
 
-### Resin Height Calibration
+动作按钮：
 
-The user can adjust resin Z by:
+- `进入测试准备`
+- `确认树脂打印高度`
+- `继续调整纤维头`
+- `开始测试树脂打印`
+- `应用纤维偏置`
+- `确认纤维头偏置`
+- `直接打印纤维`
+- `复合打印`
+- `剪切`
 
-- Existing Z jog buttons.
-- Direct signed resin Z input plus an apply action.
+`剪切` 是独立外部按钮，不依赖树脂或纤维偏置流程，只在点击时检查当前喷头状态。
 
-Both routes generate a temporary travel NPZ from the current correction to the requested target correction. When the user clicks `确认树脂打印高度`, the resin Z value is saved.
+## 测试模式流程
 
-After resin height confirmation, two paths are available:
+### 进入测试准备
 
-- `开始测试树脂打印`: generate and run only the resin test matrix.
-- `继续调整纤维头`: move into fiber calibration.
+用户点击 `进入测试准备` 后：
 
-### Fiber Calibration Entry
+1. UI 加载当前标定 JSON；如果不存在，则使用默认值。
+2. UI 根据树脂目标温度发送树脂风扇和树脂加热命令。
+3. UI 确认当前为树脂头。如果 `PrintHeadStatus.current_tool == 2`，不重复切换；否则必须先生成临时 travel NPZ 回到 RSI 全 0 correction，等待到位后发送 `EV 0 tool_change_resin 2\n`，再等待 `PrintHeadStatus.current_tool == 2`。
+4. UI 向 `/print_test/rsi_command` 发送 `RESET`。
+5. 收到 `/rsi/current_correction` 后，开放树脂 Z 调整控件。
 
-When the user clicks `继续调整纤维头`:
+### 树脂高度标定
 
-1. The UI warns that the system will return to the RSI zero correction before switching to the fiber head.
-2. If the user confirms, the UI generates a temporary travel NPZ from the current correction to `(0, 0, 0, 0, 0, 0)`.
-3. Only after arrival at zero correction, the UI sends `EV 0 tool_change_cf 1\n`.
-4. The UI waits until `PrintHeadStatus.current_tool == 1`.
-5. Fiber X/Y/Z inputs and the fiber apply/confirm actions become available.
+用户可以通过两种方式调整树脂 Z：
 
-This zero-return rule is required only for manual calibration entry, where the fiber offset may not be known yet.
+- 现有 Z 上升/下降按钮。
+- 新增的带正负号树脂 Z 输入和应用动作。
 
-### Fiber Offset Calibration
+两种方式都生成从当前 correction 到目标 correction 的临时 travel NPZ。用户点击 `确认树脂打印高度` 后，保存树脂 Z 值。
 
-Fiber X/Y/Z inputs are signed values local to the fiber head. Clicking `应用纤维偏置` generates a temporary travel NPZ from the current correction to the entered fiber X/Y/Z target while keeping A/B/C unchanged or at the current correction values.
+树脂高度确认后，开放两个路径：
 
-Clicking `确认纤维头偏置` saves the fiber X/Y/Z values to the calibration JSON. After confirmation:
+- `开始测试树脂打印`：只生成并执行树脂测试矩阵。
+- `继续调整纤维头`：进入纤维标定阶段。
 
-- `直接打印纤维` is enabled.
-- `复合打印` is enabled.
+### 进入纤维标定
 
-### Resin-Only Test Print
+用户点击 `继续调整纤维头` 后：
 
-`开始测试树脂打印` generates a resin test matrix using the resin parameter set and the current resin correction. It preserves the existing behavior of the prior resin-only test logic.
+1. UI 弹窗提示系统将先回 RSI 全 0 correction，再切换到纤维喷头。
+2. 用户确认后，UI 生成从当前 correction 到 `(0, 0, 0, 0, 0, 0)` 的临时 travel NPZ。
+3. 只有确认到达全 0 correction 后，才发送 `EV 0 tool_change_cf 1\n`。
+4. UI 等待 `PrintHeadStatus.current_tool == 1`。
+5. 确认纤维头使用中后，开放纤维 X/Y/Z 输入、应用和确认动作。
 
-### Fiber-Only Test Print
+这个回全 0 的规则只用于人工标定入口，因为此时纤维偏置可能还未知，必须优先保证安全。
 
-`直接打印纤维` generates a fiber test matrix using the fiber parameter set and the current fiber correction. It mirrors the resin-only matrix behavior:
+### 纤维偏置标定
 
-- Same serpentine matrix structure.
-- Same configurable line length and Y spacing.
-- Fiber tool id `1`.
-- Fiber target temperature and fiber extrusion parameters.
+纤维 X/Y/Z 输入是带正负号的数值，且只针对纤维头自身。点击 `应用纤维偏置` 后，UI 从当前 correction 规划到输入的纤维 X/Y/Z 目标；A/B/C 保持当前 correction 值，或按当前实现中一致的姿态处理。
 
-It does not print resin first.
+点击 `确认纤维头偏置` 后，保存纤维 X/Y/Z 值到标定 JSON。确认后开放：
 
-### Composite Test Print
+- `直接打印纤维`
+- `复合打印`
 
-`复合打印` generates one temporary test job:
+### 只打印树脂
 
-1. Resin matrix using resin parameters and resin tool id `2`.
-2. Tool-change safety sequence from resin to fiber:
-   - Insert safe lift of `tool_change_safe_lift_mm`, default `10mm`.
-   - Insert compensation move `F - R`.
-   - Insert `tool_change_cf`.
-3. Fiber matrix using fiber parameters and fiber tool id `1`, with the same geometric matrix pattern as the resin matrix.
+`开始测试树脂打印` 使用树脂参数组和当前树脂 correction 生成树脂测试矩阵。它保留原先只打印树脂测试线的行为。
 
-The composite job is generated as GCode and exported to NPZ before loading. No runtime queue mutation is added.
+### 只打印纤维
 
-## Tool-Change Safety
+`直接打印纤维` 使用纤维参数组和当前纤维 correction 生成纤维测试矩阵。它模仿树脂单独打印逻辑：
 
-For manual calibration entry:
+- 使用同样的蛇形矩阵结构。
+- 使用同一组全局线长和 Y 间距。
+- 纤维工具号为 `1`。
+- 使用纤维目标温度、纤维层高、纤维挤出倍率、纤维预挤出/回抽参数。
 
-- Return to RSI zero correction first.
-- Then execute the tool-change UART event.
-- Then wait for `PrintHeadStatus.current_tool` to match the requested tool.
+该动作不先打印树脂。
 
-For generated test print jobs after calibration:
+### 复合打印
 
-- Do not return to zero before each tool change.
-- Insert a safe lift of `10mm`.
-- Insert the signed relative compensation move.
-- Then emit the tool-change event.
+`复合打印` 生成一个临时测试作业：
 
-The generated job approach keeps the real-time communication path unchanged.
+1. 使用树脂参数和树脂工具号 `2` 生成完整树脂矩阵。
+2. 插入树脂切纤维安全序列：
+   - 先插入 `tool_change_safe_lift_mm` 安全抬升，默认 `10mm`。
+   - 再插入补偿移动 `F - R`。
+   - 再插入 `tool_change_cf`。
+3. 使用纤维参数和纤维工具号 `1` 生成完整纤维矩阵，几何矩阵与树脂矩阵完全对应。
 
-## Scissor Button
+复合打印作业先生成 GCode，再导出 NPZ 后加载。不在实时队列中动态插入轨迹。
 
-`剪切` is an external test-mode button. It does not depend on calibration completion.
+## Tool Change 安全策略
 
-On click:
+人工标定入口：
 
-1. Check `PrintHeadStatus.current_tool == 1`.
-2. If false, show a status error and send nothing.
-3. If true, publish the reserved UART command `EV 0 cut_cf\n`.
+- 必须先回 RSI 全 0 correction。
+- 到位后才允许发送 tool change UART 事件。
+- 发送后必须等待 `PrintHeadStatus.current_tool` 确认目标喷头已使用。
 
-The command string is intentionally isolated so the final protocol fields can be replaced later.
+已完成标定后的测试打印作业：
 
-## Formal-Print UI Layout
+- 每次 tool change 前不回全 0。
+- 插入 `10mm` 安全抬升。
+- 插入带正负号的相对补偿移动。
+- 然后再发 tool change 事件。
 
-Formal-print behavior is not changed in this scope. Only the offset layout changes:
+这种生成作业阶段处理的方式不增加实时通信链路复杂度。
 
-- The old resin Z print compensation area becomes a Z compensation area with two inputs:
-  - Resin Z print compensation.
-  - Fiber Z print compensation, placed to the right of resin Z.
-- The old tool offset area becomes fiber XY offset:
-  - Fiber X print compensation.
-  - Fiber Y print compensation.
-- Existing wheel-event protection remains for these numeric offset controls.
-- Values are loaded from and saved to `head_offsets.json`.
+## 剪切按钮
 
-Formal-print export still uses the current existing offset behavior until a later implementation explicitly connects the new compensation model.
+`剪切` 是测试模式里的独立按钮，不依赖标定是否完成。
 
-## Testing
+点击时：
 
-Focused tests should cover:
+1. 检查 `PrintHeadStatus.current_tool == 1`。
+2. 如果不是纤维头，显示错误状态，不发送任何 UART 命令。
+3. 如果是纤维头，发送预留 UART 命令 `EV 0 cut_cf\n`。
 
-- Calibration JSON load/save path, schema, signed values, and timestamp.
-- Test-mode UI contains separate resin/fiber/global parameter groups and the requested buttons.
-- Resin-only path still generates the existing resin matrix behavior.
-- Fiber-only path generates a fiber matrix with tool id `1`.
-- Composite path emits resin matrix, safe lift, compensation move `F - R`, `tool_change_cf`, and fiber matrix in order.
-- Manual calibration entry requires zero correction before tool change and waits for current tool status.
-- Scissor button refuses to send unless current tool is fiber.
-- Formal-print UI layout exposes resin Z, fiber Z, fiber X, and fiber Y in the requested locations.
+命令字符串会集中放置，后续你给出最终 UART 字段后，只替换该字符串即可。
 
-## Open Decisions
+## 正式打印 UI 布局
 
-No open decisions remain for this implementation scope.
+本轮不改变正式打印行为，只调整偏置 UI 布局：
+
+- 原 `树脂轴 Z 打印补偿` 区域改成 Z 方向补偿区域，包含两个输入：
+  - 树脂 Z 打印补偿。
+  - 纤维 Z 打印补偿，放在树脂 Z 右侧。
+- 原 `工具偏移` 区域改成纤维 XY 偏置区域：
+  - 纤维 X 打印补偿。
+  - 纤维 Y 打印补偿。
+- 这些数值输入继续保留禁止鼠标滚轮误触修改的保护。
+- 数值从 `head_offsets.json` 加载并保存到该文件。
+
+正式打印导出仍沿用当前既有偏置行为，直到后续单独实现正式打印补偿模型接入。
+
+## 测试
+
+需要覆盖的重点测试：
+
+- 标定 JSON 加载/保存路径、schema、带正负号数值和时间戳。
+- 测试模式 UI 包含独立的树脂参数、纤维参数、全局参数和确认过的按钮。
+- 树脂单独打印仍保持现有树脂矩阵行为。
+- 纤维单独打印生成工具号为 `1` 的纤维矩阵。
+- 复合打印按顺序生成树脂矩阵、安全抬升、`F - R` 补偿移动、`tool_change_cf`、纤维矩阵。
+- 人工进入纤维标定前必须先回 RSI 全 0，再切换喷头，并等待 current tool 状态确认。
+- 剪切按钮在当前不是纤维头时拒绝发送。
+- 正式打印 UI 在要求的位置暴露树脂 Z、纤维 Z、纤维 X、纤维 Y。
+
+## 未决事项
+
+当前实现范围内没有未决事项。
