@@ -47,6 +47,8 @@ class CsvRow:
     event_type: str
     payload: str
     trigger_seq: Optional[int]
+    layer_index: int = 0
+    total_layers: int = 0
 
 
 @dataclass
@@ -128,6 +130,17 @@ def export_npz(
     last_pose: Optional[CsvRow] = None
     last_feedrate_mm_min: Optional[float] = None
     resin_z_offset: float = 0.0
+
+    def _command_layer(cmd) -> int:
+        try:
+            return max(0, int(getattr(cmd, "layer", 0) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    total_layers = (
+        max((_command_layer(cmd) for cmd in parsed_commands), default=0) + 1
+        if parsed_commands else 0
+    )
 
     # 预先定义 vocab，确保分片一致
     import numpy as np
@@ -218,6 +231,8 @@ def export_npz(
                 [r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk],
                 dtype=np.int32,
             )
+            layer_index = np.array([r.layer_index for r in chunk], dtype=np.uint32)
+            total_layers_arr = np.array([r.total_layers for r in chunk], dtype=np.uint32)
 
             np.savez_compressed(
                 out_path,
@@ -236,6 +251,8 @@ def export_npz(
                 event_type=event_type,
                 payload=payload,
                 trigger_seq=trigger_seq,
+                layer_index=layer_index,
+                total_layers=total_layers_arr,
                 move_type_vocab_keys=move_type_keys,
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
@@ -361,6 +378,14 @@ def export_npz(
         if processed_rows % export_yield_every == 0:
             time.sleep(export_sleep_ms / 1000.0)
 
+    def _with_layer_progress(row: CsvRow, layer: int) -> CsvRow:
+        try:
+            row.layer_index = max(0, int(layer))
+        except (TypeError, ValueError):
+            row.layer_index = 0
+        row.total_layers = total_layers
+        return row
+
     def _record_flat_preview_point(layer: int, row: CsvRow):
         if split_by_layer_type or not plot_layer_xy:
             return
@@ -423,6 +448,7 @@ def export_npz(
                 payload="",
                 trigger_seq=None,
             )
+            row = _with_layer_progress(row, layer)
             _writer_for(layer, subtype, occ).add(row)
             _record_flat_preview_point(layer, row)
             processed_rows += 1
@@ -960,6 +986,7 @@ def export_npz(
                 payload="",
                 trigger_seq=None,
             )
+            row = _with_layer_progress(row, layer)
             writer.add(row)
             processed_rows += 1
             _maybe_yield()
@@ -987,25 +1014,24 @@ def export_npz(
             payload="",
             trigger_seq=None,
         )
-        _writer_for(layer, subtype, occ).add(
-            CsvRow(
-                seq=seq,
-                x=hold_row.x,
-                y=hold_row.y,
-                z=hold_row.z,
-                a=hold_row.a,
-                b=hold_row.b,
-                c=hold_row.c,
-                e=hold_row.e,
-                tool_id=ev.tool_id,
-                move_type="EVENT",
-                src_line=str(ev.src_line),
-                event_flag=1,
-                event_type=ev.event_type,
-                payload=ev.payload,
-                trigger_seq=seq,
-            )
+        row = CsvRow(
+            seq=seq,
+            x=hold_row.x,
+            y=hold_row.y,
+            z=hold_row.z,
+            a=hold_row.a,
+            b=hold_row.b,
+            c=hold_row.c,
+            e=hold_row.e,
+            tool_id=ev.tool_id,
+            move_type="EVENT",
+            src_line=str(ev.src_line),
+            event_flag=1,
+            event_type=ev.event_type,
+            payload=ev.payload,
+            trigger_seq=seq,
         )
+        _writer_for(layer, subtype, occ).add(_with_layer_progress(row, layer))
         processed_rows += 1
         _maybe_yield()
         seq += 1
@@ -1385,6 +1411,8 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
             [r.trigger_seq if r.trigger_seq is not None else -1 for r in chunk],
             dtype=np.int32,
         )
+        layer_index = np.array([r.layer_index for r in chunk], dtype=np.uint32)
+        total_layers_arr = np.array([r.total_layers for r in chunk], dtype=np.uint32)
 
         out_path = (
             f"{part_base}_part{part:04d}.npz"
@@ -1408,6 +1436,8 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
             event_type=event_type,
             payload=payload,
             trigger_seq=trigger_seq,
+            layer_index=layer_index,
+            total_layers=total_layers_arr,
             move_type_vocab_keys=move_type_keys,
             move_type_vocab_vals=move_type_vals,
             event_type_vocab_keys=event_type_keys,

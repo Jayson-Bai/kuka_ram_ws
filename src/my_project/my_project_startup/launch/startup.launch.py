@@ -211,7 +211,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "ui_publish_period_ms",
-            default_value="200",
+            default_value="100",
             description="UI 状态发布周期（毫秒）。",
         ),
         DeclareLaunchArgument(

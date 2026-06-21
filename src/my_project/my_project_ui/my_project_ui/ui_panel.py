@@ -17,7 +17,9 @@ import re
 from pathlib import Path
 
 
-_DEFAULT_NPZ_PATH = "/home/jayson/kuka_ram_ws/data/output_npz/test.npz"
+_DEFAULT_GCODE_INPUT_DIR = "/home/jayson/kuka_ram_ws/data/input_gcode"
+_DEFAULT_NPZ_OUTPUT_DIR = "/home/jayson/kuka_ram_ws/data/output_npz"
+_DEFAULT_NPZ_PATH = os.path.join(_DEFAULT_NPZ_OUTPUT_DIR, "test.npz")
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
@@ -42,7 +44,7 @@ LAUNCH_PARAMS = [
     ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART 节点"),
     ("baudrate", "115200", "UART 波特率", "UART 节点"),
     ("extrude_scale", "1.0", "UART 挤出倍率因子", "UART 节点"),
-    ("ui_publish_period_ms", "200", "UI 状态发布周期（ms）", "系统管理器"),
+    ("ui_publish_period_ms", "100", "UI 状态发布周期（ms）", "系统管理器"),
     ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
@@ -359,6 +361,31 @@ def _format_tool_offset(offset):
     return f"({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
 
 
+def _dialog_start_dir(current_path, default_dir):
+    current_path = (current_path or "").strip()
+    if current_path:
+        p = Path(current_path).expanduser()
+        candidate = p if p.is_dir() else p.parent
+        if candidate.is_dir():
+            return str(candidate)
+    return default_dir
+
+
+def _normalize_npz_launch_path(npz_path):
+    p = Path(npz_path)
+    if p.suffix.lower() != ".npz":
+        return None
+    stem = re.sub(r"_part\d+$", "", p.stem)
+    return str(p.with_name(stem + ".npz"))
+
+
+def _npz_layer_dir_from_launch_path(npz_path):
+    launch_path = _normalize_npz_launch_path(npz_path)
+    if not launch_path:
+        return None
+    return str(Path(launch_path).with_suffix(""))
+
+
 def _resolve_npz_launch_path_from_dir(npz_dir):
     root = Path(npz_dir)
     if not root.is_dir():
@@ -373,8 +400,7 @@ def _resolve_npz_launch_path_from_dir(npz_dir):
 
     part_files = sorted(root.glob("*_part*.npz"))
     if part_files:
-        stem = re.sub(r"_part\d+$", "", part_files[0].stem)
-        return str(part_files[0].with_name(stem + ".npz"))
+        return _normalize_npz_launch_path(str(part_files[0]))
 
     return None
 
@@ -442,6 +468,11 @@ def _format_rsi_xml_for_display(xml_text):
         return "\n".join(lines)
     except Exception:
         return text
+
+
+class _NoWheelDoubleSpinBox(QtWidgets.QDoubleSpinBox):
+    def wheelEvent(self, event):
+        event.ignore()
 
 
 class _PanelDialog(QtWidgets.QDialog):
@@ -892,6 +923,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         else:
             self._title_label.setText("正式打印")
             self._launch_box.setTitle("启动")
+        self._print_progress_widget.setVisible(mode == _MODE_PAGE_PRINT)
         self._mode_stack.setCurrentWidget(self._content_scroll)
 
     def _show_mode_select(self):
@@ -961,7 +993,29 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_mode_back.setObjectName("btnModeBack")
         self._btn_mode_back.setMinimumHeight(28)
         self._btn_mode_back.setCursor(QtCore.Qt.PointingHandCursor)
+        self._print_progress_widget = QtWidgets.QWidget()
+        self._print_progress_widget.setObjectName("printProgressWidget")
+        progress_layout = QtWidgets.QHBoxLayout(self._print_progress_widget)
+        progress_layout.setContentsMargins(0, 0, 0, 0)
+        progress_layout.setSpacing(6)
+        self._print_progress_label = QtWidgets.QLabel("层进度 -- / --")
+        self._print_progress_label.setObjectName("printProgressLabel")
+        self._print_progress_label.setAlignment(
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self._print_progress_label.setMinimumWidth(92)
+        self._print_progress_bar = QtWidgets.QProgressBar()
+        self._print_progress_bar.setObjectName("printProgressBar")
+        self._print_progress_bar.setRange(0, 100)
+        self._print_progress_bar.setValue(0)
+        self._print_progress_bar.setTextVisible(False)
+        self._print_progress_bar.setFixedWidth(160)
+        self._print_progress_bar.setFixedHeight(14)
+        progress_layout.addWidget(self._print_progress_label)
+        progress_layout.addWidget(self._print_progress_bar)
+        self._print_progress_widget.setVisible(False)
+
         header.addWidget(self._title_label, 1)
+        header.addWidget(self._print_progress_widget)
         header.addWidget(self._btn_mode_back)
         layout.addLayout(header, 0, 0, 1, 3)
 
@@ -1616,7 +1670,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         resin_z_row.setSpacing(4)
         resin_z_label = QtWidgets.QLabel("补偿 (mm)")
         resin_z_label.setObjectName("fieldLabel")
-        self._resin_z_print_comp_spin = QtWidgets.QDoubleSpinBox()
+        self._resin_z_print_comp_spin = _NoWheelDoubleSpinBox()
         self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
         self._resin_z_print_comp_spin.setDecimals(2)
         self._resin_z_print_comp_spin.setSingleStep(0.1)
@@ -1656,7 +1710,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             lbl = QtWidgets.QLabel(f"{axis} (mm)")
             lbl.setObjectName("fieldLabel")
             lbl.setAlignment(QtCore.Qt.AlignCenter)
-            spin = QtWidgets.QDoubleSpinBox()
+            spin = _NoWheelDoubleSpinBox()
             spin.setRange(-100.0, 100.0)
             spin.setDecimals(2)
             spin.setSingleStep(0.01)
@@ -2691,6 +2745,22 @@ class _UiStatusWidget(QtWidgets.QWidget):
             warn_color,
         )
 
+    def _update_print_progress(self, msg: UiStatus):
+        if not msg.current_traj_valid:
+            self._print_progress_bar.setValue(0)
+            self._print_progress_label.setText("层进度 -- / --")
+            return
+        layer_index = int(msg.current_traj.layer_index)
+        total_layers = int(msg.current_traj.total_layers)
+        if total_layers <= 0:
+            self._print_progress_bar.setValue(0)
+            self._print_progress_label.setText("层进度 -- / --")
+            return
+        current_layer = max(1, min(total_layers, layer_index + 1))
+        progress = int(round(current_layer * 100.0 / total_layers))
+        self._print_progress_bar.setValue(max(0, min(100, progress)))
+        self._print_progress_label.setText(f"第 {current_layer} / {total_layers} 层")
+
     def _update_ui(self, msg: UiStatus):
         self._append_diagnostic("ui_status", "snapshot", {
             "state": str(msg.state or ""),
@@ -2729,6 +2799,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 else None
             ),
         })
+        self._update_print_progress(msg)
         state_str = msg.state or "-"
         state_color = self._STATE_COLORS.get(state_str, "#a0a0a0")
         self._set_value("System State", state_str, state_color)
@@ -3217,7 +3288,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
             "选择 GCode 文件",
-            os.path.dirname(self._gcode_path_input.text()) or os.path.expanduser("~"),
+            _dialog_start_dir(self._gcode_path_input.text(), _DEFAULT_GCODE_INPUT_DIR),
             "GCode Files (*.gcode *.gc *.g);;All Files (*)",
         )
         if path:
@@ -3227,7 +3298,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not text:
             return
         base = os.path.splitext(os.path.basename(text))[0]
-        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        data_root = _DEFAULT_NPZ_OUTPUT_DIR
         self._npz_out_input.setText(os.path.join(data_root, base + ".npz"))
 
     def _on_export_npz(self):
@@ -3371,7 +3442,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _npz_launch_relation_text(self):
         return (
-            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选文件夹解析出的 flat NPZ 或 _part 分片入口传给它。\n"
+            "启动设置中与 NPZ 直接相关的是 npz_path；UI 会把所选 NPZ 文件或 _part 分片入口传给它。\n"
             "npz_preload_chunks、queue_low/high、traj_prefill、traj_low/high 只影响加载、预取和队列阈值，"
             "不会改变 NPZ 文件内容。"
         )
@@ -3420,7 +3491,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _confirm_npz_dir_selection(
             self,
-            npz_dir,
+            npz_file,
             launch_path,
             saved_offset,
             saved_resin_z_print_compensation,
@@ -3429,7 +3500,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         current_offset = self.get_tool_offset()
         current_resin_z = self.current_resin_z_print_compensation()
         detail = [
-            f"NPZ 文件夹: {npz_dir}",
+            f"NPZ 文件: {npz_file}",
             f"启动将使用: {launch_path}",
             f"当前界面工具偏移: {_format_tool_offset(current_offset)}",
             f"当前界面树脂轴 Z 打印补偿: {current_resin_z:.2f} mm",
@@ -3453,7 +3524,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         detail.append("")
         detail.append(self._npz_launch_relation_text())
         detail.append("")
-        detail.append("是否将该文件夹作为本次启动使用的 NPZ 数据？")
+        detail.append("是否将该文件作为本次启动使用的 NPZ 数据？")
 
         return _ask_yes_no(
             self,
@@ -3463,21 +3534,25 @@ class _UiStatusWidget(QtWidgets.QWidget):
         ) == QtWidgets.QMessageBox.Yes
 
     def _on_select_npz_dir(self):
-        start_dir = self._selected_npz_dir or os.path.expanduser("~/kuka_ram_ws/data/output_npz")
-        npz_dir = QtWidgets.QFileDialog.getExistingDirectory(
-            self,
-            "选择已导出的 NPZ 文件夹",
-            start_dir,
+        start_dir = _dialog_start_dir(
+            self._selected_npz_launch_path or self._selected_npz_dir_input.text(),
+            _DEFAULT_NPZ_OUTPUT_DIR,
         )
-        if not npz_dir:
+        npz_file, _ = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            "选择已导出的 NPZ 文件",
+            start_dir,
+            "NPZ Files (*.npz);;All Files (*)",
+        )
+        if not npz_file:
             return
 
-        launch_path = _resolve_npz_launch_path_from_dir(npz_dir)
+        launch_path = _normalize_npz_launch_path(npz_file)
         if not launch_path:
             _show_warning(
                 self,
-                "NPZ 文件夹无效",
-                "所选文件夹中未找到可用于正式打印的 flat NPZ 或 _part 分片。",
+                "NPZ 文件无效",
+                "请选择可用于正式打印的 flat NPZ 或 _part 分片文件。",
             )
             return
 
@@ -3494,7 +3569,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         warnings = self._npz_dir_selection_warnings(saved_offset, saved_resin_z_print_compensation)
         if warnings and not self._confirm_npz_dir_selection(
-                npz_dir,
+                npz_file,
                 launch_path,
                 saved_offset,
                 saved_resin_z_print_compensation,
@@ -3502,19 +3577,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 warnings):
             return
 
-        self._selected_npz_dir = npz_dir
+        layer_dir = _npz_layer_dir_from_launch_path(launch_path)
+        self._selected_npz_dir = layer_dir
         self._selected_npz_launch_path = launch_path
-        self._last_npz_dir = npz_dir
-        self._selected_npz_dir_input.setText(npz_dir)
-        self._btn_view_layers.setEnabled(os.path.isdir(npz_dir))
-        self._export_status.setText(f"已选择 NPZ 文件夹: {npz_dir}")
+        self._last_npz_dir = layer_dir
+        self._selected_npz_dir_input.setText(npz_file)
+        self._btn_view_layers.setEnabled(bool(layer_dir and os.path.isdir(layer_dir)))
+        self._export_status.setText(f"已选择 NPZ 文件: {npz_file}")
         self._export_status.setStyleSheet("color: #1b6e3c;")
 
     def _on_clear_npz_dir(self):
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._selected_npz_dir_input.clear()
-        self._export_status.setText("已清除手动选择的 NPZ 文件夹；启动时将按 GCode 自动匹配。")
+        self._export_status.setText("已清除手动选择的 NPZ 文件；启动时将按 GCode 自动匹配。")
         self._export_status.setStyleSheet("color: #1a73e8;")
 
     _STATE_COLORS = {
@@ -3809,7 +3885,7 @@ class MyProjectUiPlugin(Plugin):
         if not gcode_path:
             return None
         base = os.path.splitext(os.path.basename(gcode_path))[0]
-        data_root = os.path.expanduser("~/kuka_ram_ws/data/output_npz")
+        data_root = _DEFAULT_NPZ_OUTPUT_DIR
 
         npz_dir = os.path.join(data_root, base)
         launch_path = _resolve_npz_launch_path_from_dir(npz_dir)
@@ -3965,7 +4041,7 @@ class MyProjectUiPlugin(Plugin):
             _show_warning(
                 self._widget,
                 "NPZ 文件缺失",
-                "未找到可用于启动的 NPZ 数据。请先导出 NPZ，或选择已导出的 NPZ 文件夹。",
+                "未找到可用于启动的 NPZ 数据。请先导出 NPZ，或选择已导出的 NPZ 文件。",
             )
             return
 

@@ -59,6 +59,8 @@ void QueueManager::fill(NpzLoader & loader)
     tp.e = row.e;
     tp.tool_id = row.tool_id;
     tp.seq = row.seq;
+    tp.layer_index = row.layer_index;
+    tp.total_layers = row.total_layers;
     traj_queue_.push_back(tp);
   }
 }

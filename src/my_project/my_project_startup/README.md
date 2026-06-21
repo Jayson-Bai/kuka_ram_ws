@@ -63,7 +63,7 @@ python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz --
 - `extrude_scale`：UART 挤出倍率，默认 `1.0`（仅影响串口发送的挤出量，不影响 UI/RSI/轨迹数据）
 
 ### system_manager_node
-- `ui_publish_period_ms`：UI 状态发布周期（毫秒），默认 `200`
+- `ui_publish_period_ms`：UI 状态发布周期（毫秒），默认 `100`
 - `heartbeat_timeout_s`：心跳超时时间（秒），默认 `1.0`
 - `traj_queue_limit`：UI 侧轨迹队列上限，默认 `5000`
 - `event_queue_limit`：UI 侧事件队列上限，默认 `2000`

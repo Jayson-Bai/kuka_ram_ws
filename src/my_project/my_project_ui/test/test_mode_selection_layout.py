@@ -5,6 +5,12 @@ UI_PANEL = Path(__file__).resolve().parents[1] / "my_project_ui" / "ui_panel.py"
 PROJECT_SRC = Path(__file__).resolve().parents[2]
 STARTUP_LAUNCH = PROJECT_SRC / "my_project_startup" / "launch" / "startup.launch.py"
 CENTER_NODE = PROJECT_SRC / "control_center" / "src" / "center_node.cpp"
+SYSTEM_MANAGER = PROJECT_SRC / "control_center" / "src" / "system_manager_node.cpp"
+QUEUE_MANAGER = PROJECT_SRC / "control_center" / "src" / "queue_manager.cpp"
+NPZ_LOADER_HPP = PROJECT_SRC / "control_center" / "include" / "control_center" / "npz_loader.hpp"
+NPZ_LOADER_CPP = PROJECT_SRC / "control_center" / "src" / "npz_loader.cpp"
+TRAJECTORY_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
+NPZ_EXPORTER = PROJECT_SRC / "gcode_planner" / "gcode_planner" / "npz_exporter.py"
 
 
 def _source():
@@ -67,6 +73,91 @@ def test_formal_print_prefers_flat_npz_over_manifest():
     assert "npz_part = os.path.join(data_root, base + \"_part0000.npz\")" in auto_path
     assert "_resolve_npz_launch_path_from_dir(npz_dir)" in auto_path
     assert "manifest" not in auto_path.lower()
+
+
+def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
+    src = _source()
+
+    assert (
+        '_DEFAULT_GCODE_INPUT_DIR = "/home/jayson/kuka_ram_ws/data/input_gcode"'
+        in src
+    )
+    assert (
+        '_DEFAULT_NPZ_OUTPUT_DIR = "/home/jayson/kuka_ram_ws/data/output_npz"'
+        in src
+    )
+
+    browse_gcode = src.split("    def _on_browse_gcode", 1)[1].split(
+        "    def _on_gcode_path_changed", 1
+    )[0]
+    assert "_DEFAULT_GCODE_INPUT_DIR" in browse_gcode
+    assert "QtWidgets.QFileDialog.getOpenFileName" in browse_gcode
+
+    select_npz = src.split("    def _on_select_npz", 1)[1].split(
+        "    def _on_clear_npz", 1
+    )[0]
+    assert "QtWidgets.QFileDialog.getOpenFileName" in select_npz
+    assert "getExistingDirectory" not in select_npz
+    assert "_DEFAULT_NPZ_OUTPUT_DIR" in select_npz
+    assert "_normalize_npz_launch_path" in select_npz
+
+
+def test_formal_print_layer_progress_uses_low_priority_ui_status_path():
+    ui_src = _source()
+    traj_msg = TRAJECTORY_MSG.read_text(encoding="utf-8")
+    startup_src = STARTUP_LAUNCH.read_text(encoding="utf-8")
+    system_src = SYSTEM_MANAGER.read_text(encoding="utf-8")
+    queue_src = QUEUE_MANAGER.read_text(encoding="utf-8")
+    loader_hpp = NPZ_LOADER_HPP.read_text(encoding="utf-8")
+    loader_cpp = NPZ_LOADER_CPP.read_text(encoding="utf-8")
+    exporter_src = NPZ_EXPORTER.read_text(encoding="utf-8")
+
+    assert "uint32 layer_index" in traj_msg
+    assert "uint32 total_layers" in traj_msg
+    assert "layer_index" in loader_hpp
+    assert "total_layers" in loader_hpp
+    assert 'npz.count("layer_index")' in loader_cpp
+    assert 'npz.count("total_layers")' in loader_cpp
+    assert "tp.layer_index = row.layer_index" in queue_src
+    assert "tp.total_layers = row.total_layers" in queue_src
+    assert "layer_index=layer_index" in exporter_src
+    assert "total_layers=total_layers_arr" in exporter_src
+
+    assert '("ui_publish_period_ms", "100", "UI 状态发布周期（ms）", "系统管理器")' in ui_src
+    ui_publish_section = startup_src.split(
+        'DeclareLaunchArgument(\n            "ui_publish_period_ms"', 1
+    )[1].split("        ),", 1)[0]
+    assert 'default_value="100"' in ui_publish_section
+    assert 'declare_parameter<int>("ui_publish_period_ms", 100)' in system_src
+
+    assert "self._print_progress_bar" in ui_src
+    assert "self._print_progress_label" in ui_src
+    assert "def _update_print_progress" in ui_src
+    assert "msg.current_traj.layer_index" in ui_src
+    assert "msg.current_traj.total_layers" in ui_src
+    assert "self._print_progress_widget.setVisible(mode == _MODE_PAGE_PRINT)" in ui_src
+
+
+def test_offset_and_resin_z_spinboxes_ignore_mouse_wheel():
+    src = _source()
+
+    assert "class _NoWheelDoubleSpinBox(QtWidgets.QDoubleSpinBox):" in src
+    no_wheel = src.split(
+        "class _NoWheelDoubleSpinBox(QtWidgets.QDoubleSpinBox):", 1
+    )[1].split("class _PanelDialog", 1)[0]
+    assert "def wheelEvent(self, event):" in no_wheel
+    assert "event.ignore()" in no_wheel
+
+    resin_z_section = src.split("self._resin_z_print_comp_spin =", 1)[1].split(
+        "self._resin_z_print_comp_spin.valueChanged", 1
+    )[0]
+    assert "_NoWheelDoubleSpinBox()" in resin_z_section
+
+    offset_section = src.split("self._offset_spins = {}", 1)[1].split(
+        "export_layout.addLayout(offset_grid)", 1
+    )[0]
+    assert "spin = _NoWheelDoubleSpinBox()" in offset_section
+    assert "spin = QtWidgets.QDoubleSpinBox()" not in offset_section
 
 
 def test_split_export_is_not_enabled_by_default_for_formal_print():

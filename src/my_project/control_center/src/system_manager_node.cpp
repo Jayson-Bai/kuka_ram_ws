@@ -34,7 +34,7 @@ public:
   SystemManagerNode()
   : Node("system_manager_node")
   {
-    publish_period_ms_ = declare_parameter<int>("ui_publish_period_ms", 200);
+    publish_period_ms_ = declare_parameter<int>("ui_publish_period_ms", 100);
     heartbeat_timeout_s_ = declare_parameter<double>("heartbeat_timeout_s", 1.0);
     traj_queue_limit_ = declare_parameter<int>("traj_queue_limit", 5000);
     event_queue_limit_ = declare_parameter<int>("event_queue_limit", 2000);

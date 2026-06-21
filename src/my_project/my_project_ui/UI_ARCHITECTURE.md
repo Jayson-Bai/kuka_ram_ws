@@ -250,7 +250,7 @@ flowchart LR
 | `/rsi/triggered_event` | `PlannedEvent` | 已触发的事件 |
 
 **聚合逻辑**:
-- 每 **200ms** (`ui_publish_period_ms` 参数) 发布一次 `UiStatus`
+- 每 **100ms** (`ui_publish_period_ms` 参数) 发布一次 `UiStatus`
 - 系统状态基于心跳超时判定：`WAIT_HEARTBEAT` → `RUNNING` → `HEARTBEAT_LOST`
 - 轨迹队列基于心跳 `seq_used` 自动对齐清理
 - 事件队列基于触发序号自动推进

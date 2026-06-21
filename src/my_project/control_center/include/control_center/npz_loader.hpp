@@ -27,6 +27,8 @@ struct NpzRow
   uint8_t event_type{};
   std::string payload;
   int32_t trigger_seq{};
+  uint32_t layer_index{};
+  uint32_t total_layers{};
 };
 
 struct NpzChunk
@@ -46,6 +48,8 @@ struct NpzChunk
   std::vector<uint8_t> event_type;
   std::vector<std::string> payload;
   std::vector<int32_t> trigger_seq;
+  std::vector<uint32_t> layer_index;
+  std::vector<uint32_t> total_layers;
   size_t size{0};
 };
 

@@ -8,3 +8,5 @@ float64 c
 float64 e
 int32 tool_id
 uint32 seq
+uint32 layer_index
+uint32 total_layers

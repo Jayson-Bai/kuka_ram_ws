@@ -82,6 +82,49 @@ def test_extrude_wait_exports_stationary_e_change(tmp_path):
     assert np.isclose(data["e"][-1], 1.0)
 
 
+def test_npz_export_includes_layer_progress_metadata(tmp_path):
+    out = tmp_path / "layer_progress.npz"
+    parsed = [
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="TRAVEL",
+            raw="G1 X1 F600",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(2.0, 0.0, 0.2, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=2,
+            layer=2,
+            subtype="Perimeter",
+            raw="G1 X2 Z0.2 E1 F600",
+            is_pure_state_change=False,
+        ),
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    assert "layer_index" in data.files
+    assert "total_layers" in data.files
+    assert data["layer_index"][0] == 0
+    assert data["layer_index"][-1] == 2
+    assert data["total_layers"][0] == 3
+    assert data["total_layers"][-1] == 3
+
 def _decoded_src_lines(data):
     return [item.decode("utf-8").rstrip("\x00") for item in data["src_line"]]
 

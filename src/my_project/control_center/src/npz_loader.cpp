@@ -114,6 +114,8 @@ bool NpzLoader::next_row(NpzRow & out)
   out.event_type = c.event_type[i];
   out.payload = c.payload[i];
   out.trigger_seq = c.trigger_seq[i];
+  out.layer_index = c.layer_index[i];
+  out.total_layers = c.total_layers[i];
 
   if (chunk_row_idx_ >= c.size) {
     cache_.pop_front();
@@ -333,6 +335,16 @@ NpzChunk NpzLoader::load_chunk(const std::string & file)
   c.payload = decode_fixed_strings(npz.at("payload"));
   c.trigger_seq = to_vec<int32_t>(npz.at("trigger_seq"));
   c.size = c.seq.size();
+  if (npz.count("layer_index")) {
+    c.layer_index = to_vec<uint32_t>(npz.at("layer_index"));
+  } else {
+    c.layer_index.assign(c.size, 0);
+  }
+  if (npz.count("total_layers")) {
+    c.total_layers = to_vec<uint32_t>(npz.at("total_layers"));
+  } else {
+    c.total_layers.assign(c.size, 0);
+  }
 
   return c;
 }
