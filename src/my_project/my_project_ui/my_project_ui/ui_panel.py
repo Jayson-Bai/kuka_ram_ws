@@ -9,6 +9,7 @@ import signal
 import json
 import threading
 import time
+import math
 
 from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus, TrajectoryPoint
 
@@ -19,6 +20,7 @@ from pathlib import Path
 from gcode_planner.head_calibration import (
     DEFAULT_HEAD_CALIBRATION_PATH,
     HeadCalibration,
+    calibration_relative_offsets,
     load_head_calibration,
     save_head_calibration,
 )
@@ -1959,7 +1961,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_speed_input,
             self._test_line_length_input,
             self._test_y_spacing_input,
-            self._test_tool_change_safe_lift_input,
             self._test_fiber_temp_input,
             *range_inputs,
         )
@@ -1973,6 +1974,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_prime_speed_input,
             self._test_retract_length_input,
             self._test_retract_speed_input,
+            self._test_tool_change_safe_lift_input,
             self._test_fiber_prime_length_input,
             self._test_fiber_prime_speed_input,
             self._test_fiber_retract_length_input,
@@ -2957,6 +2959,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_value("Resin Current Temp", f"{ps.current_temp_resin:.1f}", "#2b2b2b")
             self._set_value("Resin Target Temp", f"{ps.target_temp_resin:.1f}", "#2b2b2b")
             self._print_test_resin_temp = (ps.current_temp_resin, ps.target_temp_resin)
+            if (
+                self._print_test_waiting_for_tool is not None
+                and int(ps.current_tool) == int(self._print_test_waiting_for_tool)
+            ):
+                self._print_test_waiting_for_tool = None
+                self._print_test_requested_target_tool = None
+                self._set_print_test_controls_enabled(self._print_test_seen_correction)
+                self._set_print_test_status(
+                    "纤维头已切换完成，可调整纤维偏置。", "#1b6e3c"
+                )
         else:
             self._current_tool_id = 0
             missing_keys = [
@@ -3163,68 +3175,189 @@ class _UiStatusWidget(QtWidgets.QWidget):
         else:
             self._test_status.setStyleSheet("")
 
+    def _float_input(self, widget, label, *, minimum=None, allow_zero=True):
+        raw = widget.text().strip()
+        if not raw:
+            raise ValueError(f"{label}不能为空。")
+        try:
+            value = float(raw)
+        except ValueError as exc:
+            raise ValueError(f"{label}必须是数字。") from exc
+        if not math.isfinite(value):
+            raise ValueError(f"{label}必须是有限数字。")
+        if minimum is not None and value < float(minimum):
+            raise ValueError(f"{label}不能小于 {float(minimum):g}。")
+        if not allow_zero and value == 0.0:
+            raise ValueError(f"{label}必须大于 0。")
+        return value
+
+    def _current_head_calibration_from_inputs(self):
+        return HeadCalibration(
+            resin_z_print_compensation_mm=self._float_input(
+                self._test_resin_z_comp_input, "树脂 Z 补偿"
+            ),
+            fiber_x_print_compensation_mm=self._float_input(
+                self._test_fiber_x_comp_input, "纤维 X 偏置"
+            ),
+            fiber_y_print_compensation_mm=self._float_input(
+                self._test_fiber_y_comp_input, "纤维 Y 偏置"
+            ),
+            fiber_z_print_compensation_mm=self._float_input(
+                self._test_fiber_z_comp_input, "纤维 Z 偏置"
+            ),
+        )
+
+    def _set_head_calibration_inputs(self, calibration):
+        self._test_resin_z_comp_input.setText(
+            f"{calibration.resin_z_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_x_comp_input.setText(
+            f"{calibration.fiber_x_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_y_comp_input.setText(
+            f"{calibration.fiber_y_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_z_comp_input.setText(
+            f"{calibration.fiber_z_print_compensation_mm:.3f}"
+        )
+
+    def _save_current_head_calibration(self):
+        self._head_calibration = self._current_head_calibration_from_inputs()
+        save_head_calibration(
+            self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
+        )
+        return self._head_calibration
+
     def _parse_print_test_params(self):
         from gcode_planner.print_test_generator import (
             TEST_MATRIX_MAX_LINES,
             expand_test_values,
         )
 
-        temp = float(self._test_temp_input.text().strip())
-        speed = float(self._test_speed_input.text().strip())
-        layer_heights = expand_test_values(
+        speed = self._float_input(
+            self._test_speed_input, "速度", minimum=0.0, allow_zero=False
+        )
+        line_length = self._float_input(
+            self._test_line_length_input, "测试线长度", minimum=0.0, allow_zero=False
+        )
+        y_spacing = self._float_input(
+            self._test_y_spacing_input, "Y 间距", minimum=0.0, allow_zero=False
+        )
+        tool_change_safe_lift = self._float_input(
+            self._test_tool_change_safe_lift_input,
+            "换头安全抬升",
+            minimum=0.0,
+            allow_zero=True,
+        )
+
+        resin_temp = self._float_input(
+            self._test_temp_input, "树脂目标温度", minimum=0.0
+        )
+        resin_layer_heights = expand_test_values(
             f"{self._test_layer_height_min_input.text()}-"
             f"{self._test_layer_height_max_input.text()}",
-            label="层高",
+            label="树脂层高",
         )
-        scales = expand_test_values(
+        resin_scales = expand_test_values(
             f"{self._test_scale_min_input.text()}-"
             f"{self._test_scale_max_input.text()}",
-            label="挤出倍率",
+            label="树脂挤出倍率",
         )
-        prime_length = float(self._test_prime_length_input.text().strip())
-        prime_speed = float(self._test_prime_speed_input.text().strip())
-        retract_length = float(self._test_retract_length_input.text().strip())
-        retract_speed = float(self._test_retract_speed_input.text().strip())
-        line_length = float(self._test_line_length_input.text().strip())
-        y_spacing = float(self._test_y_spacing_input.text().strip())
-        tool_change_safe_lift = float(
-            self._test_tool_change_safe_lift_input.text().strip()
+        resin_prime_length = self._float_input(
+            self._test_prime_length_input, "树脂预挤出长度", minimum=0.0
         )
-        line_count = len(layer_heights) * len(scales)
-        if temp < 0.0:
-            raise ValueError("目标温度不能为负。")
-        if speed <= 0.0:
-            raise ValueError("速度必须大于 0。")
-        if line_length <= 0.0:
-            raise ValueError("测试线长度必须大于 0。")
-        if y_spacing <= 0.0:
-            raise ValueError("Y 间距必须大于 0。")
-        if tool_change_safe_lift <= 0.0:
-            raise ValueError("换头安全抬升必须大于 0。")
-        if prime_length < 0.0 or retract_length < 0.0:
-            raise ValueError("预挤出/回抽耗材长度不能为负。")
-        if prime_speed <= 0.0 or retract_speed <= 0.0:
-            raise ValueError("预挤出/回抽速度必须大于 0。")
-        if line_count > TEST_MATRIX_MAX_LINES:
+        resin_prime_speed = self._float_input(
+            self._test_prime_speed_input,
+            "树脂预挤出速度",
+            minimum=0.0,
+            allow_zero=False,
+        )
+        resin_retract_length = self._float_input(
+            self._test_retract_length_input, "树脂回抽长度", minimum=0.0
+        )
+        resin_retract_speed = self._float_input(
+            self._test_retract_speed_input,
+            "树脂回抽速度",
+            minimum=0.0,
+            allow_zero=False,
+        )
+
+        fiber_temp = self._float_input(
+            self._test_fiber_temp_input, "纤维目标温度", minimum=0.0
+        )
+        fiber_layer_heights = expand_test_values(
+            f"{self._test_fiber_layer_height_min_input.text()}-"
+            f"{self._test_fiber_layer_height_max_input.text()}",
+            label="纤维层高",
+        )
+        fiber_scales = expand_test_values(
+            f"{self._test_fiber_scale_min_input.text()}-"
+            f"{self._test_fiber_scale_max_input.text()}",
+            label="纤维挤出倍率",
+        )
+        fiber_prime_length = self._float_input(
+            self._test_fiber_prime_length_input, "纤维预挤出长度", minimum=0.0
+        )
+        fiber_prime_speed = self._float_input(
+            self._test_fiber_prime_speed_input,
+            "纤维预挤出速度",
+            minimum=0.0,
+            allow_zero=False,
+        )
+        fiber_retract_length = self._float_input(
+            self._test_fiber_retract_length_input, "纤维回抽长度", minimum=0.0
+        )
+        fiber_retract_speed = self._float_input(
+            self._test_fiber_retract_speed_input,
+            "纤维回抽速度",
+            minimum=0.0,
+            allow_zero=False,
+        )
+
+        resin_line_count = len(resin_layer_heights) * len(resin_scales)
+        fiber_line_count = len(fiber_layer_heights) * len(fiber_scales)
+        if resin_line_count > TEST_MATRIX_MAX_LINES:
             raise ValueError(
-                f"测试线数量为 {line_count}，超过最大 {TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
+                f"树脂测试线数量为 {resin_line_count}，超过最大 "
+                f"{TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
+            )
+        if fiber_line_count > TEST_MATRIX_MAX_LINES:
+            raise ValueError(
+                f"纤维测试线数量为 {fiber_line_count}，超过最大 "
+                f"{TEST_MATRIX_MAX_LINES} 条，请缩小范围。"
             )
         return {
-            "temp": temp,
-            "layer_heights": layer_heights,
-            "speed": speed,
-            "scales": scales,
-            "line_count": line_count,
-            "prime_length": prime_length,
-            "prime_speed": prime_speed,
-            "retract_length": retract_length,
-            "retract_speed": retract_speed,
-            "line_length": line_length,
-            "y_spacing": y_spacing,
-            "tool_change_safe_lift": tool_change_safe_lift,
+            "global": {
+                "speed": speed,
+                "line_length": line_length,
+                "y_spacing": y_spacing,
+                "tool_change_safe_lift": tool_change_safe_lift,
+            },
+            "resin": {
+                "temp": resin_temp,
+                "layer_heights": resin_layer_heights,
+                "scales": resin_scales,
+                "prime_length": resin_prime_length,
+                "prime_speed": resin_prime_speed,
+                "retract_length": resin_retract_length,
+                "retract_speed": resin_retract_speed,
+                "line_count": resin_line_count,
+            },
+            "fiber": {
+                "temp": fiber_temp,
+                "layer_heights": fiber_layer_heights,
+                "scales": fiber_scales,
+                "prime_length": fiber_prime_length,
+                "prime_speed": fiber_prime_speed,
+                "retract_length": fiber_retract_length,
+                "retract_speed": fiber_retract_speed,
+                "line_count": fiber_line_count,
+            },
         }
 
     def _on_print_test_prepare(self):
+        self._head_calibration = load_head_calibration()
+        self._set_head_calibration_inputs(self._head_calibration)
         try:
             params = self._parse_print_test_params()
         except Exception as exc:
@@ -3248,11 +3381,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._uart_log_summary.setText("测试日志已清空")
         self.scale_submit.emit(1.0)
         self.uart_command_submit.emit("EV 0 fan_resin 1\n")
-        self.uart_command_submit.emit(f"EV 0 heat_resin {params['temp']}\n")
+        self.uart_command_submit.emit(f"EV 0 heat_resin {params['resin']['temp']}\n")
         self.print_test_rsi_command_submit.emit("RESET")
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status(
-            f"已进入测试准备：固定树脂喷头，矩阵 {params['line_count']} 条线，"
+            f"已进入测试准备：固定树脂喷头，矩阵 {params['resin']['line_count']} 条线，"
             "UART 挤出倍率已设为 1.0。请启动/准备 KUKA RSI，"
             "收到修正量后可做 Z 微调。",
             "#1b6e3c",
@@ -3312,6 +3445,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
             if err <= 0.03:
                 self._print_test_busy = False
                 self._print_test_target = None
+                if self._print_test_pending_after_zero == "tool_change_cf":
+                    self._print_test_pending_after_zero = None
+                    self._print_test_waiting_for_tool = 1
+                    self._print_test_requested_target_tool = 1
+                    self._set_print_test_controls_enabled(False)
+                    self.uart_command_submit.emit("EV 0 tool_change_cf 1\n")
+                    self._set_print_test_status(
+                        "已回到 RSI 全 0，正在切换纤维头...", "#1b6e3c"
+                    )
+                    return
                 self._set_print_test_controls_enabled(True)
                 self._set_print_test_status("测试动作已到达目标，RSI 正在保持最后一帧。", "#1b6e3c")
 
@@ -3334,7 +3477,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
             return
-        temp_target = float(self._print_test_params.get("temp", 0.0))
+        temp_target = float(self._print_test_params["resin"].get("temp", 0.0))
         if self._print_test_resin_temp is None:
             self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
             return
@@ -3346,26 +3489,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             )
             return
         start = self._print_test_current_correction
-        line_count = int(self._print_test_params.get("line_count", 1))
-        layer_heights = self._print_test_params.get("layer_heights", [0.0])
-        last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
-        line_length = float(self._print_test_params.get("line_length", 300.0))
-        y_spacing = float(self._print_test_params.get("y_spacing", 10.0))
-        safe_lift = float(
-            self._print_test_params.get(
-                "tool_change_safe_lift", _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM
-            )
-        )
-        final_x = start[0] + line_length if line_count % 2 == 1 else start[0]
-        target = (
-            final_x,
-            start[1] + max(0, line_count - 1) * y_spacing,
-            start[2] + last_layer_height + safe_lift,
-            start[3],
-            start[4],
-            start[5],
-        )
-        self._run_print_test_job("line", start, target_pose=target)
+        target = self._print_test_matrix_target(start, self._print_test_params, "resin")
+        self._run_print_test_job("resin_matrix", start, target_pose=target)
 
     def _on_print_test_confirm_resin_height(self):
         if self._print_test_params is None:
@@ -3374,61 +3499,165 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
             return
+        try:
+            self._save_current_head_calibration()
+        except Exception as exc:
+            self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
+            return
         self._print_test_resin_height_confirmed = True
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status("树脂打印高度已确认。", "#1b6e3c")
 
     def _on_print_test_continue_fiber(self):
-        self._print_test_waiting_for_tool = 1
-        self._print_test_requested_target_tool = 1
-        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        if not self._print_test_resin_height_confirmed:
+            self._set_print_test_status("请先确认树脂打印高度。", "#b42318")
+            return
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
+        reply = _ask_yes_no(
+            self,
+            "切换纤维喷头",
+            "将先规划回 RSI 全 0 correction，到位后再切换到纤维喷头。\n\n"
+            "确认继续？",
+            QtWidgets.QMessageBox.No,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
+        self._print_test_pending_after_zero = "tool_change_cf"
+        self._run_print_test_job(
+            "travel",
+            self._print_test_current_correction,
+            target_pose=_PRINT_TEST_ZERO_CORRECTION,
+        )
 
     def _on_print_test_print_resin(self):
-        self._on_print_test_confirm_height()
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        if not self._print_test_resin_height_confirmed:
+            self._set_print_test_status("请先确认树脂打印高度。", "#b42318")
+            return
+        start = self._print_test_current_correction
+        target = self._print_test_matrix_target(start, self._print_test_params, "resin")
+        self._run_print_test_job("resin_matrix", start, target_pose=target)
 
     def _on_print_test_apply_fiber_offset(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能应用纤维偏置。", "#b42318")
+            return
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
         try:
-            self._head_calibration = HeadCalibration(
-                resin_z_print_compensation_mm=float(
-                    self._test_resin_z_comp_input.text().strip()
-                ),
-                fiber_x_print_compensation_mm=float(
-                    self._test_fiber_x_comp_input.text().strip()
-                ),
-                fiber_y_print_compensation_mm=float(
-                    self._test_fiber_y_comp_input.text().strip()
-                ),
-                fiber_z_print_compensation_mm=float(
-                    self._test_fiber_z_comp_input.text().strip()
-                ),
-            )
-            save_head_calibration(
-                self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
-            )
+            calibration = self._current_head_calibration_from_inputs()
         except Exception as exc:
             self._set_print_test_status(f"纤维偏置无效: {exc}", "#b42318")
             return
-        self._set_print_test_status("纤维偏置已应用。", "#1b6e3c")
+        start = self._print_test_current_correction
+        target = (
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+            start[3],
+            start[4],
+            start[5],
+        )
+        self._run_print_test_job("travel", start, target_pose=target)
 
     def _on_print_test_confirm_fiber_offset(self):
         if self.current_tool_id() != 1:
             self._set_print_test_status("当前未使用纤维头，不能确认纤维偏置。", "#b42318")
+            return
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        try:
+            self._save_current_head_calibration()
+        except Exception as exc:
+            self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
             return
         self._print_test_fiber_confirmed = True
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status("纤维头偏置已确认。", "#1b6e3c")
 
     def _on_print_test_print_fiber(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能打印纤维。", "#b42318")
+            return
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
         if not self._print_test_fiber_confirmed:
             self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
             return
-        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+        start = self._print_test_current_correction
+        target = self._print_test_matrix_target(start, self._print_test_params, "fiber")
+        self._run_print_test_job("fiber_matrix", start, target_pose=target)
 
     def _on_print_test_print_composite(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能复合打印。", "#b42318")
+            return
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
         if not self._print_test_fiber_confirmed:
             self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
             return
-        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+        start = self._print_test_current_correction
+        target = self._print_test_matrix_target(
+            start, self._print_test_params, "fiber", include_resin_to_fiber_delta=True
+        )
+        self._run_print_test_job("composite_matrix", start, target_pose=target)
+
+    def _print_test_matrix_target(
+        self, start, params, head_key, *, include_resin_to_fiber_delta=False
+    ):
+        head_params = params[head_key]
+        global_params = params["global"]
+        line_count = int(head_params["line_count"])
+        layer_heights = head_params["layer_heights"]
+        last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
+        line_length = float(global_params["line_length"])
+        y_spacing = float(global_params["y_spacing"])
+        safe_lift = float(global_params["tool_change_safe_lift"])
+        base = tuple(float(v) for v in start[:6])
+        if include_resin_to_fiber_delta:
+            dx, dy, dz = calibration_relative_offsets(
+                self._head_calibration, from_tool="resin", to_tool="fiber"
+            )
+            base = (base[0] + dx, base[1] + dy, base[2] + dz, base[3], base[4], base[5])
+        final_x = base[0] + line_length if line_count % 2 == 1 else base[0]
+        return (
+            final_x,
+            base[1] + max(0, line_count - 1) * y_spacing,
+            base[2] + last_layer_height + safe_lift,
+            base[3],
+            base[4],
+            base[5],
+        )
 
     def _on_print_test_cut(self):
         if self.current_tool_id() != 1:
@@ -3442,10 +3671,24 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
             return
         params = self._print_test_params or {}
+        global_params = params.get("global", {})
+        speed = float(global_params.get("speed", 10.0))
         self._print_test_busy = True
         self._print_test_target = target_pose
         self._set_print_test_controls_enabled(False)
         self._set_print_test_status("正在生成临时测试 NPZ...", "#b15e00")
+        if job_type in ("resin_matrix", "fiber_matrix", "composite_matrix"):
+            try:
+                self._head_calibration = self._current_head_calibration_from_inputs()
+                save_head_calibration(
+                    self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
+                )
+            except Exception as exc:
+                self._print_test_busy = False
+                self._print_test_target = None
+                self._set_print_test_controls_enabled(True)
+                self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
+                return
 
         def _worker():
             try:
@@ -3453,6 +3696,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 from gcode_planner.npz_exporter import export_npz
                 from gcode_planner.print_test_generator import (
                     format_gcode,
+                    generate_composite_test_matrix_gcode,
+                    generate_head_test_matrix_gcode,
+                    generate_pose_adjust_gcode,
                     generate_test_matrix_gcode,
                     generate_z_adjust_gcode,
                 )
@@ -3464,29 +3710,95 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     lines = generate_z_adjust_gcode(
                         start_pose=start_pose,
                         target_z=target_z,
-                        speed_mm_s=min(float(params.get("speed", 10.0)), 10.0),
+                        speed_mm_s=speed,
                     )
                     stem = "z_adjust"
-                else:
+                elif job_type == "travel":
+                    lines = generate_pose_adjust_gcode(
+                        start_pose=start_pose,
+                        target_pose=target_pose,
+                        speed_mm_s=min(speed, 10.0),
+                    )
+                    stem = "travel"
+                elif job_type == "line":
+                    resin = params["resin"]
                     lines = generate_test_matrix_gcode(
                         start_pose=start_pose,
-                        layer_heights_mm=params["layer_heights"],
-                        extrusion_scales=params["scales"],
-                        speed_mm_s=float(params["speed"]),
-                        line_length_mm=float(params.get("line_length", 300.0)),
-                        y_spacing_mm=float(params.get("y_spacing", 10.0)),
-                        finish_lift_mm=float(
-                            params.get(
-                                "tool_change_safe_lift",
-                                _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
-                            )
-                        ),
-                        prime_length_mm=float(params.get("prime_length", 0.0)),
-                        retract_length_mm=float(params.get("retract_length", 0.0)),
-                        prime_speed_mm_s=float(params.get("prime_speed", 2.0)),
-                        retract_speed_mm_s=float(params.get("retract_speed", 8.0)),
+                        layer_heights_mm=resin["layer_heights"],
+                        extrusion_scales=resin["scales"],
+                        speed_mm_s=speed,
+                        line_length_mm=float(global_params["line_length"]),
+                        y_spacing_mm=float(global_params["y_spacing"]),
+                        finish_lift_mm=float(global_params["tool_change_safe_lift"]),
+                        prime_length_mm=float(resin["prime_length"]),
+                        retract_length_mm=float(resin["retract_length"]),
+                        prime_speed_mm_s=float(resin["prime_speed"]),
+                        retract_speed_mm_s=float(resin["retract_speed"]),
                     )
                     stem = "test_matrix"
+                elif job_type == "resin_matrix":
+                    resin = params["resin"]
+                    lines = generate_head_test_matrix_gcode(
+                        start_pose=start_pose,
+                        tool="resin",
+                        layer_heights_mm=resin["layer_heights"],
+                        extrusion_scales=resin["scales"],
+                        speed_mm_s=speed,
+                        line_length_mm=float(global_params["line_length"]),
+                        y_spacing_mm=float(global_params["y_spacing"]),
+                        finish_lift_mm=float(global_params["tool_change_safe_lift"]),
+                        prime_length_mm=float(resin["prime_length"]),
+                        retract_length_mm=float(resin["retract_length"]),
+                        prime_speed_mm_s=float(resin["prime_speed"]),
+                        retract_speed_mm_s=float(resin["retract_speed"]),
+                    )
+                    stem = "resin_matrix"
+                elif job_type == "fiber_matrix":
+                    fiber = params["fiber"]
+                    lines = generate_head_test_matrix_gcode(
+                        start_pose=start_pose,
+                        tool="fiber",
+                        layer_heights_mm=fiber["layer_heights"],
+                        extrusion_scales=fiber["scales"],
+                        speed_mm_s=speed,
+                        line_length_mm=float(global_params["line_length"]),
+                        y_spacing_mm=float(global_params["y_spacing"]),
+                        finish_lift_mm=float(global_params["tool_change_safe_lift"]),
+                        prime_length_mm=float(fiber["prime_length"]),
+                        retract_length_mm=float(fiber["retract_length"]),
+                        prime_speed_mm_s=float(fiber["prime_speed"]),
+                        retract_speed_mm_s=float(fiber["retract_speed"]),
+                    )
+                    stem = "fiber_matrix"
+                elif job_type == "composite_matrix":
+                    resin = params["resin"]
+                    fiber = params["fiber"]
+                    lines = generate_composite_test_matrix_gcode(
+                        start_pose=start_pose,
+                        resin_layer_heights_mm=resin["layer_heights"],
+                        resin_extrusion_scales=resin["scales"],
+                        fiber_layer_heights_mm=fiber["layer_heights"],
+                        fiber_extrusion_scales=fiber["scales"],
+                        speed_mm_s=speed,
+                        line_length_mm=float(global_params["line_length"]),
+                        y_spacing_mm=float(global_params["y_spacing"]),
+                        finish_lift_mm=float(global_params["tool_change_safe_lift"]),
+                        prime_length_mm=float(resin["prime_length"]),
+                        retract_length_mm=float(resin["retract_length"]),
+                        prime_speed_mm_s=float(resin["prime_speed"]),
+                        retract_speed_mm_s=float(resin["retract_speed"]),
+                        fiber_prime_length_mm=float(fiber["prime_length"]),
+                        fiber_retract_length_mm=float(fiber["retract_length"]),
+                        fiber_prime_speed_mm_s=float(fiber["prime_speed"]),
+                        fiber_retract_speed_mm_s=float(fiber["retract_speed"]),
+                        calibration=self._head_calibration,
+                        tool_change_safe_lift_mm=float(
+                            global_params["tool_change_safe_lift"]
+                        ),
+                    )
+                    stem = "composite_matrix"
+                else:
+                    raise ValueError(f"未知测试动作类型: {job_type}")
                 gcode_path = os.path.join(job_dir, f"{stem}.gcode")
                 npz_path = os.path.join(job_dir, f"{stem}.npz")
                 with open(gcode_path, "w", encoding="utf-8") as f:
@@ -3497,7 +3809,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     npz_path,
                     dt=0.004,
                     chunk_size=5000000,
-                    default_feed_mm_s=float(params.get("speed", 10.0)),
+                    default_feed_mm_s=speed,
                     tool_offset=(0.0, 0.0, 0.0),
                     enable_extrude_wait=True,
                 )
@@ -3508,6 +3820,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             except Exception as exc:
                 self._print_test_busy = False
                 self._print_test_target = None
+                self._print_test_pending_after_zero = None
                 self.print_test_controls_enabled.emit(True)
                 self.print_test_status.emit(f"测试动作生成失败: {exc}", "#b42318")
 
