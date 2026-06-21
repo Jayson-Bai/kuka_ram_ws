@@ -48,3 +48,16 @@ def test_npz_selection_validates_saved_resin_z_print_compensation():
     assert "resin_z_print_compensation_mm" in src
     assert "NPZ 中的树脂轴 Z 打印补偿与当前界面设置不一致。" in src
     assert "NPZ 保存的树脂轴 Z 打印补偿" in src
+
+def test_print_test_job_generation_supports_resin_fiber_and_composite_modes():
+    src = UI_PANEL.read_text(encoding="utf-8")
+    block = src.split("    def _run_print_test_job", 1)[1].split(
+        "    # ---- Offset persistence ----", 1
+    )[0]
+
+    assert 'job_type == "resin_matrix"' in block
+    assert 'job_type == "fiber_matrix"' in block
+    assert 'job_type == "composite_matrix"' in block
+    assert "generate_head_test_matrix_gcode" in block
+    assert "generate_composite_test_matrix_gcode" in block
+    assert "save_head_calibration" in block

@@ -241,3 +241,44 @@ def test_latency_nozzle_lever_defaults_from_kuka_tool_data():
         1)[0]
     assert 'default_value="401.68"' in lever_section
     assert 'TCP 姿态误差等效臂长' in lever_section
+
+def test_test_mode_exposes_fiber_calibration_and_print_actions():
+    src = _source()
+    test_section = src.split("# ======== Print Test 区域 ========", 1)[1].split(
+        "# ======== Launch Control 区域 ========", 1
+    )[0]
+
+    for text in (
+        "确认树脂打印高度",
+        "继续调整纤维头",
+        "开始测试树脂打印",
+        "应用纤维偏置",
+        "确认纤维头偏置",
+        "直接打印纤维",
+        "复合打印",
+        "剪切",
+    ):
+        assert text in test_section
+
+    for attr in (
+        "_test_resin_z_comp_input",
+        "_test_fiber_x_comp_input",
+        "_test_fiber_y_comp_input",
+        "_test_fiber_z_comp_input",
+        "_test_fiber_temp_input",
+        "_test_line_length_input",
+        "_test_y_spacing_input",
+        "_test_tool_change_safe_lift_input",
+    ):
+        assert attr in test_section
+
+
+def test_scissor_button_checks_fiber_tool_before_uart_command():
+    src = _source()
+    block = src.split("    def _on_print_test_cut", 1)[1].split(
+        "    def _on_print_test_prepare", 1
+    )[0]
+
+    assert "current_tool_id() != 1" in block
+    assert "EV 0 cut_cf\\n" in block
+    assert "self.uart_command_submit.emit" in block
