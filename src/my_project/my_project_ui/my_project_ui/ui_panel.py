@@ -16,10 +16,19 @@ from std_msgs.msg import String as StringMsg
 import re
 from pathlib import Path
 
+from gcode_planner.head_calibration import (
+    DEFAULT_HEAD_CALIBRATION_PATH,
+    HeadCalibration,
+    load_head_calibration,
+    save_head_calibration,
+)
+
 
 _DEFAULT_GCODE_INPUT_DIR = "/home/jayson/kuka_ram_ws/data/input_gcode"
 _DEFAULT_NPZ_OUTPUT_DIR = "/home/jayson/kuka_ram_ws/data/output_npz"
 _DEFAULT_NPZ_PATH = os.path.join(_DEFAULT_NPZ_OUTPUT_DIR, "test.npz")
+_TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM = 10.0
+_PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
@@ -808,6 +817,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_target = None
         self._print_test_params = None
         self._print_test_resin_temp = None
+        self._head_calibration = load_head_calibration()
+        self._print_test_resin_height_confirmed = False
+        self._print_test_fiber_confirmed = False
+        self._print_test_waiting_for_tool = None
+        self._print_test_pending_after_zero = None
+        self._print_test_requested_target_tool = None
         self._uart_log_history = []
         self._diagnostic_log_history = []
         self._selected_npz_dir = None
@@ -1902,26 +1917,80 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._test_prime_speed_input = QtWidgets.QLineEdit("2.0")
         self._test_retract_length_input = QtWidgets.QLineEdit("3.0")
         self._test_retract_speed_input = QtWidgets.QLineEdit("8.0")
+        self._test_line_length_input = QtWidgets.QLineEdit("300.0")
+        self._test_y_spacing_input = QtWidgets.QLineEdit("10.0")
+        self._test_tool_change_safe_lift_input = QtWidgets.QLineEdit(
+            f"{_TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM:.1f}"
+        )
+        self._test_resin_z_comp_input = QtWidgets.QLineEdit(
+            f"{self._head_calibration.resin_z_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_temp_input = QtWidgets.QLineEdit("250")
+        self._test_fiber_layer_height_min_input = QtWidgets.QLineEdit("0.5")
+        self._test_fiber_layer_height_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_fiber_scale_min_input = QtWidgets.QLineEdit("0.8")
+        self._test_fiber_scale_max_input = QtWidgets.QLineEdit("1.2")
+        self._test_fiber_prime_length_input = QtWidgets.QLineEdit("5.0")
+        self._test_fiber_prime_speed_input = QtWidgets.QLineEdit("2.0")
+        self._test_fiber_retract_length_input = QtWidgets.QLineEdit("3.0")
+        self._test_fiber_retract_speed_input = QtWidgets.QLineEdit("8.0")
+        self._test_fiber_x_comp_input = QtWidgets.QLineEdit(
+            f"{self._head_calibration.fiber_x_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_y_comp_input = QtWidgets.QLineEdit(
+            f"{self._head_calibration.fiber_y_print_compensation_mm:.3f}"
+        )
+        self._test_fiber_z_comp_input = QtWidgets.QLineEdit(
+            f"{self._head_calibration.fiber_z_print_compensation_mm:.3f}"
+        )
 
         range_inputs = (
             self._test_layer_height_min_input,
             self._test_layer_height_max_input,
             self._test_scale_min_input,
             self._test_scale_max_input,
+            self._test_fiber_layer_height_min_input,
+            self._test_fiber_layer_height_max_input,
+            self._test_fiber_scale_min_input,
+            self._test_fiber_scale_max_input,
         )
-        for inp in (self._test_temp_input, self._test_speed_input, *range_inputs):
+        positive_inputs = (
+            self._test_temp_input,
+            self._test_speed_input,
+            self._test_line_length_input,
+            self._test_y_spacing_input,
+            self._test_tool_change_safe_lift_input,
+            self._test_fiber_temp_input,
+            *range_inputs,
+        )
+        for inp in positive_inputs:
             inp.setMaximumWidth(64)
             validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
-        for inp in (
+        non_negative_inputs = (
             self._test_prime_length_input,
             self._test_prime_speed_input,
             self._test_retract_length_input,
             self._test_retract_speed_input,
-        ):
+            self._test_fiber_prime_length_input,
+            self._test_fiber_prime_speed_input,
+            self._test_fiber_retract_length_input,
+            self._test_fiber_retract_speed_input,
+        )
+        for inp in non_negative_inputs:
             inp.setMaximumWidth(64)
             validator = QtGui.QDoubleValidator(0.0, 1000.0, 3, inp)
+            validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+            inp.setValidator(validator)
+        for inp in (
+            self._test_resin_z_comp_input,
+            self._test_fiber_x_comp_input,
+            self._test_fiber_y_comp_input,
+            self._test_fiber_z_comp_input,
+        ):
+            inp.setMaximumWidth(64)
+            validator = QtGui.QDoubleValidator(-1000.0, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
 
@@ -1953,27 +2022,51 @@ class _UiStatusWidget(QtWidgets.QWidget):
             layout.addStretch(1)
             return widget
 
-        for row, (label, widget) in enumerate((
-            ("目标温度", _value_widget(self._test_temp_input)),
-            ("层高", _range_widget(
+        form_rows = (
+            ("树脂目标温度", _value_widget(self._test_temp_input)),
+            ("树脂层高", _range_widget(
                 self._test_layer_height_min_input,
                 self._test_layer_height_max_input,
                 "mm",
             )),
-            ("速度", _value_widget(self._test_speed_input, "mm/s")),
-            ("挤出倍率", _range_widget(
+            ("树脂速度", _value_widget(self._test_speed_input, "mm/s")),
+            ("树脂挤出倍率", _range_widget(
                 self._test_scale_min_input,
                 self._test_scale_max_input,
             )),
-            ("预挤出耗材长度", _value_widget(self._test_prime_length_input, "mm E")),
-            ("预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
-            ("回抽耗材长度", _value_widget(self._test_retract_length_input, "mm E")),
-            ("回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
-        )):
+            ("树脂预挤出长度", _value_widget(self._test_prime_length_input, "mm E")),
+            ("树脂预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
+            ("树脂回抽长度", _value_widget(self._test_retract_length_input, "mm E")),
+            ("树脂回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
+            ("测试线长度", _value_widget(self._test_line_length_input, "mm")),
+            ("Y 间距", _value_widget(self._test_y_spacing_input, "mm")),
+            ("换头安全抬升", _value_widget(self._test_tool_change_safe_lift_input, "mm")),
+            ("树脂 Z 补偿", _value_widget(self._test_resin_z_comp_input, "mm")),
+            ("纤维目标温度", _value_widget(self._test_fiber_temp_input)),
+            ("纤维层高", _range_widget(
+                self._test_fiber_layer_height_min_input,
+                self._test_fiber_layer_height_max_input,
+                "mm",
+            )),
+            ("纤维挤出倍率", _range_widget(
+                self._test_fiber_scale_min_input,
+                self._test_fiber_scale_max_input,
+            )),
+            ("纤维预挤出长度", _value_widget(self._test_fiber_prime_length_input, "mm E")),
+            ("纤维预挤出速度", _value_widget(self._test_fiber_prime_speed_input, "mm/s E")),
+            ("纤维回抽长度", _value_widget(self._test_fiber_retract_length_input, "mm E")),
+            ("纤维回抽速度", _value_widget(self._test_fiber_retract_speed_input, "mm/s E")),
+            ("纤维 X 偏置", _value_widget(self._test_fiber_x_comp_input, "mm")),
+            ("纤维 Y 偏置", _value_widget(self._test_fiber_y_comp_input, "mm")),
+            ("纤维 Z 偏置", _value_widget(self._test_fiber_z_comp_input, "mm")),
+        )
+        for index, (label, widget) in enumerate(form_rows):
+            row = index // 2
+            col = (index % 2) * 2
             lbl = QtWidgets.QLabel(label)
             lbl.setObjectName("fieldLabel")
-            test_form.addWidget(lbl, row, 0)
-            test_form.addWidget(widget, row, 1)
+            test_form.addWidget(lbl, row, col)
+            test_form.addWidget(widget, row, col + 1)
         print_test_layout.addLayout(test_form)
 
         self._test_correction_label = QtWidgets.QLabel("RSI 修正量: 未收到")
@@ -2004,11 +2097,34 @@ class _UiStatusWidget(QtWidgets.QWidget):
         print_test_layout.addLayout(z_row_up)
         print_test_layout.addLayout(z_row_down)
 
+        action_grid = QtWidgets.QGridLayout()
+        action_grid.setHorizontalSpacing(6)
+        action_grid.setVerticalSpacing(6)
+        self._btn_test_confirm_resin_height = QtWidgets.QPushButton("确认树脂打印高度")
+        self._btn_test_continue_fiber = QtWidgets.QPushButton("继续调整纤维头")
+        self._btn_test_print_resin = QtWidgets.QPushButton("开始测试树脂打印")
+        self._btn_test_apply_fiber_offset = QtWidgets.QPushButton("应用纤维偏置")
+        self._btn_test_confirm_fiber_offset = QtWidgets.QPushButton("确认纤维头偏置")
+        self._btn_test_print_fiber = QtWidgets.QPushButton("直接打印纤维")
+        self._btn_test_print_composite = QtWidgets.QPushButton("复合打印")
+        self._btn_test_cut = QtWidgets.QPushButton("剪切")
         self._btn_test_confirm_height = QtWidgets.QPushButton("确认高度并打印测试线")
-        self._btn_test_confirm_height.setMinimumHeight(30)
-        self._btn_test_confirm_height.setCursor(QtCore.Qt.PointingHandCursor)
-        self._btn_test_confirm_height.setEnabled(False)
-        print_test_layout.addWidget(self._btn_test_confirm_height)
+        self._btn_test_confirm_height.setVisible(False)
+        for index, btn in enumerate((
+            self._btn_test_confirm_resin_height,
+            self._btn_test_continue_fiber,
+            self._btn_test_print_resin,
+            self._btn_test_apply_fiber_offset,
+            self._btn_test_confirm_fiber_offset,
+            self._btn_test_print_fiber,
+            self._btn_test_print_composite,
+            self._btn_test_cut,
+        )):
+            btn.setMinimumHeight(30)
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
+            btn.setEnabled(False)
+            action_grid.addWidget(btn, index // 2, index % 2)
+        print_test_layout.addLayout(action_grid)
 
         self._btn_export_uart_log = QtWidgets.QPushButton("导出诊断日志")
         self._btn_export_uart_log.setMinimumHeight(36)
@@ -2021,6 +2137,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
         self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
+        self._btn_test_confirm_resin_height.clicked.connect(self._on_print_test_confirm_resin_height)
+        self._btn_test_continue_fiber.clicked.connect(self._on_print_test_continue_fiber)
+        self._btn_test_print_resin.clicked.connect(self._on_print_test_print_resin)
+        self._btn_test_apply_fiber_offset.clicked.connect(self._on_print_test_apply_fiber_offset)
+        self._btn_test_confirm_fiber_offset.clicked.connect(self._on_print_test_confirm_fiber_offset)
+        self._btn_test_print_fiber.clicked.connect(self._on_print_test_print_fiber)
+        self._btn_test_print_composite.clicked.connect(self._on_print_test_print_composite)
+        self._btn_test_cut.clicked.connect(self._on_print_test_cut)
         self._btn_export_uart_log.clicked.connect(self._on_export_diagnostic_log)
 
         # ======== Launch Control 区域 ========
@@ -3105,9 +3229,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
 
     def _set_print_test_controls_enabled(self, enabled):
+        base_ready = bool(enabled and not self._print_test_busy)
         for btn in getattr(self, "_test_z_buttons", []):
-            btn.setEnabled(enabled and not self._print_test_busy)
-        self._btn_test_confirm_height.setEnabled(enabled and not self._print_test_busy)
+            btn.setEnabled(base_ready)
+        if hasattr(self, "_btn_test_confirm_height"):
+            self._btn_test_confirm_height.setEnabled(base_ready)
+        if not hasattr(self, "_btn_test_confirm_resin_height"):
+            return
+        self._btn_test_confirm_resin_height.setEnabled(base_ready)
+        self._btn_test_print_resin.setEnabled(
+            base_ready and self._print_test_resin_height_confirmed
+        )
+        self._btn_test_continue_fiber.setEnabled(
+            base_ready and self._print_test_resin_height_confirmed
+        )
+        fiber_ready = base_ready and self.current_tool_id() == 1
+        self._btn_test_apply_fiber_offset.setEnabled(fiber_ready)
+        self._btn_test_confirm_fiber_offset.setEnabled(fiber_ready)
+        self._btn_test_print_fiber.setEnabled(
+            fiber_ready and self._print_test_fiber_confirmed
+        )
+        self._btn_test_print_composite.setEnabled(
+            fiber_ready and self._print_test_fiber_confirmed
+        )
+        self._btn_test_cut.setEnabled(base_ready)
 
     def _on_current_correction(self, msg):
         self._append_diagnostic("rsi", "current_correction", {
@@ -3184,6 +3329,70 @@ class _UiStatusWidget(QtWidgets.QWidget):
             start[5],
         )
         self._run_print_test_job("line", start, target_pose=target)
+
+    def _on_print_test_confirm_resin_height(self):
+        self._print_test_resin_height_confirmed = True
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._set_print_test_status("树脂打印高度已确认。", "#1b6e3c")
+
+    def _on_print_test_continue_fiber(self):
+        self._print_test_waiting_for_tool = 1
+        self._print_test_requested_target_tool = 1
+        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+
+    def _on_print_test_print_resin(self):
+        if not self._print_test_resin_height_confirmed:
+            self._set_print_test_status("请先确认树脂打印高度。", "#b42318")
+            return
+        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+
+    def _on_print_test_apply_fiber_offset(self):
+        try:
+            self._head_calibration = HeadCalibration(
+                resin_z_print_compensation_mm=float(
+                    self._test_resin_z_comp_input.text().strip()
+                ),
+                fiber_x_print_compensation_mm=float(
+                    self._test_fiber_x_comp_input.text().strip()
+                ),
+                fiber_y_print_compensation_mm=float(
+                    self._test_fiber_y_comp_input.text().strip()
+                ),
+                fiber_z_print_compensation_mm=float(
+                    self._test_fiber_z_comp_input.text().strip()
+                ),
+            )
+            save_head_calibration(
+                self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
+            )
+        except Exception as exc:
+            self._set_print_test_status(f"纤维偏置无效: {exc}", "#b42318")
+            return
+        self._set_print_test_status("纤维偏置已应用。", "#1b6e3c")
+
+    def _on_print_test_confirm_fiber_offset(self):
+        self._print_test_fiber_confirmed = True
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._set_print_test_status("纤维头偏置已确认。", "#1b6e3c")
+
+    def _on_print_test_print_fiber(self):
+        if not self._print_test_fiber_confirmed:
+            self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
+            return
+        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+
+    def _on_print_test_print_composite(self):
+        if not self._print_test_fiber_confirmed:
+            self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
+            return
+        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+
+    def _on_print_test_cut(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能剪切。", "#b42318")
+            return
+        self.uart_command_submit.emit("EV 0 cut_cf\n")
+        self._set_print_test_status("已发送剪切命令。", "#1b6e3c")
 
     def _run_print_test_job(self, job_type, start_pose, target_pose, target_z=None):
         if self._print_test_busy:
