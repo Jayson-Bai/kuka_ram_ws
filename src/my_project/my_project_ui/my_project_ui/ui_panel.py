@@ -1683,15 +1683,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(resin_z_desc)
 
         offset_cfg = _load_offset_config()
+        resin_z_default = offset_cfg["resin_z_print_compensation_mm"]
+        fiber_x_default = offset_cfg["tool_offset_x"]
+        fiber_y_default = offset_cfg["tool_offset_y"]
         fiber_z_default = offset_cfg["tool_offset_z"]
         try:
             head_calibration = load_head_calibration()
             self._head_calibration = head_calibration
             if DEFAULT_HEAD_CALIBRATION_PATH.is_file():
+                resin_z_default = float(
+                    head_calibration.resin_z_print_compensation_mm
+                )
+                fiber_x_default = float(
+                    head_calibration.fiber_x_print_compensation_mm
+                )
+                fiber_y_default = float(
+                    head_calibration.fiber_y_print_compensation_mm
+                )
                 fiber_z_default = float(
                     head_calibration.fiber_z_print_compensation_mm
                 )
         except Exception:
+            resin_z_default = offset_cfg["resin_z_print_compensation_mm"]
+            fiber_x_default = offset_cfg["tool_offset_x"]
+            fiber_y_default = offset_cfg["tool_offset_y"]
             fiber_z_default = offset_cfg["tool_offset_z"]
 
         resin_z_row = QtWidgets.QHBoxLayout()
@@ -1708,7 +1723,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
         self._resin_z_print_comp_spin.setDecimals(2)
         self._resin_z_print_comp_spin.setSingleStep(0.1)
-        self._resin_z_print_comp_spin.setValue(offset_cfg["resin_z_print_compensation_mm"])
+        self._resin_z_print_comp_spin.setValue(resin_z_default)
         self._resin_z_print_comp_spin.setMinimumHeight(28)
         self._resin_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
         resin_z_lay.addWidget(resin_z_label)
@@ -1753,8 +1768,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_grid = QtWidgets.QHBoxLayout()
         offset_grid.setSpacing(8)
         self._offset_spins = {}
-        for axis, default_val in [("X", offset_cfg["tool_offset_x"]),
-                                  ("Y", offset_cfg["tool_offset_y"])]:
+        for axis, default_val in [("X", fiber_x_default),
+                                  ("Y", fiber_y_default)]:
             axis_w = QtWidgets.QWidget()
             axis_lay = QtWidgets.QVBoxLayout(axis_w)
             axis_lay.setContentsMargins(0, 0, 0, 0)

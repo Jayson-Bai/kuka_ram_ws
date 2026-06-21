@@ -176,6 +176,26 @@ def test_formal_print_offsets_show_resin_z_fiber_z_and_fiber_xy_only():
     assert '("Z", offset_cfg["tool_offset_z"])' not in export_section
 
 
+def test_formal_print_offsets_load_all_values_from_head_calibration_when_available():
+    src = _source()
+    export_section = src.split("# ======== GCode Export 区域 ========", 1)[1].split(
+        "# ======== Print Test 区域 ========", 1
+    )[0]
+
+    assert "if DEFAULT_HEAD_CALIBRATION_PATH.is_file():" in export_section
+    assert "resin_z_default = float(" in export_section
+    assert "head_calibration.resin_z_print_compensation_mm" in export_section
+    assert "fiber_x_default = float(" in export_section
+    assert "head_calibration.fiber_x_print_compensation_mm" in export_section
+    assert "fiber_y_default = float(" in export_section
+    assert "head_calibration.fiber_y_print_compensation_mm" in export_section
+    assert "fiber_z_default = float(" in export_section
+    assert "head_calibration.fiber_z_print_compensation_mm" in export_section
+    assert "self._resin_z_print_comp_spin.setValue(resin_z_default)" in export_section
+    assert 'for axis, default_val in [("X", fiber_x_default),' in export_section
+    assert '("Y", fiber_y_default)' in export_section
+
+
 def test_split_export_is_not_enabled_by_default_for_formal_print():
     src = _source()
 
