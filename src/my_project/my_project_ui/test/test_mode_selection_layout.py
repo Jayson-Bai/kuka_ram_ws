@@ -242,6 +242,7 @@ def test_latency_nozzle_lever_defaults_from_kuka_tool_data():
     assert 'default_value="401.68"' in lever_section
     assert 'TCP 姿态误差等效臂长' in lever_section
 
+
 def test_test_mode_exposes_fiber_calibration_and_print_actions():
     src = _source()
     test_section = src.split("# ======== Print Test 区域 ========", 1)[1].split(
@@ -272,13 +273,34 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
     ):
         assert attr in test_section
 
+    for connection in (
+        "self._btn_test_confirm_resin_height.clicked.connect("
+        "self._on_print_test_confirm_resin_height)",
+        "self._btn_test_continue_fiber.clicked.connect("
+        "self._on_print_test_continue_fiber)",
+        "self._btn_test_print_resin.clicked.connect(self._on_print_test_print_resin)",
+        "self._btn_test_apply_fiber_offset.clicked.connect("
+        "self._on_print_test_apply_fiber_offset)",
+        "self._btn_test_confirm_fiber_offset.clicked.connect("
+        "self._on_print_test_confirm_fiber_offset)",
+        "self._btn_test_print_fiber.clicked.connect(self._on_print_test_print_fiber)",
+        "self._btn_test_print_composite.clicked.connect("
+        "self._on_print_test_print_composite)",
+        "self._btn_test_cut.clicked.connect(self._on_print_test_cut)",
+    ):
+        assert connection in test_section
+
 
 def test_scissor_button_checks_fiber_tool_before_uart_command():
     src = _source()
+    assert "    def _on_print_test_cut" in src
+
     block = src.split("    def _on_print_test_cut", 1)[1].split(
         "    def _on_print_test_prepare", 1
     )[0]
+    guard = "current_tool_id() != 1"
+    send = 'self.uart_command_submit.emit("EV 0 cut_cf\\n")'
 
-    assert "current_tool_id() != 1" in block
-    assert "EV 0 cut_cf\\n" in block
-    assert "self.uart_command_submit.emit" in block
+    assert guard in block
+    assert send in block
+    assert block.index(guard) < block.index(send)
