@@ -1,7 +1,7 @@
 # my_project_ui 架构文档
 
 > **版本**: v1.0  
-> **最后更新**: 2026-05-25  
+> **最后更新**: 2026-06-21  
 > **用途**: 本文档作为 UI 代码的版本管理指导，每次对 UI 界面进行功能添加或修改时，都应同步更新本文档。
 
 ---
@@ -15,6 +15,7 @@
 - **实时状态监控**: 订阅 `/ui/status` 话题，展示系统运行状态的完整快照
 - **参数在线调节**: 通过 ROS 2 Parameter Service 远程修改 `uart_node` 的 `extrude_scale` 参数
 - **状态可视化**: 对各子系统的健康状态进行颜色编码，便于操作员快速判断
+- **测试与正式打印入口**: 支持测试模式的喷头标定/矩阵打印，以及正式打印的 GCode 到 NPZ 导出与启动前偏移校验
 
 ### 技术栈
 
@@ -276,6 +277,36 @@ sequenceDiagram
     Plugin ->> Widget: set_extrude_scale() 更新显示
 ```
 
+### 5.4 测试模式、标定与正式打印导出约束
+
+测试模式以 `/print_test/rsi_command` 和 `/print_test/load_npz` 作为临时测试动作的下发通道。UI 根据当前 RSI correction、喷头状态和标定输入生成临时 GCode/NPZ，再让测试模式节点加载执行。
+
+**测试矩阵类型**:
+
+| 类型 | 入口 | 说明 |
+|------|------|------|
+| 树脂单独矩阵 | `resin_matrix` | 使用树脂层高、树脂挤出倍率、树脂预挤出/回抽参数生成树脂喷头矩阵 |
+| 纤维单独矩阵 | `fiber_matrix` | 使用纤维层高、纤维挤出倍率、纤维预挤出/回抽参数生成纤维喷头矩阵 |
+| 树脂+纤维复合矩阵 | `composite_matrix` | 先生成树脂矩阵，再根据喷头标定的树脂到纤维相对补偿切到纤维矩阵 |
+
+**喷头标定持久化**:
+
+- 标定值统一保存到 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json`
+- JSON 中保存 `resin.z_print_compensation_mm`，以及 `fiber.x_print_compensation_mm` / `fiber.y_print_compensation_mm` / `fiber.z_print_compensation_mm`
+- 测试矩阵生成前会刷新当前 UI 输入到该标定文件，正式打印偏移输入变化时也同步写入该文件
+
+**测试模式操作约束**:
+
+- 人工进入纤维标定前，必须先规划回 RSI 全 0 correction，确认到位后再发送 `tool_change_cf` 切换纤维头
+- 纤维偏置应用、纤维矩阵、复合矩阵和剪切动作都要求当前工具为 CF/纤维头
+- 剪切按钮仅在当前工具为 CF/纤维头时发送预留 UART 命令 `EV 0 cut_cf`；否则只在 UI 显示拒绝状态，不下发 UART 命令
+
+**正式打印导出约束**:
+
+- 正式打印 UI 显示并保存四类补偿输入：树脂 Z、纤维 Z、纤维 X、纤维 Y
+- 本轮正式打印导出仍沿用既有补偿行为：`export_npz()` 接收 `tool_offset=(纤维 X, 纤维 Y, 纤维 Z)` 和 `resin_z_print_compensation_mm=树脂 Z`
+- 正式打印导出尚未接入测试模式的新复合补偿模型；复合矩阵中的树脂到纤维相对补偿只用于测试模式临时动作
+
 ---
 
 ## 6. UI 布局结构
@@ -514,6 +545,23 @@ QGridLayout (主布局, 2列)
 | `_extrude_scale_apply` | QPushButton | "Apply" 按钮 |
 | `_extrude_scale_status` | QLabel | 操作反馈 (Applied / Error / Submitting...) |
 
+### 7.8 测试模式与正式打印补偿控件
+
+测试模式和正式打印页面包含额外交互控件，这些控件不通过 `self._labels` 字典管理，而是直接保存在实例属性中并通过信号连接后端。
+
+| 控件/状态 | 类型 | 说明 |
+|-----------|------|------|
+| 树脂测试参数输入 | QLineEdit/QDoubleSpinBox | 树脂目标温度、层高范围、挤出倍率范围、预挤出和回抽参数 |
+| 纤维测试参数输入 | QLineEdit/QDoubleSpinBox | 纤维目标温度、层高范围、挤出倍率范围、预挤出和回抽参数 |
+| `确认树脂打印高度` | QPushButton | 保存树脂 Z 标定，允许后续树脂单独矩阵或进入纤维标定流程 |
+| `继续调整纤维头` | QPushButton | 先回 RSI 全 0 correction，再切换到 CF/纤维头 |
+| `应用纤维偏置` / `确认纤维头偏置` | QPushButton | 仅在当前工具为 CF/纤维头时启用，用于移动到纤维 XYZ 补偿并保存 |
+| `开始测试树脂打印` | QPushButton | 生成树脂单独矩阵临时 NPZ |
+| `直接打印纤维` | QPushButton | 生成纤维单独矩阵临时 NPZ |
+| `复合打印` | QPushButton | 生成树脂+纤维复合矩阵临时 NPZ |
+| `剪切` | QPushButton | 仅当前工具为 CF/纤维头时发送 `EV 0 cut_cf` |
+| 正式打印补偿输入 | QDoubleSpinBox | 显示并保存树脂 Z、纤维 Z、纤维 X、纤维 Y |
+
 ---
 
 ## 8. 颜色系统
@@ -647,6 +695,13 @@ def _format_tool(self, tool_id):
 - **无效数据**: 统一显示 `"-"`，颜色为 `#b42318`（红色）
 - 每个子系统通过 `*_valid` 布尔标志控制
 
+### 10.5 喷头补偿与导出约定
+
+- 测试模式使用 `HeadCalibration` 作为树脂/纤维喷头补偿的内存模型，默认从 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json` 加载
+- `calibration_relative_offsets(calibration, from_tool="resin", to_tool="fiber")` 只用于测试模式复合矩阵中树脂矩阵到纤维矩阵的相对位姿衔接
+- 正式打印导出继续走既有 `tool_offset` + `resin_z_print_compensation_mm` 参数路径，不读取测试模式复合矩阵中的相对补偿模型
+- 选择已导出的 NPZ 用于正式打印时，UI 会检查 sidecar 中保存的工具偏移和树脂 Z 打印补偿是否与当前界面一致
+
 ---
 
 ## 11. 修改指南
@@ -665,6 +720,7 @@ def _format_tool(self, tool_id):
 2. 在 `_UiStatusWidget` 类中定义新的 `pyqtSignal`（如需跨层通信）
 3. 在 `MyProjectUiPlugin` 中连接信号并实现 ROS 2 服务/话题交互
 4. **更新本文档**: 在"Extrude Scale 区域"后添加新的交互控件说明
+5. 若控件会改变喷头补偿值，必须同步更新 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json` 的读写说明和正式打印导出约束
 
 ### 11.3 修改布局
 
@@ -684,6 +740,7 @@ def _format_tool(self, tool_id):
 
 | 日期 | 版本 | 变更内容 | 修改人 |
 |------|------|----------|--------|
+| 2026-06-21 | v1.1 | 补充测试模式三类矩阵、喷头标定持久化、纤维标定前回零、剪切门控、正式打印补偿显示和导出补偿边界 | Codex |
 | 2026-05-25 | v1.0 | 初始文档，覆盖完整 UI 架构 | Antigravity AI |
 
 ---
