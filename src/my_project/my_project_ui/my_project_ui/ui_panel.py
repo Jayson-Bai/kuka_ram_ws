@@ -3178,11 +3178,22 @@ class _UiStatusWidget(QtWidgets.QWidget):
         prime_speed = float(self._test_prime_speed_input.text().strip())
         retract_length = float(self._test_retract_length_input.text().strip())
         retract_speed = float(self._test_retract_speed_input.text().strip())
+        line_length = float(self._test_line_length_input.text().strip())
+        y_spacing = float(self._test_y_spacing_input.text().strip())
+        tool_change_safe_lift = float(
+            self._test_tool_change_safe_lift_input.text().strip()
+        )
         line_count = len(layer_heights) * len(scales)
         if temp < 0.0:
             raise ValueError("目标温度不能为负。")
         if speed <= 0.0:
             raise ValueError("速度必须大于 0。")
+        if line_length <= 0.0:
+            raise ValueError("测试线长度必须大于 0。")
+        if y_spacing <= 0.0:
+            raise ValueError("Y 间距必须大于 0。")
+        if tool_change_safe_lift <= 0.0:
+            raise ValueError("换头安全抬升必须大于 0。")
         if prime_length < 0.0 or retract_length < 0.0:
             raise ValueError("预挤出/回抽耗材长度不能为负。")
         if prime_speed <= 0.0 or retract_speed <= 0.0:
@@ -3201,6 +3212,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "prime_speed": prime_speed,
             "retract_length": retract_length,
             "retract_speed": retract_speed,
+            "line_length": line_length,
+            "y_spacing": y_spacing,
+            "tool_change_safe_lift": tool_change_safe_lift,
         }
 
     def _on_print_test_prepare(self):
@@ -3210,6 +3224,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status(f"参数无效: {exc}", "#b42318")
             return
         self._print_test_params = params
+        self._print_test_resin_height_confirmed = False
+        self._print_test_fiber_confirmed = False
+        self._print_test_waiting_for_tool = None
+        self._print_test_pending_after_zero = None
+        self._print_test_requested_target_tool = None
         self._uart_log_history.clear()
         self._diagnostic_log_history.clear()
         self._append_diagnostic("ui", "diagnostic_reset", {"reason": "print_test_prepare"})
@@ -3319,11 +3338,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
         line_count = int(self._print_test_params.get("line_count", 1))
         layer_heights = self._print_test_params.get("layer_heights", [0.0])
         last_layer_height = float(layer_heights[-1]) if layer_heights else 0.0
-        final_x = start[0] + 300.0 if line_count % 2 == 1 else start[0]
+        line_length = float(self._print_test_params.get("line_length", 300.0))
+        y_spacing = float(self._print_test_params.get("y_spacing", 10.0))
+        safe_lift = float(
+            self._print_test_params.get(
+                "tool_change_safe_lift", _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM
+            )
+        )
+        final_x = start[0] + line_length if line_count % 2 == 1 else start[0]
         target = (
             final_x,
-            start[1] + max(0, line_count - 1) * 10.0,
-            start[2] + last_layer_height + 10.0,
+            start[1] + max(0, line_count - 1) * y_spacing,
+            start[2] + last_layer_height + safe_lift,
             start[3],
             start[4],
             start[5],
@@ -3331,6 +3357,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._run_print_test_job("line", start, target_pose=target)
 
     def _on_print_test_confirm_resin_height(self):
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
         self._print_test_resin_height_confirmed = True
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status("树脂打印高度已确认。", "#1b6e3c")
@@ -3341,10 +3373,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_status("功能将在下一步启用。", "#b15e00")
 
     def _on_print_test_print_resin(self):
-        if not self._print_test_resin_height_confirmed:
-            self._set_print_test_status("请先确认树脂打印高度。", "#b42318")
-            return
-        self._set_print_test_status("功能将在下一步启用。", "#b15e00")
+        self._on_print_test_confirm_height()
 
     def _on_print_test_apply_fiber_offset(self):
         try:
@@ -3430,9 +3459,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         layer_heights_mm=params["layer_heights"],
                         extrusion_scales=params["scales"],
                         speed_mm_s=float(params["speed"]),
-                        line_length_mm=300.0,
-                        y_spacing_mm=10.0,
-                        finish_lift_mm=10.0,
+                        line_length_mm=float(params.get("line_length", 300.0)),
+                        y_spacing_mm=float(params.get("y_spacing", 10.0)),
+                        finish_lift_mm=float(
+                            params.get(
+                                "tool_change_safe_lift",
+                                _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
+                            )
+                        ),
                         prime_length_mm=float(params.get("prime_length", 0.0)),
                         retract_length_mm=float(params.get("retract_length", 0.0)),
                         prime_speed_mm_s=float(params.get("prime_speed", 2.0)),
