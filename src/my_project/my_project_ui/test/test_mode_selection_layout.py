@@ -1,3 +1,4 @@
+import ast
 from pathlib import Path
 
 
@@ -296,17 +297,59 @@ def test_scissor_button_checks_fiber_tool_before_uart_command():
     cut_anchor = "    def _on_print_test_cut"
     assert cut_anchor in src
 
-    start = src.index(cut_anchor)
-    next_method = src.find("\n    def ", start + len(cut_anchor))
-    assert next_method != -1
-    block = src[start:next_method]
-    guard = "current_tool_id() != 1"
-    send = 'self.uart_command_submit.emit("EV 0 cut_cf\\n")'
+    tree = ast.parse(src)
+    cut_fns = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_on_print_test_cut"
+    ]
+    assert cut_fns
+    cut_fn = cut_fns[0]
 
-    assert guard in block
-    assert send in block
-    guard_idx = block.index(guard)
-    send_idx = block.index(send)
-    guard_block = block[guard_idx:send_idx]
-    assert "return" in guard_block
-    assert guard_idx < send_idx
+    def is_current_tool_guard(if_node):
+        condition_src = ast.get_source_segment(src, if_node.test) or ast.dump(
+            if_node.test
+        )
+        if "current_tool_id() != 1" in condition_src:
+            return True
+        return (
+            isinstance(if_node.test, ast.Compare)
+            and len(if_node.test.ops) == 1
+            and isinstance(if_node.test.ops[0], ast.NotEq)
+            and isinstance(if_node.test.left, ast.Call)
+            and isinstance(if_node.test.left.func, ast.Attribute)
+            and if_node.test.left.func.attr == "current_tool_id"
+            and len(if_node.test.comparators) == 1
+            and isinstance(if_node.test.comparators[0], ast.Constant)
+            and if_node.test.comparators[0].value == 1
+        )
+
+    guard_ifs = [
+        node
+        for node in ast.walk(cut_fn)
+        if isinstance(node, ast.If) and is_current_tool_guard(node)
+    ]
+    assert guard_ifs
+    guard_if = guard_ifs[0]
+    guarded_returns = [
+        node
+        for stmt in guard_if.body
+        for node in ast.walk(stmt)
+        if isinstance(node, ast.Return)
+    ]
+    assert guarded_returns
+
+    uart_sends = []
+    for node in ast.walk(cut_fn):
+        if not isinstance(node, ast.Call):
+            continue
+        call_src = ast.get_source_segment(src, node) or ""
+        is_cut_emit = (
+            "uart_command_submit.emit" in call_src
+            and "EV 0 cut_cf" in call_src
+        )
+        if is_cut_emit:
+            uart_sends.append(node)
+    assert uart_sends
+    assert guard_if.lineno < uart_sends[0].lineno
+    assert min(node.lineno for node in guarded_returns) < uart_sends[0].lineno
