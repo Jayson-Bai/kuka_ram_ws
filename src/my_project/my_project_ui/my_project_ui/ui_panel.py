@@ -2929,6 +2929,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_value("System State", state_str, state_color)
         self._update_control_buttons(msg.state or "")
 
+        previous_tool_id = self._current_tool_id
         if msg.printhead_status_valid:
             ps = msg.printhead_status
             self._current_tool_id = int(ps.current_tool)
@@ -2971,6 +2972,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
             for key in missing_keys:
                 self._set_value(key, "-", "#b42318")
             self._current_tool_value.setText("-")
+        if (
+            previous_tool_id != self._current_tool_id
+            and self._print_test_params is not None
+            and not self._print_test_busy
+        ):
+            self._set_print_test_controls_enabled(self._print_test_seen_correction)
 
         if msg.kuka_status_valid:
             ks = msg.kuka_status
@@ -3404,6 +3411,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_status("纤维偏置已应用。", "#1b6e3c")
 
     def _on_print_test_confirm_fiber_offset(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能确认纤维偏置。", "#b42318")
+            return
         self._print_test_fiber_confirmed = True
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status("纤维头偏置已确认。", "#1b6e3c")
