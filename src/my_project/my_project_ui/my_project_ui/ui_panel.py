@@ -1683,10 +1683,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(resin_z_desc)
 
         offset_cfg = _load_offset_config()
+        fiber_z_default = offset_cfg["tool_offset_z"]
         try:
             head_calibration = load_head_calibration()
             self._head_calibration = head_calibration
-            fiber_z_default = float(head_calibration.fiber_z_print_compensation_mm)
+            if DEFAULT_HEAD_CALIBRATION_PATH.is_file():
+                fiber_z_default = float(
+                    head_calibration.fiber_z_print_compensation_mm
+                )
         except Exception:
             fiber_z_default = offset_cfg["tool_offset_z"]
 
