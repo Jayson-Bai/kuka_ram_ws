@@ -6,6 +6,7 @@ from gcode_planner.print_test_generator import (
     EXTRUSION_PER_MM3,
     FIBER_GCODE_TOOL,
     FIBER_TOOL_ID,
+    RESIN_GCODE_TOOL,
     RESIN_TOOL_ID,
     expand_test_values,
     generate_composite_test_matrix_gcode,
@@ -242,13 +243,40 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     )
 
     text = "\n".join(lines)
+    parsed = parse_gcode_lines(lines)
+    tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
 
     assert ";TOOL_CHANGE_SAFE_LIFT:10.000000" in text
     assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-5.000000" in text
     assert "T0" in lines
+    assert [cmd.tool for cmd in tools] == [RESIN_GCODE_TOOL, FIBER_GCODE_TOOL]
+    fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
     assert lines.index("T0") > next(
         i for i, line in enumerate(lines) if line.startswith(";TOOL_CHANGE_COMPENSATION")
     )
+
+    moves_after_fiber_tool = [cmd for cmd in moves if cmd.line > fiber_tool_line]
+    first_xy_reposition = next(
+        cmd
+        for cmd in moves_after_fiber_tool
+        if cmd.type == "TRAVEL"
+        and (cmd.start_pos.x != cmd.pos.x or cmd.start_pos.y != cmd.pos.y)
+    )
+    assert first_xy_reposition.start_pos.z == first_xy_reposition.pos.z
+    assert first_xy_reposition.start_pos.z > 0.0
+
+    first_fiber_print = next(cmd for cmd in moves_after_fiber_tool if cmd.type == "PRINT")
+    descent_to_print_z = next(
+        cmd
+        for cmd in moves_after_fiber_tool
+        if cmd.type == "TRAVEL"
+        and cmd.line < first_fiber_print.line
+        and cmd.start_pos.x == cmd.pos.x == first_fiber_print.start_pos.x
+        and cmd.start_pos.y == cmd.pos.y == first_fiber_print.start_pos.y
+        and cmd.start_pos.z > cmd.pos.z
+    )
+    assert descent_to_print_z.pos.z == first_fiber_print.start_pos.z
 
 
 def test_test_matrix_gcode_rejects_more_than_45_lines():

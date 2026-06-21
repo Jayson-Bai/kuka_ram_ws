@@ -463,7 +463,7 @@ def generate_composite_test_matrix_gcode(
     delta_xyz = calibration_relative_offsets(
         active_calibration, from_tool="resin", to_tool="fiber"
     )
-    _append_tool_change_compensation(
+    compensated_safe_pose = _append_tool_change_compensation(
         lines,
         current_pose=resin_final_pose,
         delta_xyz=delta_xyz,
@@ -475,6 +475,16 @@ def generate_composite_test_matrix_gcode(
     fiber_start_pose = (x + dx, y + dy, z + dz, a, b, c)
     lines.append(f"T{FIBER_GCODE_TOOL}")
     lines.append("G92 E0")
+
+    # Composite test GCode bakes in head compensation; export with
+    # tool_offset=(0, 0, 0) to avoid applying the offset twice.
+    _safe_x, _safe_y, safe_z, safe_a, safe_b, safe_c = compensated_safe_pose
+    fiber_x, fiber_y, _fiber_z, _fiber_a, _fiber_b, _fiber_c = fiber_start_pose
+    feed = _feed(speed_mm_s)
+    lines.append(
+        f"G0 X{fiber_x:.6f} Y{fiber_y:.6f} Z{safe_z:.6f} "
+        f"A{safe_a:.6f} B{safe_b:.6f} C{safe_c:.6f} F{feed:.3f}"
+    )
     fiber_lines = generate_test_matrix_gcode(
         start_pose=fiber_start_pose,
         layer_heights_mm=fiber_layer_heights_mm,
