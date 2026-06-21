@@ -3224,6 +3224,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status(f"参数无效: {exc}", "#b42318")
             return
         self._print_test_params = params
+        self._print_test_seen_correction = False
+        self._print_test_current_correction = _PRINT_TEST_ZERO_CORRECTION
+        self._print_test_resin_temp = None
+        self._test_correction_label.setText("RSI 修正量: 未收到")
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
         self._print_test_waiting_for_tool = None
@@ -3271,7 +3275,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_print_composite.setEnabled(
             fiber_ready and self._print_test_fiber_confirmed
         )
-        self._btn_test_cut.setEnabled(base_ready)
+        self._btn_test_cut.setEnabled(fiber_ready)
 
     def _on_current_correction(self, msg):
         self._append_diagnostic("rsi", "current_correction", {
