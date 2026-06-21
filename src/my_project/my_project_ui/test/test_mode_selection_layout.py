@@ -293,14 +293,20 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
 
 def test_scissor_button_checks_fiber_tool_before_uart_command():
     src = _source()
-    assert "    def _on_print_test_cut" in src
+    cut_anchor = "    def _on_print_test_cut"
+    assert cut_anchor in src
 
-    block = src.split("    def _on_print_test_cut", 1)[1].split(
-        "    def _on_print_test_prepare", 1
-    )[0]
+    start = src.index(cut_anchor)
+    next_method = src.find("\n    def ", start + len(cut_anchor))
+    assert next_method != -1
+    block = src[start:next_method]
     guard = "current_tool_id() != 1"
     send = 'self.uart_command_submit.emit("EV 0 cut_cf\\n")'
 
     assert guard in block
     assert send in block
-    assert block.index(guard) < block.index(send)
+    guard_idx = block.index(guard)
+    send_idx = block.index(send)
+    guard_block = block[guard_idx:send_idx]
+    assert "return" in guard_block
+    assert guard_idx < send_idx
