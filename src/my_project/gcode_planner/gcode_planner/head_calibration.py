@@ -70,13 +70,13 @@ def load_head_calibration(
 
 
 def save_head_calibration(
-    path: str | Path,
     calibration: HeadCalibration,
+    path: str | Path = DEFAULT_HEAD_CALIBRATION_PATH,
 ) -> None:
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
-        "updated_at": datetime.now(timezone.utc).astimezone().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "resin": {
             "z_print_compensation_mm": float(
                 calibration.resin_z_print_compensation_mm
