@@ -1688,9 +1688,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_y_default = offset_cfg["tool_offset_y"]
         fiber_z_default = offset_cfg["tool_offset_z"]
         try:
-            head_calibration = load_head_calibration()
-            self._head_calibration = head_calibration
             if DEFAULT_HEAD_CALIBRATION_PATH.is_file():
+                json.loads(
+                    DEFAULT_HEAD_CALIBRATION_PATH.read_text(encoding="utf-8")
+                )
+                head_calibration = load_head_calibration()
+                self._head_calibration = head_calibration
                 resin_z_default = float(
                     head_calibration.resin_z_print_compensation_mm
                 )

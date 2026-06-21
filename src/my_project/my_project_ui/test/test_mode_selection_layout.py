@@ -196,6 +196,23 @@ def test_formal_print_offsets_load_all_values_from_head_calibration_when_availab
     assert '("Y", fiber_y_default)' in export_section
 
 
+def test_formal_print_offsets_fallback_to_legacy_when_head_calibration_unreadable():
+    src = _source()
+    export_section = src.split("# ======== GCode Export 区域 ========", 1)[1].split(
+        "# ======== Print Test 区域 ========", 1
+    )[0]
+
+    assert "json.loads(" in export_section
+    assert 'DEFAULT_HEAD_CALIBRATION_PATH.read_text(encoding="utf-8")' in export_section
+    fallback = export_section.split("except Exception:", 1)[1].split(
+        "resin_z_row = QtWidgets.QHBoxLayout()", 1
+    )[0]
+    assert 'resin_z_default = offset_cfg["resin_z_print_compensation_mm"]' in fallback
+    assert 'fiber_x_default = offset_cfg["tool_offset_x"]' in fallback
+    assert 'fiber_y_default = offset_cfg["tool_offset_y"]' in fallback
+    assert 'fiber_z_default = offset_cfg["tool_offset_z"]' in fallback
+
+
 def test_split_export_is_not_enabled_by_default_for_formal_print():
     src = _source()
 
