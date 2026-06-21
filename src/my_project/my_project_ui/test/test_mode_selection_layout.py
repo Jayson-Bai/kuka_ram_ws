@@ -306,28 +306,42 @@ def test_scissor_button_checks_fiber_tool_before_uart_command():
     assert cut_fns
     cut_fn = cut_fns[0]
 
-    def is_current_tool_guard(if_node):
-        condition_src = ast.get_source_segment(src, if_node.test) or ast.dump(
-            if_node.test
+    def has_current_tool_not_fiber_compare(node):
+        if isinstance(node, ast.Compare):
+            return (
+                isinstance(node.left, ast.Call)
+                and isinstance(node.left.func, ast.Attribute)
+                and node.left.func.attr == "current_tool_id"
+                and any(
+                    isinstance(op, ast.NotEq)
+                    and isinstance(comparator, ast.Constant)
+                    and comparator.value == 1
+                    for op, comparator in zip(node.ops, node.comparators)
+                )
+            )
+        return any(
+            has_current_tool_not_fiber_compare(child)
+            for child in ast.iter_child_nodes(node)
         )
-        if "current_tool_id() != 1" in condition_src:
-            return True
+
+    def is_cut_uart_emit(node):
         return (
-            isinstance(if_node.test, ast.Compare)
-            and len(if_node.test.ops) == 1
-            and isinstance(if_node.test.ops[0], ast.NotEq)
-            and isinstance(if_node.test.left, ast.Call)
-            and isinstance(if_node.test.left.func, ast.Attribute)
-            and if_node.test.left.func.attr == "current_tool_id"
-            and len(if_node.test.comparators) == 1
-            and isinstance(if_node.test.comparators[0], ast.Constant)
-            and if_node.test.comparators[0].value == 1
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "emit"
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "uart_command_submit"
+            and len(node.args) == 1
+            and not node.keywords
+            and isinstance(node.args[0], ast.Constant)
+            and node.args[0].value == "EV 0 cut_cf\n"
         )
 
     guard_ifs = [
         node
         for node in ast.walk(cut_fn)
-        if isinstance(node, ast.If) and is_current_tool_guard(node)
+        if isinstance(node, ast.If)
+        and has_current_tool_not_fiber_compare(node.test)
     ]
     assert guard_ifs
     guard_if = guard_ifs[0]
@@ -339,17 +353,8 @@ def test_scissor_button_checks_fiber_tool_before_uart_command():
     ]
     assert guarded_returns
 
-    uart_sends = []
-    for node in ast.walk(cut_fn):
-        if not isinstance(node, ast.Call):
-            continue
-        call_src = ast.get_source_segment(src, node) or ""
-        is_cut_emit = (
-            "uart_command_submit.emit" in call_src
-            and "EV 0 cut_cf" in call_src
-        )
-        if is_cut_emit:
-            uart_sends.append(node)
+    uart_sends = [node for node in ast.walk(cut_fn) if is_cut_uart_emit(node)]
     assert uart_sends
-    assert guard_if.lineno < uart_sends[0].lineno
-    assert min(node.lineno for node in guarded_returns) < uart_sends[0].lineno
+    send_call = uart_sends[0]
+    assert send_call.lineno > guard_if.end_lineno
+    assert min(node.lineno for node in guarded_returns) < send_call.lineno
