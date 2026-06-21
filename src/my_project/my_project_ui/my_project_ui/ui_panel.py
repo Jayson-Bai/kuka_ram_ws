@@ -1671,22 +1671,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout = QtWidgets.QVBoxLayout(export_box)
         export_layout.setSpacing(6)
 
-        # Resin Z print compensation
-        resin_z_subtitle = QtWidgets.QLabel("树脂轴 Z 打印补偿")
+        # Resin/Fiber Z print compensation
+        resin_z_subtitle = QtWidgets.QLabel("喷头 Z 打印补偿")
         resin_z_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         export_layout.addWidget(resin_z_subtitle)
 
-        resin_z_desc = QtWidgets.QLabel("正式打印导出时，在轨迹开头插入一段 Z 方向空走补偿；负值表示开始前先向下运动。")
+        resin_z_desc = QtWidgets.QLabel("正式打印导出时，在轨迹开头插入 Z 方向空走补偿；负值表示开始前先向下运动。")
         resin_z_desc.setObjectName("fieldLabel")
         resin_z_desc.setWordWrap(True)
         export_layout.addWidget(resin_z_desc)
 
         offset_cfg = _load_offset_config()
+        try:
+            head_calibration = load_head_calibration()
+            self._head_calibration = head_calibration
+            fiber_z_default = float(head_calibration.fiber_z_print_compensation_mm)
+        except Exception:
+            fiber_z_default = offset_cfg["tool_offset_z"]
+
         resin_z_row = QtWidgets.QHBoxLayout()
-        resin_z_row.setSpacing(4)
-        resin_z_label = QtWidgets.QLabel("补偿 (mm)")
+        resin_z_row.setSpacing(8)
+
+        resin_z_w = QtWidgets.QWidget()
+        resin_z_lay = QtWidgets.QVBoxLayout(resin_z_w)
+        resin_z_lay.setContentsMargins(0, 0, 0, 0)
+        resin_z_lay.setSpacing(2)
+        resin_z_label = QtWidgets.QLabel("树脂 Z")
         resin_z_label.setObjectName("fieldLabel")
+        resin_z_label.setAlignment(QtCore.Qt.AlignCenter)
         self._resin_z_print_comp_spin = _NoWheelDoubleSpinBox()
         self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
         self._resin_z_print_comp_spin.setDecimals(2)
@@ -1694,13 +1707,32 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._resin_z_print_comp_spin.setValue(offset_cfg["resin_z_print_compensation_mm"])
         self._resin_z_print_comp_spin.setMinimumHeight(28)
         self._resin_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
-        resin_z_row.addWidget(resin_z_label)
-        resin_z_row.addWidget(self._resin_z_print_comp_spin)
+        resin_z_lay.addWidget(resin_z_label)
+        resin_z_lay.addWidget(self._resin_z_print_comp_spin)
+        resin_z_row.addWidget(resin_z_w)
+
+        fiber_z_w = QtWidgets.QWidget()
+        fiber_z_lay = QtWidgets.QVBoxLayout(fiber_z_w)
+        fiber_z_lay.setContentsMargins(0, 0, 0, 0)
+        fiber_z_lay.setSpacing(2)
+        fiber_z_label = QtWidgets.QLabel("纤维 Z")
+        fiber_z_label.setObjectName("fieldLabel")
+        fiber_z_label.setAlignment(QtCore.Qt.AlignCenter)
+        self._fiber_z_print_comp_spin = _NoWheelDoubleSpinBox()
+        self._fiber_z_print_comp_spin.setRange(-200.0, 200.0)
+        self._fiber_z_print_comp_spin.setDecimals(2)
+        self._fiber_z_print_comp_spin.setSingleStep(0.1)
+        self._fiber_z_print_comp_spin.setValue(fiber_z_default)
+        self._fiber_z_print_comp_spin.setMinimumHeight(28)
+        self._fiber_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
+        fiber_z_lay.addWidget(fiber_z_label)
+        fiber_z_lay.addWidget(self._fiber_z_print_comp_spin)
+        resin_z_row.addWidget(fiber_z_w)
         resin_z_row.addStretch(1)
         export_layout.addLayout(resin_z_row)
 
-        # Subtitle: Tool Offset
-        offset_subtitle = QtWidgets.QLabel("工具偏移")
+        # Subtitle: Fiber XY Offset
+        offset_subtitle = QtWidgets.QLabel("纤维头 XY 偏置")
         offset_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         export_layout.addWidget(offset_subtitle)
@@ -1718,8 +1750,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_grid.setSpacing(8)
         self._offset_spins = {}
         for axis, default_val in [("X", offset_cfg["tool_offset_x"]),
-                                  ("Y", offset_cfg["tool_offset_y"]),
-                                  ("Z", offset_cfg["tool_offset_z"])]:
+                                  ("Y", offset_cfg["tool_offset_y"])]:
             axis_w = QtWidgets.QWidget()
             axis_lay = QtWidgets.QVBoxLayout(axis_w)
             axis_lay.setContentsMargins(0, 0, 0, 0)
@@ -3831,12 +3862,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _on_offset_changed(self, _value=None):
         x = self._offset_spins["X"].value()
         y = self._offset_spins["Y"].value()
-        z = self._offset_spins["Z"].value()
+        fiber_z = self._fiber_z_print_comp_spin.value()
         resin_z = self.current_resin_z_print_compensation()
         try:
-            _save_offset_config(x, y, z, resin_z)
+            _save_offset_config(x, y, fiber_z, resin_z)
+            save_head_calibration(
+                HeadCalibration(
+                    resin_z_print_compensation_mm=resin_z,
+                    fiber_x_print_compensation_mm=x,
+                    fiber_y_print_compensation_mm=y,
+                    fiber_z_print_compensation_mm=fiber_z,
+                ),
+                path=DEFAULT_HEAD_CALIBRATION_PATH,
+            )
             self._offset_status.setText(
-                f"已保存: X={x:.2f}  Y={y:.2f}  Z={z:.2f}  树脂Z补偿={resin_z:.2f}")
+                f"已保存: X={x:.2f}  Y={y:.2f}  纤维Z={fiber_z:.2f}  树脂Z={resin_z:.2f}")
             self._offset_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
             self._offset_status.setText(f"保存失败: {exc}")
@@ -3846,11 +3886,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         return (
             self._offset_spins["X"].value(),
             self._offset_spins["Y"].value(),
-            self._offset_spins["Z"].value(),
+            self._fiber_z_print_comp_spin.value(),
         )
 
     def current_resin_z_print_compensation(self):
         return self._resin_z_print_comp_spin.value()
+
+    def current_fiber_z_print_compensation(self):
+        return self._fiber_z_print_comp_spin.value()
 
     # ---- GCode Export ----
 

@@ -161,6 +161,21 @@ def test_offset_and_resin_z_spinboxes_ignore_mouse_wheel():
     assert "spin = QtWidgets.QDoubleSpinBox()" not in offset_section
 
 
+def test_formal_print_offsets_show_resin_z_fiber_z_and_fiber_xy_only():
+    src = _source()
+    export_section = src.split("# ======== GCode Export 区域 ========", 1)[1].split(
+        "# ======== Print Test 区域 ========", 1
+    )[0]
+
+    assert "喷头 Z 打印补偿" in export_section
+    assert "树脂 Z" in export_section
+    assert "纤维 Z" in export_section
+    assert "纤维头 XY 偏置" in export_section
+    assert "self._fiber_z_print_comp_spin" in export_section
+    assert 'for axis, default_val in [("X",' in export_section
+    assert '("Z", offset_cfg["tool_offset_z"])' not in export_section
+
+
 def test_split_export_is_not_enabled_by_default_for_formal_print():
     src = _source()
 
