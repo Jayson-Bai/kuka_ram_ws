@@ -1,10 +1,16 @@
 import math
 
 from gcode_planner.gcode_parser import parse_gcode_lines
+from gcode_planner.head_calibration import HeadCalibration
 from gcode_planner.print_test_generator import (
     EXTRUSION_PER_MM3,
+    FIBER_GCODE_TOOL,
+    FIBER_TOOL_ID,
     RESIN_TOOL_ID,
     expand_test_values,
+    generate_composite_test_matrix_gcode,
+    generate_head_test_matrix_gcode,
+    generate_pose_adjust_gcode,
     generate_test_matrix_gcode,
     generate_test_line_gcode,
     generate_z_adjust_gcode,
@@ -14,6 +20,23 @@ from gcode_planner.types import ExtrudeWait, MoveCommand, ResetECommand, ToolCha
 
 def _moves(lines):
     return [cmd for cmd in parse_gcode_lines(lines) if isinstance(cmd, MoveCommand)]
+
+
+def test_pose_adjust_gcode_moves_xyzabc_without_extrusion():
+    lines = generate_pose_adjust_gcode(
+        start_pose=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+        target_pose=(7.0, 8.0, 9.0, 4.0, 5.0, 6.0),
+        speed_mm_s=5.0,
+    )
+
+    moves = _moves(lines)
+
+    assert len(moves) == 1
+    assert moves[0].start_pos.x == 1.0
+    assert moves[0].pos.x == 7.0
+    assert moves[0].pos.y == 8.0
+    assert moves[0].pos.z == 9.0
+    assert moves[0].delta_e == 0.0
 
 
 def test_z_adjust_gcode_starts_from_current_rsi_correction_and_uses_resin_tool():
@@ -157,6 +180,75 @@ def test_test_matrix_gcode_generates_full_combinations_with_y_spacing_and_scaled
     assert moves[-1].type == "TRAVEL"
     assert moves[-1].pos.x == 1.0
     assert moves[-1].pos.z == 11.0
+
+
+def test_fiber_matrix_uses_fiber_tool_and_serpentine_geometry():
+    lines = generate_head_test_matrix_gcode(
+        start_pose=(1.0, 2.0, 0.4, 0.0, 0.0, 0.0),
+        tool="fiber",
+        layer_heights_mm=[0.5],
+        extrusion_scales=[0.8, 1.0],
+        speed_mm_s=10.0,
+        line_length_mm=300.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        prime_length_mm=5.0,
+        retract_length_mm=3.0,
+        prime_speed_mm_s=2.0,
+        retract_speed_mm_s=8.0,
+    )
+
+    parsed = parse_gcode_lines(lines)
+    tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    print_moves = [cmd for cmd in _moves(lines) if cmd.type == "PRINT"]
+
+    assert FIBER_TOOL_ID == 1
+    assert FIBER_GCODE_TOOL == 0
+    assert tools[0].tool == FIBER_GCODE_TOOL
+    assert "T0" in lines
+    assert [(cmd.start_pos.x, cmd.start_pos.y) for cmd in print_moves] == [
+        (1.0, 2.0),
+        (301.0, 12.0),
+    ]
+    assert [cmd.pos.x for cmd in print_moves] == [301.0, 1.0]
+
+
+def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0],
+        fiber_layer_heights_mm=[0.6],
+        fiber_extrusion_scales=[1.1],
+        speed_mm_s=10.0,
+        line_length_mm=300.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        prime_length_mm=0.0,
+        retract_length_mm=0.0,
+        prime_speed_mm_s=2.0,
+        retract_speed_mm_s=8.0,
+        fiber_prime_length_mm=0.0,
+        fiber_retract_length_mm=0.0,
+        fiber_prime_speed_mm_s=2.0,
+        fiber_retract_speed_mm_s=8.0,
+        calibration=HeadCalibration(
+            resin_z_print_compensation_mm=-20.0,
+            fiber_x_print_compensation_mm=5.0,
+            fiber_y_print_compensation_mm=4.0,
+            fiber_z_print_compensation_mm=-25.0,
+        ),
+        tool_change_safe_lift_mm=10.0,
+    )
+
+    text = "\n".join(lines)
+
+    assert ";TOOL_CHANGE_SAFE_LIFT:10.000000" in text
+    assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-5.000000" in text
+    assert "T0" in lines
+    assert lines.index("T0") > next(
+        i for i, line in enumerate(lines) if line.startswith(";TOOL_CHANGE_COMPENSATION")
+    )
 
 
 def test_test_matrix_gcode_rejects_more_than_45_lines():

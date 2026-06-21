@@ -3,7 +3,14 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Iterable, Sequence
 
+from gcode_planner.head_calibration import (
+    HeadCalibration,
+    calibration_relative_offsets,
+)
 
+
+FIBER_TOOL_ID = 1
+FIBER_GCODE_TOOL = 0
 RESIN_TOOL_ID = 2
 RESIN_GCODE_TOOL = 1
 DEFAULT_LINE_WIDTH_MM = 2.0
@@ -96,6 +103,23 @@ def generate_z_adjust_gcode(
     lines = _header(start_pose, reset_e=False)
     lines.append(
         f"G1 X{x:.6f} Y{y:.6f} Z{float(target_z):.6f} "
+        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+    )
+    return lines
+
+
+def generate_pose_adjust_gcode(
+    *,
+    start_pose: Sequence[float],
+    target_pose: Sequence[float],
+    speed_mm_s: float,
+) -> list[str]:
+    _pose_values(start_pose)
+    x, y, z, a, b, c = _pose_values(target_pose)
+    feed = _feed(speed_mm_s)
+    lines = _header(start_pose, reset_e=False)
+    lines.append(
+        f"G1 X{x:.6f} Y{y:.6f} Z{z:.6f} "
         f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
     )
     return lines
@@ -279,6 +303,193 @@ def generate_test_matrix_gcode(
             else:
                 previous_lift_z = print_z
             index += 1
+    return lines
+
+
+def _gcode_tool_for_head(tool: str) -> int:
+    normalized = str(tool).strip().lower()
+    if normalized == "fiber":
+        return FIBER_GCODE_TOOL
+    if normalized == "resin":
+        return RESIN_GCODE_TOOL
+    raise ValueError("tool must be 'fiber' or 'resin'")
+
+
+def _insert_tool_selection(lines: Sequence[str], *, gcode_tool: int) -> list[str]:
+    result = list(lines)
+    try:
+        insert_at = result.index("M82") + 1
+    except ValueError:
+        insert_at = 0
+    result.insert(insert_at, f"T{int(gcode_tool)}")
+    return result
+
+
+def generate_head_test_matrix_gcode(
+    *,
+    start_pose: Sequence[float],
+    tool: str,
+    layer_heights_mm: Sequence[float],
+    extrusion_scales: Sequence[float],
+    speed_mm_s: float,
+    line_length_mm: float = 300.0,
+    y_spacing_mm: float = 10.0,
+    finish_lift_mm: float = 10.0,
+    max_lines: int = TEST_MATRIX_MAX_LINES,
+    prime_length_mm: float = 0.0,
+    retract_length_mm: float = 0.0,
+    prime_speed_mm_s: float = 2.0,
+    retract_speed_mm_s: float = 8.0,
+) -> list[str]:
+    lines = generate_test_matrix_gcode(
+        start_pose=start_pose,
+        layer_heights_mm=layer_heights_mm,
+        extrusion_scales=extrusion_scales,
+        speed_mm_s=speed_mm_s,
+        line_length_mm=line_length_mm,
+        y_spacing_mm=y_spacing_mm,
+        finish_lift_mm=finish_lift_mm,
+        max_lines=max_lines,
+        prime_length_mm=prime_length_mm,
+        retract_length_mm=retract_length_mm,
+        prime_speed_mm_s=prime_speed_mm_s,
+        retract_speed_mm_s=retract_speed_mm_s,
+    )
+    return _insert_tool_selection(lines, gcode_tool=_gcode_tool_for_head(tool))
+
+
+def _matrix_final_pose(
+    *,
+    start_pose: Sequence[float],
+    layer_heights_mm: Sequence[float],
+    extrusion_scales: Sequence[float],
+    line_length_mm: float,
+    y_spacing_mm: float,
+    finish_lift_mm: float,
+) -> tuple[float, float, float, float, float, float]:
+    x, y, z, a, b, c = _pose_values(start_pose)
+    layer_heights = _validate_positive_sequence(layer_heights_mm, "层高")
+    scales = _validate_positive_sequence(extrusion_scales, "挤出倍率")
+    line_count = len(layer_heights) * len(scales)
+    final_x = x + float(line_length_mm) if line_count % 2 == 1 else x
+    final_y = y + (line_count - 1) * float(y_spacing_mm)
+    final_z = z + layer_heights[-1] + float(finish_lift_mm)
+    return final_x, final_y, final_z, a, b, c
+
+
+def _append_tool_change_compensation(
+    lines: list[str],
+    *,
+    current_pose: Sequence[float],
+    delta_xyz: Sequence[float],
+    safe_lift_mm: float,
+    speed_mm_s: float,
+) -> tuple[float, float, float, float, float, float]:
+    x, y, z, a, b, c = _pose_values(current_pose)
+    if len(delta_xyz) != 3:
+        raise ValueError("delta_xyz must contain X/Y/Z")
+    dx, dy, dz = (float(v) for v in delta_xyz)
+    safe_lift = float(safe_lift_mm)
+    if safe_lift < 0.0:
+        raise ValueError("safe_lift_mm must be >= 0")
+    feed = _feed(speed_mm_s)
+    lifted_z = z + safe_lift
+    lines.append(f";TOOL_CHANGE_SAFE_LIFT:{safe_lift:.6f}")
+    lines.append(
+        f"G0 X{x:.6f} Y{y:.6f} Z{lifted_z:.6f} "
+        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+    )
+    target_pose = (x + dx, y + dy, lifted_z + dz, a, b, c)
+    tx, ty, tz, ta, tb, tc = target_pose
+    lines.append(f";TOOL_CHANGE_COMPENSATION:{dx:.6f},{dy:.6f},{dz:.6f}")
+    lines.append(
+        f"G0 X{tx:.6f} Y{ty:.6f} Z{tz:.6f} "
+        f"A{ta:.6f} B{tb:.6f} C{tc:.6f} F{feed:.3f}"
+    )
+    return target_pose
+
+
+def _matrix_body_without_header(lines: Sequence[str]) -> list[str]:
+    return list(lines[len(_header((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))) :])
+
+
+def generate_composite_test_matrix_gcode(
+    *,
+    start_pose: Sequence[float],
+    resin_layer_heights_mm: Sequence[float],
+    resin_extrusion_scales: Sequence[float],
+    fiber_layer_heights_mm: Sequence[float],
+    fiber_extrusion_scales: Sequence[float],
+    speed_mm_s: float,
+    line_length_mm: float = 300.0,
+    y_spacing_mm: float = 10.0,
+    finish_lift_mm: float = 10.0,
+    max_lines: int = TEST_MATRIX_MAX_LINES,
+    prime_length_mm: float = 0.0,
+    retract_length_mm: float = 0.0,
+    prime_speed_mm_s: float = 2.0,
+    retract_speed_mm_s: float = 8.0,
+    fiber_prime_length_mm: float = 0.0,
+    fiber_retract_length_mm: float = 0.0,
+    fiber_prime_speed_mm_s: float = 2.0,
+    fiber_retract_speed_mm_s: float = 8.0,
+    calibration: HeadCalibration | None = None,
+    tool_change_safe_lift_mm: float = 10.0,
+) -> list[str]:
+    active_calibration = calibration if calibration is not None else HeadCalibration()
+    lines = generate_head_test_matrix_gcode(
+        start_pose=start_pose,
+        tool="resin",
+        layer_heights_mm=resin_layer_heights_mm,
+        extrusion_scales=resin_extrusion_scales,
+        speed_mm_s=speed_mm_s,
+        line_length_mm=line_length_mm,
+        y_spacing_mm=y_spacing_mm,
+        finish_lift_mm=finish_lift_mm,
+        max_lines=max_lines,
+        prime_length_mm=prime_length_mm,
+        retract_length_mm=retract_length_mm,
+        prime_speed_mm_s=prime_speed_mm_s,
+        retract_speed_mm_s=retract_speed_mm_s,
+    )
+    resin_final_pose = _matrix_final_pose(
+        start_pose=start_pose,
+        layer_heights_mm=resin_layer_heights_mm,
+        extrusion_scales=resin_extrusion_scales,
+        line_length_mm=line_length_mm,
+        y_spacing_mm=y_spacing_mm,
+        finish_lift_mm=finish_lift_mm,
+    )
+    delta_xyz = calibration_relative_offsets(
+        active_calibration, from_tool="resin", to_tool="fiber"
+    )
+    _append_tool_change_compensation(
+        lines,
+        current_pose=resin_final_pose,
+        delta_xyz=delta_xyz,
+        safe_lift_mm=tool_change_safe_lift_mm,
+        speed_mm_s=speed_mm_s,
+    )
+    x, y, z, a, b, c = _pose_values(start_pose)
+    dx, dy, dz = delta_xyz
+    fiber_start_pose = (x + dx, y + dy, z + dz, a, b, c)
+    lines.append(f"T{FIBER_GCODE_TOOL}")
+    lines.append("G92 E0")
+    fiber_lines = generate_test_matrix_gcode(
+        start_pose=fiber_start_pose,
+        layer_heights_mm=fiber_layer_heights_mm,
+        extrusion_scales=fiber_extrusion_scales,
+        speed_mm_s=speed_mm_s,
+        line_length_mm=line_length_mm,
+        y_spacing_mm=y_spacing_mm,
+        finish_lift_mm=finish_lift_mm,
+        max_lines=max_lines,
+        prime_length_mm=fiber_prime_length_mm,
+        retract_length_mm=fiber_retract_length_mm,
+        prime_speed_mm_s=fiber_prime_speed_mm_s,
+        retract_speed_mm_s=fiber_retract_speed_mm_s,
+    )
+    lines.extend(_matrix_body_without_header(fiber_lines))
     return lines
 
 
