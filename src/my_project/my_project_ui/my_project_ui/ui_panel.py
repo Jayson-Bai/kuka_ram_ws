@@ -36,6 +36,17 @@ _PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PRINT_TEST_FIBER_TOOL_ID = 1
 _PRINT_TEST_RESIN_TOOL_ID = 2
 
+
+def _ensure_default_data_dirs():
+    for path in (
+        _DEFAULT_DATA_ROOT / "input_gcode",
+        _DEFAULT_DATA_ROOT / "output_npz",
+        _DEFAULT_DATA_ROOT / "print_test" / "tmp",
+        _DEFAULT_DATA_ROOT / "head_calibration_offsets",
+    ):
+        path.mkdir(parents=True, exist_ok=True)
+
+
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
     ("center_start_delay_s", "1.0", "中心节点启动延迟（秒）", "中心节点"),
@@ -834,6 +845,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._diagnostic_log_history = []
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
+        _ensure_default_data_dirs()
         self._build_ui()
         self.status_received.connect(self._update_ui)
         self.latency_received.connect(self._update_latency)
