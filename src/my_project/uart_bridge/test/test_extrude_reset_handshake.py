@@ -33,8 +33,8 @@ def test_print_test_reset_does_not_fake_event_completion():
     assert 'print_test_cmd_sub_' in src
     assert '"/print_test/rsi_command"' in src
     assert 'on_print_test_command(msg->data)' in src
-    assert 'void on_print_test_command(const std::string &cmd)' in src
-    reset_block = src.split('void on_print_test_command(const std::string &cmd)', 1)[1].split('void on_system_command', 1)[0]
+    assert 'void on_print_test_command(const std::string & cmd)' in src
+    reset_block = src.split('void on_print_test_command(const std::string & cmd)', 1)[1].split('void on_system_command', 1)[0]
     assert 'cmd == "RESET"' in reset_block
     assert 'current_event_ack_received_ = false' in reset_block
     assert 'current_event_done_received_ = false' in reset_block
@@ -44,7 +44,7 @@ def test_print_test_reset_does_not_fake_event_completion():
 def test_triggered_event_writes_ev_before_marking_not_ready():
     src = _source()
 
-    handler = src.split("void on_triggered_event(const PlannedEvent &ev)", 1)[1].split(
+    handler = src.split("void on_triggered_event(const PlannedEvent & ev)", 1)[1].split(
         "void on_heartbeat", 1
     )[0]
     assert 'write_line(oss.str())' in handler
@@ -57,7 +57,7 @@ def test_triggered_event_writes_ev_before_marking_not_ready():
 def test_heartbeat_does_not_forward_e_while_event_is_pending():
     src = _source()
 
-    heartbeat = src.split("void on_heartbeat(const RsiHeartBeat &hb)", 1)[1].split(
+    heartbeat = src.split("void on_heartbeat(const RsiHeartBeat & hb)", 1)[1].split(
         "void read_loop", 1
     )[0]
     assert "has_pending_event()" in heartbeat

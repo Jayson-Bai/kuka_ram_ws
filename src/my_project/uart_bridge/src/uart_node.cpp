@@ -422,16 +422,16 @@ private:
     if (!current_event_) {return;}
     const auto & ev = *current_event_;
     bool done = false;
-    constexpr float TEMP_EPS = 5.0f;
+    constexpr float TEMP_EPS = 20.0f;
     Status snapshot;
     {
       std::lock_guard<std::mutex> sk(status_cache_mutex_);
       snapshot = status_;
     }
     if (ev.event_type == "heat_cf") {
-      done = snapshot.current_temp_cf >= (snapshot.target_temp_cf - TEMP_EPS);
+      done = std::abs(snapshot.current_temp_cf - snapshot.target_temp_cf) <= TEMP_EPS;
     } else if (ev.event_type == "heat_resin") {
-      done = snapshot.current_temp_resin >= (snapshot.target_temp_resin - TEMP_EPS);
+      done = std::abs(snapshot.current_temp_resin - snapshot.target_temp_resin) <= TEMP_EPS;
     } else if (ev.event_type == "tool_change_cf" || ev.event_type == "tool_change_resin") {
       try {
         int target_tool = std::stoi(ev.payload);

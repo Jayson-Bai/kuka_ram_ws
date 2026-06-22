@@ -45,6 +45,7 @@ private:
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_status_sub_;
   rclcpp::Subscription<std_msgs::msg::UInt32>::SharedPtr resync_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_cmd_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_load_sub_;
 
   rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
@@ -186,6 +187,15 @@ public:
       }
     );
 
+    // 测试模式专用：RESET 必须同时清空中心节点和 RSI 节点的旧轨迹。
+    print_test_cmd_sub_ = create_subscription<std_msgs::msg::String>(
+      "/print_test/rsi_command",
+      rclcpp::QoS(10).reliable(),
+      [this](std_msgs::msg::String::SharedPtr msg) {
+        on_print_test_command(msg->data);
+      }
+    );
+
     // 测试模式专用：动态加载临时 NPZ。正常打印不发布该话题，默认行为不变。
     print_test_load_sub_ = create_subscription<std_msgs::msg::String>(
       "/print_test/load_npz",
@@ -200,6 +210,24 @@ public:
   }
 
 private:
+  void on_print_test_command(const std::string & cmd)
+  {
+    if (cmd == "RESET") {
+      {
+        std::lock_guard<std::mutex> lk(queue_mutex_);
+        if (queue_manager_) {
+          queue_manager_->clear();
+        }
+        npz_loader_.reset();
+        queue_manager_.reset();
+        last_published_traj_seq_.reset();
+        last_seq_used_.reset();
+      }
+      paused_.store(false);
+      RCLCPP_INFO(get_logger(), "测试模式RESET：清空中心节点旧NPZ轨迹源");
+    }
+  }
+
   void initial_prefill()
   {
     if (!npz_loader_ || !npz_loader_->ok() || !queue_manager_) {

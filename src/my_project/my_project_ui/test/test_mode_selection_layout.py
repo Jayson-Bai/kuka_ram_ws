@@ -396,11 +396,25 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
 
 
 
-def test_print_test_resin_print_switches_to_resin_tool_before_job():
+def test_print_test_prepare_switches_to_resin_and_starts_both_heat_fans():
+    src = _source()
+    prepare = src.split("    def _on_print_test_prepare", 1)[1].split(
+        "    def _set_print_test_controls_enabled", 1
+    )[0]
+
+    assert 'self.uart_command_submit.emit("EV 0 tool_change_resin 2' in prepare
+    assert 'self.uart_command_submit.emit("EV 0 fan_resin 1' in prepare
+    assert 'self.uart_command_submit.emit("EV 0 fan_cf 1' in prepare
+    assert "self.uart_command_submit.emit(f\"EV 0 heat_resin {params['resin']['temp']}\\n\")" in prepare
+    assert "self.uart_command_submit.emit(f\"EV 0 heat_cf {params['fiber']['temp']}\\n\")" in prepare
+
+
+def test_print_test_resin_print_always_prepares_head_before_job():
     src = _source()
 
     assert '_PRINT_TEST_FIBER_TOOL_ID = 1' in src
     assert '_PRINT_TEST_RESIN_TOOL_ID = 2' in src
+    assert '_PRINT_TEST_TEMP_TOLERANCE_C = 20.0' in src
 
     print_resin = src.split("    def _on_print_test_print_resin", 1)[1].split(
         "    def _start_print_test_resin_matrix", 1
@@ -411,20 +425,28 @@ def test_print_test_resin_print_switches_to_resin_tool_before_job():
     ensure_resin = src.split(
         "    def _ensure_resin_tool_then_start_print_test_resin", 1
     )[1].split("    def _request_print_test_resin_tool", 1)[0]
-    assert "current_tool = self.current_tool_id()" in ensure_resin
-    assert "if current_tool == _PRINT_TEST_RESIN_TOOL_ID:" in ensure_resin
-    assert "self._start_print_test_resin_matrix()" in ensure_resin
     assert "self._request_print_test_resin_tool()" in ensure_resin
+    assert "current_tool = self.current_tool_id()" not in ensure_resin
+    assert "self._start_print_test_resin_matrix()" not in ensure_resin
 
     request_resin = src.split("    def _request_print_test_resin_tool", 1)[1].split(
         "    def _on_print_test_apply_fiber_offset", 1
     )[0]
-    assert 'self.uart_command_submit.emit("EV 0 tool_change_resin 2\\n")' in request_resin
+    assert 'self._print_test_waiting_for_tool = _PRINT_TEST_RESIN_TOOL_ID' in request_resin
     assert 'self._print_test_pending_after_tool_change = "print_resin_matrix"' in request_resin
+    assert 'self._send_print_test_head_prepare("resin")' in request_resin
+
+    helper = src.split("    def _send_print_test_head_prepare", 1)[1].split(
+        "    def _print_test_head_ready", 1
+    )[0]
+    assert 'self.uart_command_submit.emit("EV 0 fan_resin 1' in helper
+    assert "heat_resin" not in helper
+    assert 'self.uart_command_submit.emit("EV 0 tool_change_resin 2' in helper
 
     update_ui = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split(
         "        else:\n            self._current_tool_id = 0", 1
     )[0]
+    assert "self._print_test_head_ready(" in update_ui
     assert 'pending_after_tool_change == "print_resin_matrix"' in update_ui
     assert "self._start_print_test_resin_matrix()" in update_ui
 
@@ -443,7 +465,7 @@ def test_print_test_fiber_actions_switch_to_fiber_tool_from_safe_position_before
         "    def _on_print_test_z", 1
     )[0]
     assert 'self._print_test_pending_after_zero == "tool_change_cf"' in current_correction
-    assert 'self.uart_command_submit.emit("EV 0 tool_change_cf 1\\n")' in current_correction
+    assert 'self._send_print_test_head_prepare("fiber")' in current_correction
     assert "if self._print_test_pending_after_tool_change is None:" in current_correction
     assert 'self._print_test_pending_after_tool_change = "adjust_fiber_offset"' in current_correction
 
@@ -462,11 +484,12 @@ def test_print_test_fiber_actions_switch_to_fiber_tool_from_safe_position_before
     assert "self._run_print_test_job" not in print_composite
 
     ensure_fiber = src.split("    def _ensure_fiber_tool_then_continue", 1)[1].split(
-        "    def _request_print_test_fiber_tool_from_safe_position", 1
+        "    def _request_print_test_fiber_tool", 1
     )[0]
     assert "current_tool = self.current_tool_id()" in ensure_fiber
     assert "if current_tool == _PRINT_TEST_FIBER_TOOL_ID:" in ensure_fiber
-    assert "continuation()" in ensure_fiber
+    assert "self._request_print_test_fiber_tool(pending_after_tool_change)" in ensure_fiber
+    assert "continuation()" not in ensure_fiber
 
     request_fiber = src.split(
         "    def _request_print_test_fiber_tool_from_safe_position", 1
@@ -475,9 +498,17 @@ def test_print_test_fiber_actions_switch_to_fiber_tool_from_safe_position_before
     assert "self._run_print_test_job(" in request_fiber
     assert "target_pose=_PRINT_TEST_ZERO_CORRECTION" in request_fiber
 
+    helper = src.split("    def _send_print_test_head_prepare", 1)[1].split(
+        "    def _print_test_head_ready", 1
+    )[0]
+    assert 'self.uart_command_submit.emit("EV 0 fan_cf 1' in helper
+    assert "heat_cf" not in helper
+    assert 'self.uart_command_submit.emit("EV 0 tool_change_cf 1' in helper
+
     update_ui = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split(
         "        else:\n            self._current_tool_id = 0", 1
     )[0]
+    assert "self._print_test_head_ready(" in update_ui
     assert 'pending_after_tool_change == "print_fiber_matrix"' in update_ui
     assert "self._start_print_test_fiber_matrix()" in update_ui
     assert 'pending_after_tool_change == "print_composite_matrix"' in update_ui

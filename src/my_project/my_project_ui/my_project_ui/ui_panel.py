@@ -33,6 +33,7 @@ _DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")
 _DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")
 _DEFAULT_NPZ_PATH = os.path.join(_DEFAULT_NPZ_OUTPUT_DIR, "test.npz")
 _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM = 10.0
+_PRINT_TEST_TEMP_TOLERANCE_C = 20.0
 _PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PRINT_TEST_FIBER_TOOL_ID = 1
 _PRINT_TEST_RESIN_TOOL_ID = 2
@@ -835,6 +836,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_target = None
         self._print_test_params = None
         self._print_test_resin_temp = None
+        self._print_test_printhead_status = None
         self._head_calibration = load_head_calibration()
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
@@ -3142,6 +3144,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if msg.printhead_status_valid:
             ps = msg.printhead_status
             self._current_tool_id = int(ps.current_tool)
+            self._print_test_printhead_status = ps
             self._current_tool_value.setText(self._format_tool(ps.current_tool))
 
             using_color = "#1b6e3c"
@@ -3170,15 +3173,24 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._print_test_waiting_for_tool is not None
                 and int(ps.current_tool) == int(self._print_test_waiting_for_tool)
             ):
-                # Tool changes are asynchronous; keep the requested follow-up action
-                # separate from the UART wait state so the original print path resumes.
                 pending_after_tool_change = self._print_test_pending_after_tool_change
+                head_key = (
+                    "fiber"
+                    if int(self._print_test_waiting_for_tool) == _PRINT_TEST_FIBER_TOOL_ID
+                    else "resin"
+                )
+                ready, reason = self._print_test_head_ready(head_key, ps)
+                if not ready:
+                    self._set_print_test_status(reason, "#b15e00")
+                    return
+                # Tool changes and head preparation are asynchronous; keep the
+                # requested follow-up action separate so the original print path resumes.
                 self._print_test_waiting_for_tool = None
                 self._print_test_requested_target_tool = None
                 self._print_test_pending_after_tool_change = None
                 if pending_after_tool_change == "print_resin_matrix":
                     self._set_print_test_status(
-                        "树脂头已切换完成，开始树脂测试...", "#1b6e3c"
+                        "树脂头、风扇和温度已就绪，开始树脂测试...", "#1b6e3c"
                     )
                     self._start_print_test_resin_matrix()
                 elif pending_after_tool_change == "adjust_fiber_offset":
@@ -3188,12 +3200,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     )
                 elif pending_after_tool_change == "print_fiber_matrix":
                     self._set_print_test_status(
-                        "纤维头已切换完成，开始纤维测试...", "#1b6e3c"
+                        "纤维头、风扇和温度已就绪，开始纤维测试...", "#1b6e3c"
                     )
                     self._start_print_test_fiber_matrix()
                 elif pending_after_tool_change == "print_composite_matrix":
                     self._set_print_test_status(
-                        "纤维头已切换完成，开始复合打印...", "#1b6e3c"
+                        "纤维头、风扇和温度已就绪，开始复合打印...", "#1b6e3c"
                     )
                     self._start_print_test_composite_matrix()
                 else:
@@ -3201,6 +3213,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     self._set_print_test_status("打印头已切换完成。", "#1b6e3c")
         else:
             self._current_tool_id = 0
+            self._print_test_printhead_status = None
             missing_keys = [
                 "Carbon Fiber State",
                 "Carbon Fiber Fan OK",
@@ -3597,6 +3610,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_seen_correction = False
         self._print_test_current_correction = _PRINT_TEST_ZERO_CORRECTION
         self._print_test_resin_temp = None
+        self._print_test_printhead_status = None
         self._test_correction_label.setText("RSI 修正量: 未收到")
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
@@ -3612,8 +3626,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._uart_log_latest_display = ""
         self._uart_log_summary.setText("测试日志已清空")
         self.scale_submit.emit(1.0)
+        self.uart_command_submit.emit("EV 0 tool_change_resin 2\n")
         self.uart_command_submit.emit("EV 0 fan_resin 1\n")
+        self.uart_command_submit.emit("EV 0 fan_cf 1\n")
         self.uart_command_submit.emit(f"EV 0 heat_resin {params['resin']['temp']}\n")
+        self.uart_command_submit.emit(f"EV 0 heat_cf {params['fiber']['temp']}\n")
         self.print_test_rsi_command_submit.emit("RESET")
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._set_print_test_status(
@@ -3693,9 +3710,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     self._print_test_waiting_for_tool = _PRINT_TEST_FIBER_TOOL_ID
                     self._print_test_requested_target_tool = _PRINT_TEST_FIBER_TOOL_ID
                     self._set_print_test_controls_enabled(False)
-                    self.uart_command_submit.emit("EV 0 tool_change_cf 1\n")
+                    self._send_print_test_head_prepare("fiber")
                     self._set_print_test_status(
-                        "已到达纤维换头安全位置，正在切换纤维头...", "#1b6e3c"
+                        "已到达纤维换头安全位置，正在切换纤维头并确认温度/风扇...", "#1b6e3c"
                     )
                     return
                 self._set_print_test_controls_enabled(True)
@@ -3725,7 +3742,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
             return
         current_temp, _target_temp = self._print_test_resin_temp
-        if current_temp < temp_target - 5.0:
+        if abs(current_temp - temp_target) > _PRINT_TEST_TEMP_TOLERANCE_C:
             self._set_print_test_status(
                 f"树脂温度未到达: 当前 {current_temp:.1f} / 目标 {temp_target:.1f}",
                 "#b42318",
@@ -3793,14 +3810,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._run_print_test_job("resin_matrix", start, target_pose=target)
 
     def _ensure_resin_tool_then_start_print_test_resin(self):
-        # Resin test printing must start with the resin tool active; otherwise wait
-        # for UART to report tool=2 before generating and loading the test NPZ.
+        # Resin printing always re-sends head preparation so stale tool/fan/heat
+        # state cannot start a matrix without a fresh UART confirmation.
         if self._print_test_waiting_for_tool is not None:
             self._set_print_test_status("正在等待打印头切换完成。", "#b15e00")
-            return
-        current_tool = self.current_tool_id()
-        if current_tool == _PRINT_TEST_RESIN_TOOL_ID:
-            self._start_print_test_resin_matrix()
             return
         self._request_print_test_resin_tool()
 
@@ -3809,9 +3822,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_requested_target_tool = _PRINT_TEST_RESIN_TOOL_ID
         self._print_test_pending_after_tool_change = "print_resin_matrix"
         self._set_print_test_controls_enabled(False)
-        self.uart_command_submit.emit("EV 0 tool_change_resin 2\n")
+        self._send_print_test_head_prepare("resin")
         self._set_print_test_status(
-            "当前未使用树脂头，已发送切换树脂头命令，等待 UART 状态确认...",
+            "已发送树脂头切换和风扇命令，等待 UART 工具、风扇和温度状态确认...",
             "#b15e00",
         )
 
@@ -3945,15 +3958,27 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._run_print_test_job("composite_matrix", start, target_pose=target)
 
     def _ensure_fiber_tool_then_continue(self, pending_after_tool_change, continuation):
-        # Fiber actions first travel to the test safe position, then switch to tool=1.
+        # Fiber actions first travel to the test safe position when changing from
+        # another tool; if already on fiber, still re-send head preparation.
         if self._print_test_waiting_for_tool is not None:
             self._set_print_test_status("正在等待打印头切换完成。", "#b15e00")
             return
         current_tool = self.current_tool_id()
         if current_tool == _PRINT_TEST_FIBER_TOOL_ID:
-            continuation()
+            self._request_print_test_fiber_tool(pending_after_tool_change)
             return
         self._request_print_test_fiber_tool_from_safe_position(pending_after_tool_change)
+
+    def _request_print_test_fiber_tool(self, pending_after_tool_change):
+        self._print_test_waiting_for_tool = _PRINT_TEST_FIBER_TOOL_ID
+        self._print_test_requested_target_tool = _PRINT_TEST_FIBER_TOOL_ID
+        self._print_test_pending_after_tool_change = pending_after_tool_change
+        self._set_print_test_controls_enabled(False)
+        self._send_print_test_head_prepare("fiber")
+        self._set_print_test_status(
+            "已发送纤维头切换和风扇命令，等待 UART 工具、风扇和温度状态确认...",
+            "#b15e00",
+        )
 
     def _request_print_test_fiber_tool_from_safe_position(self, pending_after_tool_change):
         self._print_test_pending_after_tool_change = pending_after_tool_change
@@ -3963,6 +3988,43 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._print_test_current_correction,
             target_pose=_PRINT_TEST_ZERO_CORRECTION,
         )
+
+    def _send_print_test_head_prepare(self, head_key):
+        if head_key == "resin":
+            self.uart_command_submit.emit("EV 0 tool_change_resin 2\n")
+            self.uart_command_submit.emit("EV 0 fan_resin 1\n")
+        elif head_key == "fiber":
+            self.uart_command_submit.emit("EV 0 tool_change_cf 1\n")
+            self.uart_command_submit.emit("EV 0 fan_cf 1\n")
+
+    def _print_test_head_ready(self, head_key, ps=None):
+        status = ps if ps is not None else self._print_test_printhead_status
+        if status is None or self._print_test_params is None:
+            return False, "尚未收到打印头状态。"
+        if head_key == "resin":
+            if int(status.current_tool) != _PRINT_TEST_RESIN_TOOL_ID:
+                return False, "等待树脂头切换完成..."
+            if not bool(status.fan_ok_resin):
+                return False, "等待树脂头风扇开启..."
+            current_temp = float(status.current_temp_resin)
+            target_temp = float(self._print_test_params["resin"]["temp"])
+            label = "树脂"
+        elif head_key == "fiber":
+            if int(status.current_tool) != _PRINT_TEST_FIBER_TOOL_ID:
+                return False, "等待纤维头切换完成..."
+            if not bool(status.fan_ok_cf):
+                return False, "等待纤维头风扇开启..."
+            current_temp = float(status.current_temp_cf)
+            target_temp = float(self._print_test_params["fiber"]["temp"])
+            label = "纤维"
+        else:
+            return False, "未知打印头。"
+        if abs(current_temp - target_temp) > _PRINT_TEST_TEMP_TOLERANCE_C:
+            return (
+                False,
+                f"等待{label}头温度到达: 当前 {current_temp:.1f} / 目标 {target_temp:.1f}",
+            )
+        return True, ""
 
     def _print_test_matrix_target(
         self, start, params, head_key, *, include_resin_to_fiber_delta=False
