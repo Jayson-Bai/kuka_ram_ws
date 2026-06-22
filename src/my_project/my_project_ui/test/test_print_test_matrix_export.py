@@ -82,3 +82,16 @@ def test_print_test_job_generation_supports_resin_fiber_and_composite_modes():
     assert 'tool="fiber"' in fiber_branch
     assert "generate_composite_test_matrix_gcode" in composite_branch
     assert "save_head_calibration" in block
+
+
+
+def test_print_test_composite_export_starts_from_fiber_tool():
+    src = _source()
+    worker = src.split(
+        '    def _run_print_test_job', 1)[1].split(
+        '    # ---- Offset persistence ----', 1)[0]
+
+    assert 'initial_tool_id=(' in worker
+    assert '_PRINT_TEST_FIBER_TOOL_ID' in worker
+    assert 'if job_type == "composite_matrix"' in worker
+    assert '_PRINT_TEST_RESIN_TOOL_ID' in worker

@@ -80,6 +80,7 @@ def export_npz(
     enable_extrude_wait: bool = False,
     enable_travel_extrude_overlap: bool = True,
     resin_z_print_compensation_mm: float = 0.0,
+    initial_tool_id: int = 2,
 ) -> dict:
     """
     导出 npz（分片）.
@@ -119,7 +120,7 @@ def export_npz(
     }
 
     last_pose_map = {}
-    current_tool = 2  # 默认工具号（树脂，T1）
+    current_tool = int(initial_tool_id)  # 1=纤维(T0), 2=树脂(T1)
     seq = 0
     planner = GlobalSplinePlanner()
 

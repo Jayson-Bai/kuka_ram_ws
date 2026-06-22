@@ -4208,6 +4208,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     default_feed_mm_s=speed,
                     tool_offset=(0.0, 0.0, 0.0),
                     enable_extrude_wait=True,
+                    initial_tool_id=(
+                        _PRINT_TEST_FIBER_TOOL_ID
+                        if job_type == "composite_matrix"
+                        else _PRINT_TEST_RESIN_TOOL_ID
+                    ),
                 )
                 self.print_test_rsi_command_submit.emit("RESET")
                 time.sleep(0.05)

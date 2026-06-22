@@ -539,6 +539,56 @@ def test_composite_fiber_starts_at_first_resin_line_with_resin_height_added():
     assert math.isclose(fiber_print.pos.z, 0.55)
 
 
+def test_composite_npz_switches_from_initial_fiber_tool_after_safe_lift(tmp_path):
+    calibration = HeadCalibration(
+        resin_z_print_compensation_mm=-20.0,
+        fiber_x_print_compensation_mm=3.0,
+        fiber_y_print_compensation_mm=2.0,
+        fiber_z_print_compensation_mm=4.0,
+    )
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=(3.0, 2.0, -16.0, 0.0, 0.0, 0.0),
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0],
+        fiber_layer_heights_mm=[0.05],
+        fiber_extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=10.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        calibration=calibration,
+        tool_change_safe_lift_mm=10.0,
+    )
+    out = tmp_path / "composite_initial_fiber.npz"
+
+    export_npz(
+        parse_gcode_lines(lines),
+        str(out),
+        dt=0.004,
+        default_feed_mm_s=10.0,
+        enable_extrude_wait=True,
+        initial_tool_id=FIBER_TOOL_ID,
+    )
+
+    data = np.load(out)
+    event_type_vocab = {
+        int(value): key.decode("utf-8").rstrip("\x00")
+        for key, value in zip(
+            data["event_type_vocab_keys"],
+            data["event_type_vocab_vals"],
+        )
+    }
+    event_types = [event_type_vocab[int(v)] for v in data["event_type"]]
+    resin_switch_idx = event_types.index("tool_change_resin")
+    first_resin_print_idx = next(
+        idx for idx, value in enumerate(data["move_type"])
+        if value == 1 and idx > resin_switch_idx
+    )
+
+    assert np.isclose(data["z"][resin_switch_idx], -6.0)
+    assert data["z"][first_resin_print_idx] < data["z"][resin_switch_idx]
+
+
 def test_composite_npz_initial_reset_event_keeps_current_start_pose(tmp_path):
     start_pose = (-0.34, -1.24, -24.45, 0.0, 0.0, 0.0)
     lines = generate_composite_test_matrix_gcode(
