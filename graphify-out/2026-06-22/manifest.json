@@ -40,9 +40,9 @@
     "semantic_hash": "f8472af0149986f9ebc2d92f5c627f20"
   },
   "src/my_project/control_center/src/center_node.cpp": {
-    "mtime": 1781752692.5635428,
-    "ast_hash": "447dccc13aca83978eb1246cd52a136a",
-    "semantic_hash": "447dccc13aca83978eb1246cd52a136a"
+    "mtime": 1782127611.1856258,
+    "ast_hash": "3fa7827588d9ec01f11cce7f3a41b5a5",
+    "semantic_hash": ""
   },
   "src/my_project/control_center/src/extruder_latency_monitor_node.cpp": {
     "mtime": 1781752692.5635428,
@@ -115,13 +115,13 @@
     "semantic_hash": "1d47bf61a285c3f54c1e1af66adaaf39"
   },
   "src/my_project/gcode_planner/gcode_planner/gcode_parser.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "59e2425d6067d9c891f9e713357216bf",
-    "semantic_hash": "59e2425d6067d9c891f9e713357216bf"
+    "mtime": 1782131546.8524387,
+    "ast_hash": "e4f273724978a8ec8cc66d8cbc907d34",
+    "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/npz_exporter.py": {
-    "mtime": 1782113890.598742,
-    "ast_hash": "38585ef91d0f7b692028f50502828495",
+    "mtime": 1782132302.6104274,
+    "ast_hash": "15768914a1312f841a576c710c17a72f",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/polynomial_interpolator.py": {
@@ -130,14 +130,14 @@
     "semantic_hash": "5df3713279d13b9975dda70d64f8b645"
   },
   "src/my_project/gcode_planner/gcode_planner/print_test_generator.py": {
-    "mtime": 1782113977.8998427,
-    "ast_hash": "adf290589bb3651912e402696aaf8d6b",
+    "mtime": 1782135503.7780223,
+    "ast_hash": "bb1114be00aa2397998b36c50a1841e3",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/types.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "f65d31dcb8e5875dea8a06187f0ef9ee",
-    "semantic_hash": "f65d31dcb8e5875dea8a06187f0ef9ee"
+    "mtime": 1782131546.8524387,
+    "ast_hash": "747a0c4d00907e2127b640f9f8f86642",
+    "semantic_hash": ""
   },
   "src/my_project/gcode_planner/setup.py": {
     "mtime": 1781752692.567543,
@@ -155,8 +155,8 @@
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
   "src/my_project/gcode_planner/test/test_extrude_reset_payload.py": {
-    "mtime": 1782113840.9309807,
-    "ast_hash": "e6d9625cc6aa3de9067df736622ca76a",
+    "mtime": 1782114248.2084513,
+    "ast_hash": "70d6c68da5f2ecbf195c9e4290c118de",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_flake8.py": {
@@ -175,8 +175,8 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/gcode_planner/test/test_print_test_generator.py": {
-    "mtime": 1782114008.5726318,
-    "ast_hash": "bfa06f9ef6cbe9e1939e9ff9a69d9dfd",
+    "mtime": 1782135469.1098232,
+    "ast_hash": "f9e8acbb759a50f42e7b28b68e21540c",
     "semantic_hash": ""
   },
   "src/my_project/my_project_startup/launch/startup.launch.py": {
@@ -215,8 +215,8 @@
     "semantic_hash": "aaf04bbf6860ac2c66ea46e2d51312e0"
   },
   "src/my_project/my_project_ui/my_project_ui/ui_panel.py": {
-    "mtime": 1782114073.828644,
-    "ast_hash": "d88bcb12c0234d0be41780207675b791",
+    "mtime": 1782135746.624902,
+    "ast_hash": "af4828cd6cd55ec9c97624d9869b583a",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/setup.py": {
@@ -235,13 +235,13 @@
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
   "src/my_project/my_project_ui/test/test_log_detail_and_alignment.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "a86ac6e6dda5eb7ba8d523c62014916d",
-    "semantic_hash": "a86ac6e6dda5eb7ba8d523c62014916d"
+    "mtime": 1782135746.6329024,
+    "ast_hash": "b55fc25fadf118ed310e363247cdb624",
+    "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_mode_selection_layout.py": {
-    "mtime": 1782114073.828644,
-    "ast_hash": "c7e12350d3584849d4983a2d7fd94ca9",
+    "mtime": 1782135746.624902,
+    "ast_hash": "ddaa3f273d118ac951867504ec1acc80",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_pep257.py": {
@@ -250,14 +250,14 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/my_project_ui/test/test_print_test_matrix_export.py": {
-    "mtime": 1782113050.7637079,
-    "ast_hash": "38fa767e64fef7d634a7822568edc2f7",
+    "mtime": 1782132338.0022113,
+    "ast_hash": "a6a8173c558207658d0ca53d9d8b2384",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_print_test_temperature_threshold.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "61c839105be034191a78ddaabc352b8e",
-    "semantic_hash": "61c839105be034191a78ddaabc352b8e"
+    "mtime": 1782127996.041198,
+    "ast_hash": "c10a7b2e96e2519cb47e594a0c4d6ecc",
+    "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_rqt_context_node_lifecycle.py": {
     "mtime": 1781752692.5715432,
@@ -275,19 +275,19 @@
     "semantic_hash": "871975d020db654bcf405db9b13ba24f"
   },
   "src/my_project/uart_bridge/src/uart_node.cpp": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "cf6706ecfef6f40943300d8ae499c651",
-    "semantic_hash": "cf6706ecfef6f40943300d8ae499c651"
+    "mtime": 1782128280.6861098,
+    "ast_hash": "f23cac4f37429502bb86149e33eef0ea",
+    "semantic_hash": ""
   },
   "src/my_project/uart_bridge/test/test_extrude_reset_handshake.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "3ee00e16453daf4c471397c4a23b68b7",
-    "semantic_hash": "3ee00e16453daf4c471397c4a23b68b7"
+    "mtime": 1782128391.714785,
+    "ast_hash": "957836b6196a8a72c33ec2027bc09c89",
+    "semantic_hash": ""
   },
   "src/my_project/uart_bridge/test/test_temperature_ready_threshold.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "d1a0efa0ec3feeac8ec7a7d73bee269d",
-    "semantic_hash": "d1a0efa0ec3feeac8ec7a7d73bee269d"
+    "mtime": 1782127996.0451982,
+    "ast_hash": "0114168b402d06c7f2e490401c524851",
+    "semantic_hash": ""
   },
   "src/my_project_simulation/launch/simulation.launch.py": {
     "mtime": 1781752692.5755432,
@@ -1550,8 +1550,8 @@
     "semantic_hash": "089e3e2710ba494a66dd4c6220614363"
   },
   "src/my_project/my_project_ui/UI_ARCHITECTURE.md": {
-    "mtime": 1782114125.5949626,
-    "ast_hash": "2f3e0876af8c2874cd1277a940a267f1",
+    "mtime": 1782118764.9226353,
+    "ast_hash": "172ae4853fdfc515b1d6b3b317603477",
     "semantic_hash": ""
   },
   "src/my_project/rsi_server/CMakeLists.txt": {
@@ -2505,13 +2505,13 @@
     "semantic_hash": "ffe28050c4b2ee0a83cf19fabe546d5a"
   },
   "src/my_project/gcode_planner/gcode_planner/head_calibration.py": {
-    "mtime": 1782113332.806305,
-    "ast_hash": "5896956785897237b96e09cdc93d8c3f",
+    "mtime": 1782125701.9079795,
+    "ast_hash": "9e068fc995fc099f73a420f71f68c669",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_head_calibration.py": {
-    "mtime": 1782113332.806305,
-    "ast_hash": "162fe48e65377d061e6846d386d0b241",
+    "mtime": 1782125669.0061588,
+    "ast_hash": "35ffb3e93c58afc2f790b350eff2a0d5",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-06-21-test-mode-fiber-printing.md": {
@@ -2523,5 +2523,15 @@
     "mtime": 1782042934.6973543,
     "ast_hash": "12dcdb52581c9feb44faac1ffe52e226",
     "semantic_hash": "12dcdb52581c9feb44faac1ffe52e226"
+  },
+  "data/head_calibration_offsets/head_offsets.json": {
+    "mtime": 1782131546.8404384,
+    "ast_hash": "7095e9672e1ca068370eea596a18cfcf",
+    "semantic_hash": ""
+  },
+  "src/my_project/control_center/test/test_print_test_reset_queue.py": {
+    "mtime": 1782127566.353529,
+    "ast_hash": "8f71fca8e2f49ea9a384cd2a3cbc81e5",
+    "semantic_hash": ""
   }
 }
