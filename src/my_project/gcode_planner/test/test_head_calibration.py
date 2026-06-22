@@ -1,8 +1,10 @@
 import json
 from datetime import datetime
+from pathlib import Path
 
 from gcode_planner.head_calibration import (
     DEFAULT_HEAD_CALIBRATION,
+    DEFAULT_HEAD_CALIBRATION_PATH,
     HeadCalibration,
     calibration_relative_offsets,
     load_head_calibration,
@@ -21,6 +23,12 @@ def test_load_head_calibration_returns_defaults_when_file_missing(tmp_path):
     assert cal.fiber_z_print_compensation_mm == 0.0
     assert DEFAULT_HEAD_CALIBRATION["resin"]["z_print_compensation_mm"] == 0.0
     assert DEFAULT_HEAD_CALIBRATION["fiber"]["z_offset_mm"] == 0.0
+
+
+def test_default_head_calibration_path_uses_runtime_workspace_data_dir():
+    assert DEFAULT_HEAD_CALIBRATION_PATH == (
+        Path.cwd() / "data" / "head_calibration_offsets" / "head_offsets.json"
+    )
 
 
 def test_load_head_calibration_returns_defaults_for_malformed_json(tmp_path):

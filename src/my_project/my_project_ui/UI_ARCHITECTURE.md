@@ -291,7 +291,7 @@ sequenceDiagram
 
 **喷头标定持久化**:
 
-- 标定值统一保存到 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json`
+- 标定值统一保存到运行时当前工作目录下的 `data/head_calibration_offsets/head_offsets.json`
 - JSON 中保存 `resin.z_print_compensation_mm`，以及 `fiber.x_print_compensation_mm` / `fiber.y_print_compensation_mm` / `fiber.z_print_compensation_mm`
 - 测试矩阵生成前会刷新当前 UI 输入到该标定文件，正式打印偏移输入变化时也同步写入该文件
 
@@ -697,7 +697,7 @@ def _format_tool(self, tool_id):
 
 ### 10.5 喷头补偿与导出约定
 
-- 测试模式使用 `HeadCalibration` 作为树脂/纤维喷头补偿的内存模型，默认从 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json` 加载
+- 测试模式使用 `HeadCalibration` 作为树脂/纤维喷头补偿的内存模型，默认从运行时当前工作目录下的 `data/head_calibration_offsets/head_offsets.json` 加载
 - `calibration_relative_offsets(calibration, from_tool="resin", to_tool="fiber")` 用于测试模式复合矩阵中的工具切换补偿，其中 Z 向为树脂 Z 打印补偿与纤维 Z 偏置之和
 - 正式打印导出继续走既有 `tool_offset` + `resin_z_print_compensation_mm` 参数路径，不读取测试模式复合矩阵中的相对补偿模型
 - 选择已导出的 NPZ 用于正式打印时，UI 会检查 sidecar 中保存的纤维头偏置和树脂 Z 打印补偿是否与当前界面一致
@@ -720,7 +720,7 @@ def _format_tool(self, tool_id):
 2. 在 `_UiStatusWidget` 类中定义新的 `pyqtSignal`（如需跨层通信）
 3. 在 `MyProjectUiPlugin` 中连接信号并实现 ROS 2 服务/话题交互
 4. **更新本文档**: 在"Extrude Scale 区域"后添加新的交互控件说明
-5. 若控件会改变喷头补偿值，必须同步更新 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json` 的读写说明和正式打印导出约束
+5. 若控件会改变喷头补偿值，必须同步更新 `data/head_calibration_offsets/head_offsets.json` 的读写说明和正式打印导出约束
 
 ### 11.3 修改布局
 

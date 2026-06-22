@@ -7,8 +7,10 @@ from pathlib import Path
 from typing import Mapping
 
 
-DEFAULT_HEAD_CALIBRATION_PATH = Path(
-    "/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json"
+# Use the runtime workspace, not a developer home path; this code often runs in containers.
+DEFAULT_DATA_ROOT = Path.cwd() / "data"
+DEFAULT_HEAD_CALIBRATION_PATH = (
+    DEFAULT_DATA_ROOT / "head_calibration_offsets" / "head_offsets.json"
 )
 
 DEFAULT_HEAD_CALIBRATION = {

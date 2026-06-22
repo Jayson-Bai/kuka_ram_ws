@@ -106,14 +106,14 @@ def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
 def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     src = _source()
 
-    assert (
-        '_DEFAULT_GCODE_INPUT_DIR = "/home/jayson/kuka_ram_ws/data/input_gcode"'
-        in src
-    )
-    assert (
-        '_DEFAULT_NPZ_OUTPUT_DIR = "/home/jayson/kuka_ram_ws/data/output_npz"'
-        in src
-    )
+    assert '"/home/jayson/kuka_ram_ws/data' not in src
+    assert '"~/kuka_ram_ws/data' not in src
+    assert 'os.path.expanduser("~/kuka_ram_ws' not in src
+    assert '_DEFAULT_DATA_ROOT = Path.cwd() / "data"' in src
+    assert '_DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")' in src
+    assert '_DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")' in src
+    assert 'base_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp")' in src
+    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")' in src
 
     browse_gcode = src.split("    def _on_browse_gcode", 1)[1].split(
         "    def _on_gcode_path_changed", 1
@@ -388,6 +388,94 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
     ):
         assert connection in test_section
 
+
+
+def test_print_test_resin_print_switches_to_resin_tool_before_job():
+    src = _source()
+
+    assert '_PRINT_TEST_FIBER_TOOL_ID = 1' in src
+    assert '_PRINT_TEST_RESIN_TOOL_ID = 2' in src
+
+    print_resin = src.split("    def _on_print_test_print_resin", 1)[1].split(
+        "    def _start_print_test_resin_matrix", 1
+    )[0]
+    assert "self._ensure_resin_tool_then_start_print_test_resin()" in print_resin
+    assert "self._run_print_test_job" not in print_resin
+
+    ensure_resin = src.split(
+        "    def _ensure_resin_tool_then_start_print_test_resin", 1
+    )[1].split("    def _request_print_test_resin_tool", 1)[0]
+    assert "current_tool = self.current_tool_id()" in ensure_resin
+    assert "if current_tool == _PRINT_TEST_RESIN_TOOL_ID:" in ensure_resin
+    assert "self._start_print_test_resin_matrix()" in ensure_resin
+    assert "self._request_print_test_resin_tool()" in ensure_resin
+
+    request_resin = src.split("    def _request_print_test_resin_tool", 1)[1].split(
+        "    def _on_print_test_apply_fiber_offset", 1
+    )[0]
+    assert 'self.uart_command_submit.emit("EV 0 tool_change_resin 2\\n")' in request_resin
+    assert 'self._print_test_pending_after_tool_change = "print_resin_matrix"' in request_resin
+
+    update_ui = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split(
+        "        else:\n            self._current_tool_id = 0", 1
+    )[0]
+    assert 'pending_after_tool_change == "print_resin_matrix"' in update_ui
+    assert "self._start_print_test_resin_matrix()" in update_ui
+
+
+def test_print_test_fiber_actions_switch_to_fiber_tool_from_safe_position_before_job():
+    src = _source()
+
+    controls = src.split("    def _set_print_test_controls_enabled", 1)[1].split(
+        "    def _on_current_correction", 1
+    )[0]
+    assert "fiber_action_ready = base_ready and self._print_test_fiber_confirmed" in controls
+    assert "self._btn_test_print_fiber.setEnabled(fiber_action_ready)" in controls
+    assert "self._btn_test_print_composite.setEnabled(fiber_action_ready)" in controls
+
+    current_correction = src.split("    def _on_current_correction", 1)[1].split(
+        "    def _on_print_test_z", 1
+    )[0]
+    assert 'self._print_test_pending_after_zero == "tool_change_cf"' in current_correction
+    assert 'self.uart_command_submit.emit("EV 0 tool_change_cf 1\\n")' in current_correction
+    assert "if self._print_test_pending_after_tool_change is None:" in current_correction
+    assert 'self._print_test_pending_after_tool_change = "adjust_fiber_offset"' in current_correction
+
+    print_fiber = src.split("    def _on_print_test_print_fiber", 1)[1].split(
+        "    def _start_print_test_fiber_matrix", 1
+    )[0]
+    assert "self._ensure_fiber_tool_then_continue(" in print_fiber
+    assert '"print_fiber_matrix"' in print_fiber
+    assert "self._run_print_test_job" not in print_fiber
+
+    print_composite = src.split("    def _on_print_test_print_composite", 1)[1].split(
+        "    def _start_print_test_composite_matrix", 1
+    )[0]
+    assert "self._ensure_fiber_tool_then_continue(" in print_composite
+    assert '"print_composite_matrix"' in print_composite
+    assert "self._run_print_test_job" not in print_composite
+
+    ensure_fiber = src.split("    def _ensure_fiber_tool_then_continue", 1)[1].split(
+        "    def _request_print_test_fiber_tool_from_safe_position", 1
+    )[0]
+    assert "current_tool = self.current_tool_id()" in ensure_fiber
+    assert "if current_tool == _PRINT_TEST_FIBER_TOOL_ID:" in ensure_fiber
+    assert "continuation()" in ensure_fiber
+
+    request_fiber = src.split(
+        "    def _request_print_test_fiber_tool_from_safe_position", 1
+    )[1].split("    def _print_test_matrix_target", 1)[0]
+    assert 'self._print_test_pending_after_zero = "tool_change_cf"' in request_fiber
+    assert "self._run_print_test_job(" in request_fiber
+    assert "target_pose=_PRINT_TEST_ZERO_CORRECTION" in request_fiber
+
+    update_ui = src.split("    def _update_ui(self, msg: UiStatus):", 1)[1].split(
+        "        else:\n            self._current_tool_id = 0", 1
+    )[0]
+    assert 'pending_after_tool_change == "print_fiber_matrix"' in update_ui
+    assert "self._start_print_test_fiber_matrix()" in update_ui
+    assert 'pending_after_tool_change == "print_composite_matrix"' in update_ui
+    assert "self._start_print_test_composite_matrix()" in update_ui
 
 
 def test_print_test_resin_target_accounts_for_final_same_height_y_shift():

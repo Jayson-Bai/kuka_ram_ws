@@ -26,11 +26,15 @@ from gcode_planner.head_calibration import (
 )
 
 
-_DEFAULT_GCODE_INPUT_DIR = "/home/jayson/kuka_ram_ws/data/input_gcode"
-_DEFAULT_NPZ_OUTPUT_DIR = "/home/jayson/kuka_ram_ws/data/output_npz"
+# Resolve data paths from the runtime workspace so container users are not tied to /home/jayson.
+_DEFAULT_DATA_ROOT = Path.cwd() / "data"
+_DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")
+_DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")
 _DEFAULT_NPZ_PATH = os.path.join(_DEFAULT_NPZ_OUTPUT_DIR, "test.npz")
 _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM = 10.0
 _PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+_PRINT_TEST_FIBER_TOOL_ID = 1
+_PRINT_TEST_RESIN_TOOL_ID = 2
 
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
@@ -824,6 +828,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_fiber_confirmed = False
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
+        self._print_test_pending_after_tool_change = None
         self._print_test_requested_target_tool = None
         self._uart_log_history = []
         self._diagnostic_log_history = []
@@ -3134,12 +3139,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._print_test_waiting_for_tool is not None
                 and int(ps.current_tool) == int(self._print_test_waiting_for_tool)
             ):
+                # Tool changes are asynchronous; keep the requested follow-up action
+                # separate from the UART wait state so the original print path resumes.
+                pending_after_tool_change = self._print_test_pending_after_tool_change
                 self._print_test_waiting_for_tool = None
                 self._print_test_requested_target_tool = None
-                self._set_print_test_controls_enabled(self._print_test_seen_correction)
-                self._set_print_test_status(
-                    "纤维头已切换完成，可调整纤维偏置。", "#1b6e3c"
-                )
+                self._print_test_pending_after_tool_change = None
+                if pending_after_tool_change == "print_resin_matrix":
+                    self._set_print_test_status(
+                        "树脂头已切换完成，开始树脂测试...", "#1b6e3c"
+                    )
+                    self._start_print_test_resin_matrix()
+                elif pending_after_tool_change == "adjust_fiber_offset":
+                    self._set_print_test_controls_enabled(self._print_test_seen_correction)
+                    self._set_print_test_status(
+                        "纤维头已切换完成，可调整纤维偏置。", "#1b6e3c"
+                    )
+                elif pending_after_tool_change == "print_fiber_matrix":
+                    self._set_print_test_status(
+                        "纤维头已切换完成，开始纤维测试...", "#1b6e3c"
+                    )
+                    self._start_print_test_fiber_matrix()
+                elif pending_after_tool_change == "print_composite_matrix":
+                    self._set_print_test_status(
+                        "纤维头已切换完成，开始复合打印...", "#1b6e3c"
+                    )
+                    self._start_print_test_composite_matrix()
+                else:
+                    self._set_print_test_controls_enabled(self._print_test_seen_correction)
+                    self._set_print_test_status("打印头已切换完成。", "#1b6e3c")
         else:
             self._current_tool_id = 0
             missing_keys = [
@@ -3543,6 +3571,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_fiber_confirmed = False
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
+        self._print_test_pending_after_tool_change = None
         self._print_test_requested_target_tool = None
         self._uart_log_history.clear()
         self._diagnostic_log_history.clear()
@@ -3588,12 +3617,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             inp.setEnabled(fiber_ready)
         self._btn_test_apply_fiber_offset.setEnabled(fiber_ready)
         self._btn_test_confirm_fiber_offset.setEnabled(fiber_ready)
-        self._btn_test_print_fiber.setEnabled(
-            fiber_ready and self._print_test_fiber_confirmed
-        )
-        self._btn_test_print_composite.setEnabled(
-            fiber_ready and self._print_test_fiber_confirmed
-        )
+        fiber_action_ready = base_ready and self._print_test_fiber_confirmed
+        self._btn_test_print_fiber.setEnabled(fiber_action_ready)
+        self._btn_test_print_composite.setEnabled(fiber_action_ready)
         self._btn_test_cut.setEnabled(fiber_ready)
 
     def _on_current_correction(self, msg):
@@ -3626,12 +3652,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._print_test_target = None
                 if self._print_test_pending_after_zero == "tool_change_cf":
                     self._print_test_pending_after_zero = None
-                    self._print_test_waiting_for_tool = 1
-                    self._print_test_requested_target_tool = 1
+                    if self._print_test_pending_after_tool_change is None:
+                        self._print_test_pending_after_tool_change = "adjust_fiber_offset"
+                    self._print_test_waiting_for_tool = _PRINT_TEST_FIBER_TOOL_ID
+                    self._print_test_requested_target_tool = _PRINT_TEST_FIBER_TOOL_ID
                     self._set_print_test_controls_enabled(False)
                     self.uart_command_submit.emit("EV 0 tool_change_cf 1\n")
                     self._set_print_test_status(
-                        "已回到 RSI 全 0，正在切换纤维头...", "#1b6e3c"
+                        "已到达纤维换头安全位置，正在切换纤维头...", "#1b6e3c"
                     )
                     return
                 self._set_print_test_controls_enabled(True)
@@ -3709,12 +3737,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
         if reply != QtWidgets.QMessageBox.Yes:
             return
-        self._print_test_pending_after_zero = "tool_change_cf"
-        self._run_print_test_job(
-            "travel",
-            self._print_test_current_correction,
-            target_pose=_PRINT_TEST_ZERO_CORRECTION,
-        )
+        self._request_print_test_fiber_tool_from_safe_position("adjust_fiber_offset")
 
     def _on_print_test_print_resin(self):
         if self._print_test_params is None:
@@ -3726,9 +3749,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_resin_height_confirmed:
             self._set_print_test_status("请先确认树脂打印高度。", "#b42318")
             return
+        self._ensure_resin_tool_then_start_print_test_resin()
+
+    def _start_print_test_resin_matrix(self):
         start = self._print_test_current_correction
         target = self._print_test_matrix_target(start, self._print_test_params, "resin")
         self._run_print_test_job("resin_matrix", start, target_pose=target)
+
+    def _ensure_resin_tool_then_start_print_test_resin(self):
+        # Resin test printing must start with the resin tool active; otherwise wait
+        # for UART to report tool=2 before generating and loading the test NPZ.
+        if self._print_test_waiting_for_tool is not None:
+            self._set_print_test_status("正在等待打印头切换完成。", "#b15e00")
+            return
+        current_tool = self.current_tool_id()
+        if current_tool == _PRINT_TEST_RESIN_TOOL_ID:
+            self._start_print_test_resin_matrix()
+            return
+        self._request_print_test_resin_tool()
+
+    def _request_print_test_resin_tool(self):
+        self._print_test_waiting_for_tool = _PRINT_TEST_RESIN_TOOL_ID
+        self._print_test_requested_target_tool = _PRINT_TEST_RESIN_TOOL_ID
+        self._print_test_pending_after_tool_change = "print_resin_matrix"
+        self._set_print_test_controls_enabled(False)
+        self.uart_command_submit.emit("EV 0 tool_change_resin 2\n")
+        self._set_print_test_status(
+            "当前未使用树脂头，已发送切换树脂头命令，等待 UART 状态确认...",
+            "#b15e00",
+        )
 
     def _on_print_test_apply_fiber_offset(self):
         if self.current_tool_id() != 1:
@@ -3776,9 +3825,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_status("纤维头偏置已确认。", "#1b6e3c")
 
     def _on_print_test_print_fiber(self):
-        if self.current_tool_id() != 1:
-            self._set_print_test_status("当前未使用纤维头，不能打印纤维。", "#b42318")
-            return
         if self._print_test_params is None:
             self._set_print_test_status("请先进入测试准备。", "#b42318")
             return
@@ -3788,14 +3834,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_fiber_confirmed:
             self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
             return
+        self._ensure_fiber_tool_then_continue(
+            "print_fiber_matrix", self._start_print_test_fiber_matrix
+        )
+
+    def _start_print_test_fiber_matrix(self):
         start = self._print_test_current_correction
         target = self._print_test_matrix_target(start, self._print_test_params, "fiber")
         self._run_print_test_job("fiber_matrix", start, target_pose=target)
 
     def _on_print_test_print_composite(self):
-        if self.current_tool_id() != 1:
-            self._set_print_test_status("当前未使用纤维头，不能复合打印。", "#b42318")
-            return
         if self._print_test_params is None:
             self._set_print_test_status("请先进入测试准备。", "#b42318")
             return
@@ -3805,11 +3853,36 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_fiber_confirmed:
             self._set_print_test_status("请先确认纤维头偏置。", "#b42318")
             return
+        self._ensure_fiber_tool_then_continue(
+            "print_composite_matrix", self._start_print_test_composite_matrix
+        )
+
+    def _start_print_test_composite_matrix(self):
         start = self._print_test_current_correction
         target = self._print_test_matrix_target(
             start, self._print_test_params, "fiber", include_resin_to_fiber_delta=True
         )
         self._run_print_test_job("composite_matrix", start, target_pose=target)
+
+    def _ensure_fiber_tool_then_continue(self, pending_after_tool_change, continuation):
+        # Fiber actions first travel to the test safe position, then switch to tool=1.
+        if self._print_test_waiting_for_tool is not None:
+            self._set_print_test_status("正在等待打印头切换完成。", "#b15e00")
+            return
+        current_tool = self.current_tool_id()
+        if current_tool == _PRINT_TEST_FIBER_TOOL_ID:
+            continuation()
+            return
+        self._request_print_test_fiber_tool_from_safe_position(pending_after_tool_change)
+
+    def _request_print_test_fiber_tool_from_safe_position(self, pending_after_tool_change):
+        self._print_test_pending_after_tool_change = pending_after_tool_change
+        self._print_test_pending_after_zero = "tool_change_cf"
+        self._run_print_test_job(
+            "travel",
+            self._print_test_current_correction,
+            target_pose=_PRINT_TEST_ZERO_CORRECTION,
+        )
 
     def _print_test_matrix_target(
         self, start, params, head_key, *, include_resin_to_fiber_delta=False
@@ -3881,7 +3954,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     generate_test_matrix_gcode,
                     generate_z_adjust_gcode,
                 )
-                base_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test")
+                # Keep all generated test-mode artifacts under one temporary subtree.
+                base_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp")
                 stamp = time.strftime("%Y%m%d_%H%M%S")
                 job_dir = os.path.join(base_dir, stamp)
                 os.makedirs(job_dir, exist_ok=True)
@@ -4431,7 +4505,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _on_export_diagnostic_log(self):
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        out_dir = os.path.expanduser("~/kuka_ram_ws/data/print_test/diagnostic_logs")
+        # Diagnostic exports are test artifacts too, so keep them with the tmp runs.
+        out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl")
         records = self._diagnostic_log_history or [
