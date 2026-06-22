@@ -89,7 +89,8 @@ def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
     assert '"kind": str(kind)' in src
     assert "json.dumps(record, ensure_ascii=False, sort_keys=True)" in src
 
-    assert "diagnostic_logs" in src
+    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")' in src
+    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")' not in src
     assert "diagnostic_log_" in src
     assert ".jsonl" in src
     assert "诊断日志已导出" in src

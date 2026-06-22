@@ -219,7 +219,33 @@ def test_fiber_matrix_uses_fiber_tool_and_serpentine_geometry():
         (301.0, 12.0),
     ]
     assert [cmd.pos.x for cmd in print_moves] == [301.0, 1.0]
+    assert [cmd.delta_e for cmd in print_moves] == [240.0, 300.0]
 
+
+def test_composite_fiber_segment_extrudes_by_path_length_only():
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0],
+        fiber_layer_heights_mm=[0.05],
+        fiber_extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=300.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        calibration=HeadCalibration(),
+        tool_change_safe_lift_mm=10.0,
+    )
+
+    parsed = parse_gcode_lines(lines)
+    tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
+    fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
+    first_fiber_print = next(
+        cmd for cmd in moves if cmd.type == "PRINT" and cmd.line > fiber_tool_line
+    )
+
+    assert math.isclose(first_fiber_print.delta_e, 300.0)
 
 
 def test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix():

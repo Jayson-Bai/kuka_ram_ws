@@ -4652,8 +4652,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _on_export_diagnostic_log(self):
         stamp = time.strftime("%Y%m%d_%H%M%S")
-        # Diagnostic exports are test artifacts too, so keep them with the tmp runs.
-        out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")
+        # Keep diagnostic exports separate from temporary NPZ/GCode runs.
+        out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")
         os.makedirs(out_dir, exist_ok=True)
         path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl")
         records = self._diagnostic_log_history or [

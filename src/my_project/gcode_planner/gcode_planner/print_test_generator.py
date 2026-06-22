@@ -205,6 +205,7 @@ def generate_test_matrix_gcode(
     prime_speed_mm_s: float = 2.0,
     retract_speed_mm_s: float = 8.0,
     lift_between_lines: bool = True,
+    extrude_by_path_length: bool = False,
 ) -> list[str]:
     x, y, base_z, a, b, c = _pose_values(start_pose)
     layer_heights = _validate_positive_sequence(layer_heights_mm, "层高")
@@ -248,9 +249,12 @@ def generate_test_matrix_gcode(
             lift_z = print_z + finish_lift
             line_start_x = x if index % 2 == 0 else end_x
             line_end_x = end_x if index % 2 == 0 else x
-            e_per_path_mm = (
-                DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3 * scale
-            )
+            if extrude_by_path_length:
+                e_per_path_mm = scale
+            else:
+                e_per_path_mm = (
+                    DEFAULT_LINE_WIDTH_MM * layer_height * EXTRUSION_PER_MM3 * scale
+                )
             prime_e = prime_length
             retract_e = retract_length
             delta_e = line_length * e_per_path_mm
@@ -381,6 +385,7 @@ def generate_head_test_matrix_gcode(
         prime_speed_mm_s=prime_speed_mm_s,
         retract_speed_mm_s=retract_speed_mm_s,
         lift_between_lines=gcode_tool != RESIN_GCODE_TOOL,
+        extrude_by_path_length=gcode_tool == FIBER_GCODE_TOOL,
     )
     return _insert_tool_selection(lines, gcode_tool=gcode_tool)
 
@@ -575,6 +580,7 @@ def generate_composite_test_matrix_gcode(
         retract_length_mm=fiber_retract_length_mm,
         prime_speed_mm_s=fiber_prime_speed_mm_s,
         retract_speed_mm_s=fiber_retract_speed_mm_s,
+        extrude_by_path_length=True,
     )
     lines.extend(_matrix_body_without_header(fiber_lines))
     return lines

@@ -113,7 +113,8 @@ def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     assert '_DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")' in src
     assert '_DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")' in src
     assert 'base_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp")' in src
-    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")' in src
+    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")' in src
+    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")' not in src
     assert 'def _ensure_default_data_dirs():' in src
     assert '_ensure_default_data_dirs()' in src.split('self._build_ui()', 1)[0]
     assert '_DEFAULT_DATA_ROOT / "input_gcode"' in src
