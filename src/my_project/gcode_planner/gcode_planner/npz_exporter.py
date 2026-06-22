@@ -1144,6 +1144,24 @@ def export_npz(
                         tool_id=mapped_tool,
                     ), cmd.layer, cmd.subtype, occ)
             elif isinstance(cmd, ResetECommand):
+                if last_pose is None and cmd.pose is not None:
+                    last_pose = CsvRow(
+                        seq=seq,
+                        x=cmd.pose.x,
+                        y=cmd.pose.y,
+                        z=cmd.pose.z,
+                        a=cmd.pose.a,
+                        b=cmd.pose.b,
+                        c=cmd.pose.c,
+                        e=cmd.val,
+                        tool_id=current_tool,
+                        move_type="TRAVEL",
+                        src_line=str(cmd.line),
+                        event_flag=0,
+                        event_type="",
+                        payload="",
+                        trigger_seq=None,
+                    )
                 occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
                 if occ == 0:
                     occ = _ensure_segment(cmd.layer, cmd.subtype)

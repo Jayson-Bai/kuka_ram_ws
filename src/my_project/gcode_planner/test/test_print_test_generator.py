@@ -1,7 +1,9 @@
 import math
+import numpy as np
 
 from gcode_planner.gcode_parser import parse_gcode_lines
 from gcode_planner.head_calibration import HeadCalibration
+from gcode_planner.npz_exporter import export_npz
 from gcode_planner.print_test_generator import (
     EXTRUSION_PER_MM3,
     FIBER_GCODE_TOOL,
@@ -274,7 +276,7 @@ def test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix():
 
 def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     lines = generate_composite_test_matrix_gcode(
-        start_pose=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        start_pose=(5.0, 4.0, -45.0, 0.0, 0.0, 0.0),
         resin_layer_heights_mm=[0.5],
         resin_extrusion_scales=[1.0],
         fiber_layer_heights_mm=[0.6],
@@ -306,12 +308,13 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
 
     assert ";TOOL_CHANGE_SAFE_LIFT:10.000000" in text
-    assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-45.000000" in text
+    assert ";TOOL_CHANGE_COMPENSATION:-5.000000,-4.000000,25.000000" in text
+    assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-25.000000" in text
     assert "T0" in lines
     assert [cmd.tool for cmd in tools] == [RESIN_GCODE_TOOL, FIBER_GCODE_TOOL]
     fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
     resin_to_fiber_compensation_line = lines.index(
-        ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-45.000000"
+        ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-25.000000"
     )
     assert lines.index("T0") < resin_to_fiber_compensation_line
 
@@ -320,13 +323,13 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
         cmd
         for cmd in moves_after_fiber_tool
         if cmd.type == "TRAVEL"
-        and cmd.pos.x == 0.0
-        and cmd.pos.y == 0.0
-        and cmd.pos.z == 10.5
+        and cmd.pos.x == 5.0
+        and cmd.pos.y == 4.0
+        and cmd.pos.z == -34.5
     )
-    assert resin_to_fiber_reposition.start_pos.x == -5.0
-    assert resin_to_fiber_reposition.start_pos.y == -4.0
-    assert resin_to_fiber_reposition.start_pos.z == 55.5
+    assert resin_to_fiber_reposition.start_pos.x == 0.0
+    assert resin_to_fiber_reposition.start_pos.y == 0.0
+    assert resin_to_fiber_reposition.start_pos.z == -9.5
 
     first_fiber_print = next(cmd for cmd in moves_after_fiber_tool if cmd.type == "PRINT")
     descent_to_print_z = next(
@@ -339,6 +342,47 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
         and cmd.start_pos.z > cmd.pos.z
     )
     assert descent_to_print_z.pos.z == first_fiber_print.start_pos.z
+
+
+def test_composite_from_confirmed_fiber_pose_applies_resin_z_once():
+    calibration = HeadCalibration(
+        resin_z_print_compensation_mm=-20.0,
+        fiber_x_print_compensation_mm=3.0,
+        fiber_y_print_compensation_mm=2.0,
+        fiber_z_print_compensation_mm=4.0,
+    )
+    start_pose = (3.0, 2.0, -16.0, 0.0, 0.0, 0.0)
+
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=start_pose,
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0],
+        fiber_layer_heights_mm=[0.05],
+        fiber_extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=100.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        calibration=calibration,
+        tool_change_safe_lift_mm=10.0,
+    )
+
+    text = "\n".join(lines)
+    parsed = parse_gcode_lines(lines)
+    tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
+    fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
+    first_resin_print = next(
+        cmd for cmd in moves if cmd.type == "PRINT" and cmd.line < fiber_tool_line
+    )
+    first_fiber_print = next(
+        cmd for cmd in moves if cmd.type == "PRINT" and cmd.line > fiber_tool_line
+    )
+
+    assert ";TOOL_CHANGE_COMPENSATION:-3.000000,-2.000000,-4.000000" in text
+    assert ";TOOL_CHANGE_COMPENSATION:3.000000,2.000000,4.000000" in text
+    assert math.isclose(first_resin_print.start_pos.z, -19.5)
+    assert math.isclose(first_fiber_print.start_pos.z, -15.45)
 
 
 def test_composite_resin_lines_shift_y_without_intermediate_z_lift():
@@ -493,6 +537,55 @@ def test_composite_fiber_starts_at_first_resin_line_with_resin_height_added():
     assert fiber_print.start_pos.y == 0.0
     assert math.isclose(fiber_print.start_pos.z, 0.55)
     assert math.isclose(fiber_print.pos.z, 0.55)
+
+
+def test_composite_npz_initial_reset_event_keeps_current_start_pose(tmp_path):
+    start_pose = (-0.34, -1.24, -24.45, 0.0, 0.0, 0.0)
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=start_pose,
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0],
+        fiber_layer_heights_mm=[0.05],
+        fiber_extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=10.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        prime_length_mm=0.1,
+        retract_length_mm=0.1,
+        prime_speed_mm_s=5.0,
+        retract_speed_mm_s=5.0,
+        fiber_prime_length_mm=0.1,
+        fiber_retract_length_mm=0.1,
+        fiber_prime_speed_mm_s=5.0,
+        fiber_retract_speed_mm_s=5.0,
+        calibration=HeadCalibration(),
+        tool_change_safe_lift_mm=10.0,
+    )
+    out = tmp_path / "composite_matrix.npz"
+
+    export_npz(
+        parse_gcode_lines(lines),
+        str(out),
+        dt=0.004,
+        default_feed_mm_s=10.0,
+        enable_extrude_wait=True,
+    )
+
+    data = np.load(out)
+    event_type_vocab = {
+        int(value): key.decode("utf-8").rstrip("\x00")
+        for key, value in zip(
+            data["event_type_vocab_keys"],
+            data["event_type_vocab_vals"],
+        )
+    }
+    event_types = [event_type_vocab[int(v)] for v in data["event_type"]]
+    first_reset_idx = event_types.index("extrude_reset")
+
+    assert np.isclose(data["x"][first_reset_idx], start_pose[0])
+    assert np.isclose(data["y"][first_reset_idx], start_pose[1])
+    assert np.isclose(data["z"][first_reset_idx], start_pose[2])
 
 
 def test_test_matrix_gcode_rejects_more_than_45_lines():

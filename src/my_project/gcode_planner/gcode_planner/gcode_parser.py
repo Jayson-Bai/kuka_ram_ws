@@ -185,6 +185,7 @@ def _handle_g92(parsed: ParsedCommandList, state: MachineState, params, line_idx
                 layer=state.current_layer,
                 subtype=state.current_subtype or "UNKNOWN",
                 raw=raw_line,
+                pose=Position(state.x, state.y, state.z, state.a, state.b, state.c),
             )
         )
 

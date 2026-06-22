@@ -50,6 +50,7 @@ class ResetECommand:
     layer: int = 0
     subtype: str = "UNKNOWN"
     raw: Optional[str] = None
+    pose: Optional[Position] = None
 
 
 @dataclass

@@ -3,10 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Iterable, Sequence
 
-from gcode_planner.head_calibration import (
-    HeadCalibration,
-    calibration_relative_offsets,
-)
+from gcode_planner.head_calibration import HeadCalibration
 
 
 FIBER_TOOL_ID = 1
@@ -490,10 +487,12 @@ def generate_composite_test_matrix_gcode(
     lines.append(f"T{RESIN_GCODE_TOOL}")
     lines.append("G92 E0")
 
-    fiber_to_resin = calibration_relative_offsets(
-        active_calibration, from_tool="fiber", to_tool="resin"
-    )
-    fr_dx, fr_dy, fr_dz = fiber_to_resin
+    # Composite starts from the confirmed fiber pose, which already includes
+    # the global resin Z print compensation. Tool-change deltas here use only
+    # the measured fiber-head offset so the global Z is neither dropped nor doubled.
+    fr_dx = -float(active_calibration.fiber_x_print_compensation_mm)
+    fr_dy = -float(active_calibration.fiber_y_print_compensation_mm)
+    fr_dz = -float(active_calibration.fiber_z_print_compensation_mm)
     resin_start_pose = (x + fr_dx, y + fr_dy, z + fr_dz, a, b, c)
     lines.append(f";TOOL_CHANGE_COMPENSATION:{fr_dx:.6f},{fr_dy:.6f},{fr_dz:.6f}")
     lines.append(
@@ -539,10 +538,9 @@ def generate_composite_test_matrix_gcode(
     lines.append(f"T{FIBER_GCODE_TOOL}")
     lines.append("G92 E0")
 
-    resin_to_fiber = calibration_relative_offsets(
-        active_calibration, from_tool="resin", to_tool="fiber"
-    )
-    rf_dx, rf_dy, rf_dz = resin_to_fiber
+    rf_dx = float(active_calibration.fiber_x_print_compensation_mm)
+    rf_dy = float(active_calibration.fiber_y_print_compensation_mm)
+    rf_dz = float(active_calibration.fiber_z_print_compensation_mm)
     fiber_safe_x = resin_start_x + rf_dx
     fiber_safe_y = resin_start_y + rf_dy
     # Composite fiber is laid on top of the first resin line surface.
