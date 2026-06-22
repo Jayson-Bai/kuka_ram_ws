@@ -140,13 +140,11 @@
   "138": "source",
   "139": "cnpy h",
   "140": "ros2 control tools hpp",
-  "141": "Trajectory Publisher Configuration",
   "142": "kuka iiqka client library protobuf",
   "143": "extension h",
   "144": "Path Following Visualization",
   "145": "gpio value h",
   "146": "ros2 base hpp",
-  "147": "param callback",
   "148": "plot layers from manifest py",
   "149": "extruder latency monitor cpp",
   "150": "joint group impedance controller cpp",
@@ -181,7 +179,6 @@
   "179": "test multi robot startup py",
   "180": "test driver activation py",
   "181": "generate test description",
-  "182": "test multi robot startup py",
   "183": "generate test description",
   "184": "generate test description",
   "185": "generate test description",
@@ -368,9 +365,6 @@
   "366": "Community 366",
   "367": "Community 367",
   "368": "Community 368",
-  "369": "Community 369",
-  "370": "Community 370",
   "371": "Community 371",
-  "372": "Community 372",
-  "373": "Community 373"
+  "372": "Community 372"
 }

@@ -1964,14 +1964,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         test_form.setVerticalSpacing(4)
         self._test_temp_input = QtWidgets.QLineEdit("250")
         self._test_layer_height_min_input = QtWidgets.QLineEdit("0.5")
-        self._test_layer_height_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_layer_height_max_input = QtWidgets.QLineEdit("0.5")
         self._test_speed_input = QtWidgets.QLineEdit("10.0")
-        self._test_scale_min_input = QtWidgets.QLineEdit("0.8")
-        self._test_scale_max_input = QtWidgets.QLineEdit("1.2")
-        self._test_prime_length_input = QtWidgets.QLineEdit("5.0")
-        self._test_prime_speed_input = QtWidgets.QLineEdit("2.0")
-        self._test_retract_length_input = QtWidgets.QLineEdit("3.0")
-        self._test_retract_speed_input = QtWidgets.QLineEdit("8.0")
+        self._test_scale_min_input = QtWidgets.QLineEdit("1.0")
+        self._test_scale_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_prime_length_input = QtWidgets.QLineEdit("18.0")
+        self._test_prime_speed_input = QtWidgets.QLineEdit("15.0")
+        self._test_retract_length_input = QtWidgets.QLineEdit("15.0")
+        self._test_retract_speed_input = QtWidgets.QLineEdit("30.0")
         self._test_line_length_input = QtWidgets.QLineEdit("300.0")
         self._test_y_spacing_input = QtWidgets.QLineEdit("10.0")
         self._test_tool_change_safe_lift_input = QtWidgets.QLineEdit(
@@ -1981,14 +1981,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f"{self._head_calibration.resin_z_print_compensation_mm:.3f}"
         )
         self._test_fiber_temp_input = QtWidgets.QLineEdit("250")
-        self._test_fiber_layer_height_min_input = QtWidgets.QLineEdit("0.5")
-        self._test_fiber_layer_height_max_input = QtWidgets.QLineEdit("1.0")
-        self._test_fiber_scale_min_input = QtWidgets.QLineEdit("0.8")
-        self._test_fiber_scale_max_input = QtWidgets.QLineEdit("1.2")
-        self._test_fiber_prime_length_input = QtWidgets.QLineEdit("5.0")
-        self._test_fiber_prime_speed_input = QtWidgets.QLineEdit("2.0")
-        self._test_fiber_retract_length_input = QtWidgets.QLineEdit("3.0")
-        self._test_fiber_retract_speed_input = QtWidgets.QLineEdit("8.0")
+        self._test_fiber_layer_height_min_input = QtWidgets.QLineEdit("0.05")
+        self._test_fiber_layer_height_max_input = QtWidgets.QLineEdit("0.05")
+        self._test_fiber_scale_min_input = QtWidgets.QLineEdit("1.0")
+        self._test_fiber_scale_max_input = QtWidgets.QLineEdit("1.0")
+        self._test_fiber_prime_length_input = QtWidgets.QLineEdit("12.0")
+        self._test_fiber_prime_speed_input = QtWidgets.QLineEdit("5.0")
+        self._test_fiber_retract_length_input = QtWidgets.QLineEdit("10.0")
+        self._test_fiber_retract_speed_input = QtWidgets.QLineEdit("5.0")
         self._test_fiber_x_comp_input = QtWidgets.QLineEdit(
             f"{self._head_calibration.fiber_x_print_compensation_mm:.3f}"
         )
@@ -3913,6 +3913,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         retract_length_mm=float(resin["retract_length"]),
                         prime_speed_mm_s=float(resin["prime_speed"]),
                         retract_speed_mm_s=float(resin["retract_speed"]),
+                        lift_between_lines=False,
                     )
                     stem = "test_matrix"
                 elif job_type == "resin_matrix":

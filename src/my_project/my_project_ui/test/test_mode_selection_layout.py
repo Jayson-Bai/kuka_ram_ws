@@ -76,6 +76,33 @@ def test_formal_print_prefers_flat_npz_over_manifest():
     assert "manifest" not in auto_path.lower()
 
 
+def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
+    src = _source()
+    init_section = src.split("        self._test_temp_input =", 1)[1].split(
+        "        range_inputs = (", 1
+    )[0]
+
+    for expected in (
+        'self._test_layer_height_min_input = QtWidgets.QLineEdit("0.5")',
+        'self._test_layer_height_max_input = QtWidgets.QLineEdit("0.5")',
+        'self._test_scale_min_input = QtWidgets.QLineEdit("1.0")',
+        'self._test_scale_max_input = QtWidgets.QLineEdit("1.0")',
+        'self._test_prime_length_input = QtWidgets.QLineEdit("18.0")',
+        'self._test_prime_speed_input = QtWidgets.QLineEdit("15.0")',
+        'self._test_retract_length_input = QtWidgets.QLineEdit("15.0")',
+        'self._test_retract_speed_input = QtWidgets.QLineEdit("30.0")',
+        'self._test_fiber_layer_height_min_input = QtWidgets.QLineEdit("0.05")',
+        'self._test_fiber_layer_height_max_input = QtWidgets.QLineEdit("0.05")',
+        'self._test_fiber_scale_min_input = QtWidgets.QLineEdit("1.0")',
+        'self._test_fiber_scale_max_input = QtWidgets.QLineEdit("1.0")',
+        'self._test_fiber_prime_length_input = QtWidgets.QLineEdit("12.0")',
+        'self._test_fiber_prime_speed_input = QtWidgets.QLineEdit("5.0")',
+        'self._test_fiber_retract_length_input = QtWidgets.QLineEdit("10.0")',
+        'self._test_fiber_retract_speed_input = QtWidgets.QLineEdit("5.0")',
+    ):
+        assert expected in init_section
+
+
 def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     src = _source()
 

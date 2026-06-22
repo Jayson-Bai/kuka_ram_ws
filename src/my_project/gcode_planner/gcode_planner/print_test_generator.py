@@ -207,6 +207,7 @@ def generate_test_matrix_gcode(
     retract_length_mm: float = 0.0,
     prime_speed_mm_s: float = 2.0,
     retract_speed_mm_s: float = 8.0,
+    lift_between_lines: bool = True,
 ) -> list[str]:
     x, y, base_z, a, b, c = _pose_values(start_pose)
     layer_heights = _validate_positive_sequence(layer_heights_mm, "层高")
@@ -241,6 +242,7 @@ def generate_test_matrix_gcode(
     current_e = 0.0
     index = 0
     previous_lift_z = None
+    current_x, current_y, current_z = x, y, base_z
 
     for layer_height in layer_heights:
         for scale in scales:
@@ -261,32 +263,45 @@ def generate_test_matrix_gcode(
             lines.append(f";EXTRUDE_SCALE:{scale:.6f}")
             lines.append(f";PRIME_FILAMENT_LENGTH:{prime_length:.6f}")
             lines.append(f";RETRACT_FILAMENT_LENGTH:{retract_length:.6f}")
-            if previous_lift_z is None:
+            if lift_between_lines:
+                if previous_lift_z is None:
+                    lines.append(
+                        f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+                    )
+                else:
+                    lines.append(
+                        f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{previous_lift_z:.6f} "
+                        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+                    )
+                    lines.append(
+                        f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+                    )
+            elif (
+                current_x != line_start_x
+                or current_y != line_y
+                or current_z != print_z
+            ):
                 lines.append(
                     f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
-            else:
-                lines.append(
-                    f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{previous_lift_z:.6f} "
-                    f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
-                )
-                lines.append(
-                    f"G0 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
-                    f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
-                )
+                current_x, current_y, current_z = line_start_x, line_y, print_z
             if prime_e > 0.0:
                 current_e += prime_e
                 lines.append(
                     f"G1 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} "
-                    f"E{current_e:.6f} F{prime_feed:.3f}")
+                    f"E{current_e:.6f} F{prime_feed:.3f}"
+                )
             current_e += delta_e
             lines.append(
                 f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
                 f"A{a:.6f} B{b:.6f} C{c:.6f} "
                 f"E{current_e:.6f} F{feed:.3f}"
             )
+            current_x, current_y, current_z = line_end_x, line_y, print_z
             if retract_e > 0.0:
                 current_e -= retract_e
                 lines.append(
@@ -294,17 +309,30 @@ def generate_test_matrix_gcode(
                     f"A{a:.6f} B{b:.6f} C{c:.6f} "
                     f"E{current_e:.6f} F{retract_feed:.3f}"
                 )
-            if finish_lift > 0.0:
+            if lift_between_lines:
+                if finish_lift > 0.0:
+                    lines.append(
+                        f"G0 X{line_end_x:.6f} Y{line_y:.6f} Z{lift_z:.6f} "
+                        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+                    )
+                    previous_lift_z = lift_z
+                else:
+                    previous_lift_z = print_z
+            else:
+                next_y = line_y + y_spacing
                 lines.append(
-                    f"G0 X{line_end_x:.6f} Y{line_y:.6f} Z{lift_z:.6f} "
+                    f"G0 X{line_end_x:.6f} Y{next_y:.6f} Z{print_z:.6f} "
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
-                previous_lift_z = lift_z
-            else:
-                previous_lift_z = print_z
+                current_x, current_y, current_z = line_end_x, next_y, print_z
             index += 1
-    return lines
 
+    if not lift_between_lines and finish_lift > 0.0:
+        lines.append(
+            f"G0 X{current_x:.6f} Y{current_y:.6f} Z{current_z + finish_lift:.6f} "
+            f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+        )
+    return lines
 
 def _gcode_tool_for_head(tool: str) -> int:
     normalized = str(tool).strip().lower()
@@ -341,6 +369,7 @@ def generate_head_test_matrix_gcode(
     prime_speed_mm_s: float = 2.0,
     retract_speed_mm_s: float = 8.0,
 ) -> list[str]:
+    gcode_tool = _gcode_tool_for_head(tool)
     lines = generate_test_matrix_gcode(
         start_pose=start_pose,
         layer_heights_mm=layer_heights_mm,
@@ -354,8 +383,9 @@ def generate_head_test_matrix_gcode(
         retract_length_mm=retract_length_mm,
         prime_speed_mm_s=prime_speed_mm_s,
         retract_speed_mm_s=retract_speed_mm_s,
+        lift_between_lines=gcode_tool != RESIN_GCODE_TOOL,
     )
-    return _insert_tool_selection(lines, gcode_tool=_gcode_tool_for_head(tool))
+    return _insert_tool_selection(lines, gcode_tool=gcode_tool)
 
 
 def _matrix_final_pose(
@@ -366,13 +396,17 @@ def _matrix_final_pose(
     line_length_mm: float,
     y_spacing_mm: float,
     finish_lift_mm: float,
+    shift_y_after_each_line: bool = False,
 ) -> tuple[float, float, float, float, float, float]:
     x, y, z, a, b, c = _pose_values(start_pose)
     layer_heights = _validate_positive_sequence(layer_heights_mm, "层高")
     scales = _validate_positive_sequence(extrusion_scales, "挤出倍率")
     line_count = len(layer_heights) * len(scales)
     final_x = x + float(line_length_mm) if line_count % 2 == 1 else x
-    final_y = y + (line_count - 1) * float(y_spacing_mm)
+    if shift_y_after_each_line:
+        final_y = y + line_count * float(y_spacing_mm)
+    else:
+        final_y = y + (line_count - 1) * float(y_spacing_mm)
     final_z = z + layer_heights[-1] + float(finish_lift_mm)
     return final_x, final_y, final_z, a, b, c
 
@@ -437,10 +471,39 @@ def generate_composite_test_matrix_gcode(
     tool_change_safe_lift_mm: float = 10.0,
 ) -> list[str]:
     active_calibration = calibration if calibration is not None else HeadCalibration()
-    lines = generate_head_test_matrix_gcode(
-        start_pose=start_pose,
-        tool="resin",
-        layer_heights_mm=resin_layer_heights_mm,
+    tool_change_safe_lift = float(tool_change_safe_lift_mm)
+    if tool_change_safe_lift < 0.0:
+        raise ValueError("tool_change_safe_lift_mm must be >= 0")
+
+    resin_layer_heights = _validate_positive_sequence(resin_layer_heights_mm, "层高")
+    fiber_layer_heights = _validate_positive_sequence(fiber_layer_heights_mm, "层高")
+    x, y, z, a, b, c = _pose_values(start_pose)
+    feed = _feed(speed_mm_s)
+    lines = _header(start_pose)
+
+    start_safe_z = z + tool_change_safe_lift
+    lines.append(f";TOOL_CHANGE_SAFE_LIFT:{tool_change_safe_lift:.6f}")
+    lines.append(
+        f"G0 X{x:.6f} Y{y:.6f} Z{start_safe_z:.6f} "
+        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+    )
+    lines.append(f"T{RESIN_GCODE_TOOL}")
+    lines.append("G92 E0")
+
+    fiber_to_resin = calibration_relative_offsets(
+        active_calibration, from_tool="fiber", to_tool="resin"
+    )
+    fr_dx, fr_dy, fr_dz = fiber_to_resin
+    resin_start_pose = (x + fr_dx, y + fr_dy, z + fr_dz, a, b, c)
+    lines.append(f";TOOL_CHANGE_COMPENSATION:{fr_dx:.6f},{fr_dy:.6f},{fr_dz:.6f}")
+    lines.append(
+        f"G0 X{x + fr_dx:.6f} Y{y + fr_dy:.6f} Z{start_safe_z + fr_dz:.6f} "
+        f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
+    )
+
+    resin_lines = generate_test_matrix_gcode(
+        start_pose=resin_start_pose,
+        layer_heights_mm=resin_layer_heights,
         extrusion_scales=resin_extrusion_scales,
         speed_mm_s=speed_mm_s,
         line_length_mm=line_length_mm,
@@ -451,43 +514,65 @@ def generate_composite_test_matrix_gcode(
         retract_length_mm=retract_length_mm,
         prime_speed_mm_s=prime_speed_mm_s,
         retract_speed_mm_s=retract_speed_mm_s,
+        lift_between_lines=False,
     )
+    lines.extend(_matrix_body_without_header(resin_lines))
+
     resin_final_pose = _matrix_final_pose(
-        start_pose=start_pose,
-        layer_heights_mm=resin_layer_heights_mm,
+        start_pose=resin_start_pose,
+        layer_heights_mm=resin_layer_heights,
         extrusion_scales=resin_extrusion_scales,
         line_length_mm=line_length_mm,
         y_spacing_mm=y_spacing_mm,
         finish_lift_mm=finish_lift_mm,
+        shift_y_after_each_line=True,
     )
-    delta_xyz = calibration_relative_offsets(
-        active_calibration, from_tool="resin", to_tool="fiber"
+    resin_start_x, resin_start_y, resin_start_z, resin_a, resin_b, resin_c = (
+        _pose_values(resin_start_pose)
     )
-    compensated_safe_pose = _append_tool_change_compensation(
-        lines,
-        current_pose=resin_final_pose,
-        delta_xyz=delta_xyz,
-        safe_lift_mm=tool_change_safe_lift_mm,
-        speed_mm_s=speed_mm_s,
+    _final_x, _final_y, final_safe_z, _final_a, _final_b, _final_c = resin_final_pose
+    lines.append(";RETURN_TO_RESIN_START")
+    lines.append(
+        f"G0 X{resin_start_x:.6f} Y{resin_start_y:.6f} Z{final_safe_z:.6f} "
+        f"A{resin_a:.6f} B{resin_b:.6f} C{resin_c:.6f} F{feed:.3f}"
     )
-    x, y, z, a, b, c = _pose_values(start_pose)
-    dx, dy, dz = delta_xyz
-    fiber_start_pose = (x + dx, y + dy, z + dz, a, b, c)
     lines.append(f"T{FIBER_GCODE_TOOL}")
     lines.append("G92 E0")
 
+    resin_to_fiber = calibration_relative_offsets(
+        active_calibration, from_tool="resin", to_tool="fiber"
+    )
+    rf_dx, rf_dy, rf_dz = resin_to_fiber
+    fiber_safe_x = resin_start_x + rf_dx
+    fiber_safe_y = resin_start_y + rf_dy
+    fiber_safe_z = final_safe_z + rf_dz
+    lines.append(f";TOOL_CHANGE_COMPENSATION:{rf_dx:.6f},{rf_dy:.6f},{rf_dz:.6f}")
+    lines.append(
+        f"G0 X{fiber_safe_x:.6f} Y{fiber_safe_y:.6f} Z{fiber_safe_z:.6f} "
+        f"A{resin_a:.6f} B{resin_b:.6f} C{resin_c:.6f} F{feed:.3f}"
+    )
+
+    # Composite fiber is laid on top of the first resin line surface.
+    fiber_base_z = resin_start_z + resin_layer_heights[0] + rf_dz
+    fiber_start_pose = (
+        fiber_safe_x,
+        fiber_safe_y,
+        fiber_base_z,
+        resin_a,
+        resin_b,
+        resin_c,
+    )
+    fiber_print_safe_z = fiber_base_z + fiber_layer_heights[0] + finish_lift_mm
+    lines.append(
+        f"G0 X{fiber_safe_x:.6f} Y{fiber_safe_y:.6f} Z{fiber_print_safe_z:.6f} "
+        f"A{resin_a:.6f} B{resin_b:.6f} C{resin_c:.6f} F{feed:.3f}"
+    )
+
     # Composite test GCode bakes in head compensation; export with
     # tool_offset=(0, 0, 0) to avoid applying the offset twice.
-    _safe_x, _safe_y, safe_z, safe_a, safe_b, safe_c = compensated_safe_pose
-    fiber_x, fiber_y, _fiber_z, _fiber_a, _fiber_b, _fiber_c = fiber_start_pose
-    feed = _feed(speed_mm_s)
-    lines.append(
-        f"G0 X{fiber_x:.6f} Y{fiber_y:.6f} Z{safe_z:.6f} "
-        f"A{safe_a:.6f} B{safe_b:.6f} C{safe_c:.6f} F{feed:.3f}"
-    )
     fiber_lines = generate_test_matrix_gcode(
         start_pose=fiber_start_pose,
-        layer_heights_mm=fiber_layer_heights_mm,
+        layer_heights_mm=fiber_layer_heights,
         extrusion_scales=fiber_extrusion_scales,
         speed_mm_s=speed_mm_s,
         line_length_mm=line_length_mm,
@@ -501,7 +586,6 @@ def generate_composite_test_matrix_gcode(
     )
     lines.extend(_matrix_body_without_header(fiber_lines))
     return lines
-
 
 def format_gcode(lines: Iterable[str]) -> str:
     return "\n".join(lines) + "\n"
