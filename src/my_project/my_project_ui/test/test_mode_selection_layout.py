@@ -109,7 +109,7 @@ def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     assert '"/home/jayson/kuka_ram_ws/data' not in src
     assert '"~/kuka_ram_ws/data' not in src
     assert 'os.path.expanduser("~/kuka_ram_ws' not in src
-    assert '_DEFAULT_DATA_ROOT = Path.cwd() / "data"' in src
+    assert '_DEFAULT_DATA_ROOT = DEFAULT_DATA_ROOT' in src
     assert '_DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")' in src
     assert '_DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")' in src
     assert 'base_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp")' in src
@@ -350,7 +350,8 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
         "X 偏置",
         "Y 偏置",
         "Z 补偿",
-        "应用偏置",
+        "锁定偏置输入",
+        "确认偏置（叠加树脂Z并下发）",
         "确认偏置",
         "直接打印纤维",
         "剪切",
@@ -503,17 +504,52 @@ def test_print_test_composite_target_uses_resin_surface_height_not_head_offset()
     assert 'calibration_relative_offsets(' not in target_section
     assert "base[2] + resin_surface_height + last_layer_height + safe_lift" in target_section
 
-def test_fiber_offset_apply_is_relative_to_current_rsi_correction():
+def test_fiber_offset_apply_only_locks_inputs_for_micro_nudging():
     src = _source()
     apply_section = src.split("    def _on_print_test_apply_fiber_offset", 1)[1].split(
-        "    def _on_print_test_confirm_fiber_offset", 1
+        "    def _on_print_test_nudge_fiber_offset", 1
     )[0]
 
-    assert "start = self._print_test_current_correction" in apply_section
-    assert "start[0] + calibration.fiber_x_print_compensation_mm" in apply_section
-    assert "start[1] + calibration.fiber_y_print_compensation_mm" in apply_section
-    assert "start[2] + calibration.fiber_z_print_compensation_mm" in apply_section
-    assert 'self._run_print_test_job("travel", start, target_pose=target)' in apply_section
+    assert "self._print_test_fiber_offset_locked = True" in apply_section
+    assert "save_head_calibration" not in apply_section
+    assert "self._run_print_test_job" not in apply_section
+
+
+def test_fiber_offset_micro_nudges_only_change_inputs_until_confirm():
+    src = _source()
+
+    assert "self._print_test_fiber_offset_locked = False" in src
+    controls = src.split("    def _set_print_test_controls_enabled", 1)[1].split(
+        "    def _on_current_correction", 1
+    )[0]
+    assert "fiber_input_ready = fiber_ready and not self._print_test_fiber_offset_locked" in controls
+    assert "inp.setEnabled(fiber_input_ready)" in controls
+    assert "self._btn_test_apply_fiber_offset.setEnabled(fiber_input_ready)" in controls
+    assert "fiber_nudge_ready = fiber_ready and self._print_test_fiber_offset_locked" in controls
+    assert "btn.setEnabled(fiber_nudge_ready)" in controls
+
+    nudge_section = src.split("    def _on_print_test_nudge_fiber_offset", 1)[1].split(
+        "    def _on_print_test_confirm_fiber_offset", 1
+    )[0]
+    assert "if not self._print_test_fiber_offset_locked:" in nudge_section
+    assert "setText" in nudge_section
+    assert "save_head_calibration" not in nudge_section
+    assert "self._run_print_test_job" not in nudge_section
+
+
+def test_fiber_offset_confirm_saves_and_downlinks_resin_z_adjusted_offset():
+    src = _source()
+    confirm_section = src.split("    def _on_print_test_confirm_fiber_offset", 1)[1].split(
+        "    def _on_print_test_print_fiber", 1
+    )[0]
+
+    assert "start = self._print_test_current_correction" in confirm_section
+    assert "start[0] + calibration.fiber_x_print_compensation_mm" in confirm_section
+    assert "start[1] + calibration.fiber_y_print_compensation_mm" in confirm_section
+    assert "calibration.resin_z_print_compensation_mm" in confirm_section
+    assert "calibration.fiber_z_print_compensation_mm" in confirm_section
+    assert "save_head_calibration(calibration" in confirm_section
+    assert 'self._run_print_test_job("travel", start, target_pose=target)' in confirm_section
 
 
 def test_scissor_button_checks_fiber_tool_before_uart_command():

@@ -115,6 +115,11 @@ def test_expand_test_values_accepts_single_value_and_inclusive_range():
     assert expand_test_values("0.5-0.7") == [0.5, 0.6, 0.7]
 
 
+def test_expand_test_values_preserves_small_positive_values():
+    assert expand_test_values("0.05") == [0.05]
+    assert expand_test_values("0.05-0.05") == [0.05]
+
+
 def test_expand_test_values_rejects_descending_range():
     try:
         expand_test_values("1.0-0.8")

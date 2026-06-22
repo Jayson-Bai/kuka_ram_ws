@@ -47,7 +47,7 @@ def expand_test_values(text: str, *, label: str = "参数") -> list[float]:
     values = []
     current = start
     while current <= end + Decimal("0.000000001"):
-        values.append(float(current.quantize(Decimal("0.1"))))
+        values.append(float(current))
         current += TEST_MATRIX_RANGE_STEP
     return values
 

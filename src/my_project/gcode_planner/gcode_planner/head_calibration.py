@@ -7,8 +7,21 @@ from pathlib import Path
 from typing import Mapping
 
 
-# Use the runtime workspace, not a developer home path; this code often runs in containers.
-DEFAULT_DATA_ROOT = Path.cwd() / "data"
+def default_data_root(start_paths: tuple[str | Path, ...] | None = None) -> Path:
+    starts = start_paths if start_paths is not None else (Path(__file__).resolve(), Path.cwd())
+    for start in starts:
+        start_path = Path(start).resolve()
+        candidates = (start_path,) + tuple(start_path.parents)
+        for parent in candidates:
+            if (parent / "src" / "my_project").is_dir() or (parent / ".git").exists():
+                return parent / "data"
+            if parent.name == "install" and (parent.parent / "src" / "my_project").is_dir():
+                return parent.parent / "data"
+    return Path.cwd() / "data"
+
+
+# Use the workspace root, not the process cwd; rqt may be opened from different dirs.
+DEFAULT_DATA_ROOT = default_data_root()
 DEFAULT_HEAD_CALIBRATION_PATH = (
     DEFAULT_DATA_ROOT / "head_calibration_offsets" / "head_offsets.json"
 )

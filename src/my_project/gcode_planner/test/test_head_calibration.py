@@ -4,7 +4,9 @@ from pathlib import Path
 
 from gcode_planner.head_calibration import (
     DEFAULT_HEAD_CALIBRATION,
+    DEFAULT_DATA_ROOT,
     DEFAULT_HEAD_CALIBRATION_PATH,
+    default_data_root,
     HeadCalibration,
     calibration_relative_offsets,
     load_head_calibration,
@@ -25,10 +27,22 @@ def test_load_head_calibration_returns_defaults_when_file_missing(tmp_path):
     assert DEFAULT_HEAD_CALIBRATION["fiber"]["z_offset_mm"] == 0.0
 
 
-def test_default_head_calibration_path_uses_runtime_workspace_data_dir():
+def test_default_head_calibration_path_uses_workspace_data_dir():
     assert DEFAULT_HEAD_CALIBRATION_PATH == (
-        Path.cwd() / "data" / "head_calibration_offsets" / "head_offsets.json"
+        DEFAULT_DATA_ROOT / "head_calibration_offsets" / "head_offsets.json"
     )
+
+
+def test_default_data_root_is_stable_when_cwd_changes(tmp_path, monkeypatch):
+    workspace = tmp_path / "ws"
+    package_dir = workspace / "src" / "my_project" / "gcode_planner"
+    package_dir.mkdir(parents=True)
+    other_cwd = tmp_path / "other"
+    other_cwd.mkdir()
+
+    monkeypatch.chdir(other_cwd)
+
+    assert default_data_root(start_paths=(package_dir,)) == workspace / "data"
 
 
 def test_load_head_calibration_returns_defaults_for_malformed_json(tmp_path):
