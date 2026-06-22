@@ -1951,7 +1951,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_clear_npz_dir.clicked.connect(self._on_clear_npz_dir)
 
         # ======== Print Test 区域 ========
-        print_test_box = QtWidgets.QGroupBox("打印测试（树脂）")
+        print_test_box = QtWidgets.QGroupBox("打印测试")
         print_test_box.setObjectName("groupPrintTest")
         print_test_box.setSizePolicy(
             QtWidgets.QSizePolicy.Preferred,
@@ -2018,7 +2018,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             *range_inputs,
         )
         for inp in positive_inputs:
-            inp.setMaximumWidth(64)
+            inp.setMaximumWidth(72)
             validator = QtGui.QDoubleValidator(0.001, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
@@ -2034,7 +2034,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_fiber_retract_speed_input,
         )
         for inp in non_negative_inputs:
-            inp.setMaximumWidth(64)
+            inp.setMaximumWidth(72)
             validator = QtGui.QDoubleValidator(0.0, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
@@ -2044,10 +2044,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_fiber_y_comp_input,
             self._test_fiber_z_comp_input,
         ):
-            inp.setMaximumWidth(64)
+            inp.setMaximumWidth(72)
             validator = QtGui.QDoubleValidator(-1000.0, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
+
+        def _section_title(text):
+            label = QtWidgets.QLabel(text)
+            label.setStyleSheet(
+                "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;"
+            )
+            return label
 
         def _range_widget(min_input, max_input, unit_text=None):
             widget = QtWidgets.QWidget()
@@ -2077,109 +2084,220 @@ class _UiStatusWidget(QtWidgets.QWidget):
             layout.addStretch(1)
             return widget
 
-        form_rows = (
-            ("树脂目标温度", _value_widget(self._test_temp_input)),
-            ("树脂层高", _range_widget(
+        def _add_form_rows(form_layout, rows):
+            for index, (label, widget) in enumerate(rows):
+                lbl = QtWidgets.QLabel(label)
+                lbl.setObjectName("fieldLabel")
+                form_layout.addWidget(lbl, index, 0)
+                form_layout.addWidget(widget, index, 1)
+            form_layout.setColumnStretch(1, 1)
+
+        global_form = QtWidgets.QGridLayout()
+        global_form.setHorizontalSpacing(8)
+        global_form.setVerticalSpacing(4)
+        global_rows = (
+            ("测试速度", _value_widget(self._test_speed_input, "mm/s")),
+            ("测试线长度", _value_widget(self._test_line_length_input, "mm")),
+            ("Y 间距", _value_widget(self._test_y_spacing_input, "mm")),
+            ("换头安全抬升", _value_widget(self._test_tool_change_safe_lift_input, "mm")),
+        )
+        for index, (label, widget) in enumerate(global_rows):
+            lbl = QtWidgets.QLabel(label)
+            lbl.setObjectName("fieldLabel")
+            col = index * 2
+            global_form.addWidget(lbl, 0, col)
+            global_form.addWidget(widget, 0, col + 1)
+        global_form.setColumnStretch(len(global_rows) * 2, 1)
+        print_test_layout.addWidget(_section_title("全局测试参数"))
+        print_test_layout.addLayout(global_form)
+
+        head_columns = QtWidgets.QHBoxLayout()
+        head_columns.setSpacing(14)
+
+        resin_column = QtWidgets.QWidget()
+        resin_layout = QtWidgets.QVBoxLayout(resin_column)
+        resin_layout.setContentsMargins(0, 0, 0, 0)
+        resin_layout.setSpacing(4)
+        resin_layout.addWidget(_section_title("树脂头参数"))
+        resin_form = QtWidgets.QGridLayout()
+        resin_form.setHorizontalSpacing(8)
+        resin_form.setVerticalSpacing(4)
+        _add_form_rows(resin_form, (
+            ("目标温度", _value_widget(self._test_temp_input)),
+            ("层高", _range_widget(
                 self._test_layer_height_min_input,
                 self._test_layer_height_max_input,
                 "mm",
             )),
-            ("树脂速度", _value_widget(self._test_speed_input, "mm/s")),
-            ("树脂挤出倍率", _range_widget(
+            ("挤出倍率", _range_widget(
                 self._test_scale_min_input,
                 self._test_scale_max_input,
             )),
-            ("树脂预挤出长度", _value_widget(self._test_prime_length_input, "mm E")),
-            ("树脂预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
-            ("树脂回抽长度", _value_widget(self._test_retract_length_input, "mm E")),
-            ("树脂回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
-            ("测试线长度", _value_widget(self._test_line_length_input, "mm")),
-            ("Y 间距", _value_widget(self._test_y_spacing_input, "mm")),
-            ("换头安全抬升", _value_widget(self._test_tool_change_safe_lift_input, "mm")),
-            ("树脂 Z 补偿", _value_widget(self._test_resin_z_comp_input, "mm")),
-            ("纤维目标温度", _value_widget(self._test_fiber_temp_input)),
-            ("纤维层高", _range_widget(
+            ("预挤出长度", _value_widget(self._test_prime_length_input, "mm E")),
+            ("预挤出速度", _value_widget(self._test_prime_speed_input, "mm/s E")),
+            ("回抽长度", _value_widget(self._test_retract_length_input, "mm E")),
+            ("回抽速度", _value_widget(self._test_retract_speed_input, "mm/s E")),
+        ))
+        resin_layout.addLayout(resin_form)
+        head_columns.addWidget(resin_column, 1, QtCore.Qt.AlignTop)
+
+        separator = QtWidgets.QFrame()
+        separator.setFrameShape(QtWidgets.QFrame.VLine)
+        separator.setFrameShadow(QtWidgets.QFrame.Sunken)
+        head_columns.addWidget(separator, 0, QtCore.Qt.AlignTop)
+
+        fiber_column = QtWidgets.QWidget()
+        fiber_layout = QtWidgets.QVBoxLayout(fiber_column)
+        fiber_layout.setContentsMargins(0, 0, 0, 0)
+        fiber_layout.setSpacing(4)
+        fiber_layout.addWidget(_section_title("纤维头参数"))
+        fiber_form = QtWidgets.QGridLayout()
+        fiber_form.setHorizontalSpacing(8)
+        fiber_form.setVerticalSpacing(4)
+        _add_form_rows(fiber_form, (
+            ("目标温度", _value_widget(self._test_fiber_temp_input)),
+            ("层高", _range_widget(
                 self._test_fiber_layer_height_min_input,
                 self._test_fiber_layer_height_max_input,
                 "mm",
             )),
-            ("纤维挤出倍率", _range_widget(
+            ("挤出倍率", _range_widget(
                 self._test_fiber_scale_min_input,
                 self._test_fiber_scale_max_input,
             )),
-            ("纤维预挤出长度", _value_widget(self._test_fiber_prime_length_input, "mm E")),
-            ("纤维预挤出速度", _value_widget(self._test_fiber_prime_speed_input, "mm/s E")),
-            ("纤维回抽长度", _value_widget(self._test_fiber_retract_length_input, "mm E")),
-            ("纤维回抽速度", _value_widget(self._test_fiber_retract_speed_input, "mm/s E")),
-            ("纤维 X 偏置", _value_widget(self._test_fiber_x_comp_input, "mm")),
-            ("纤维 Y 偏置", _value_widget(self._test_fiber_y_comp_input, "mm")),
-            ("纤维 Z 偏置", _value_widget(self._test_fiber_z_comp_input, "mm")),
-        )
-        for index, (label, widget) in enumerate(form_rows):
-            row = index // 2
-            col = (index % 2) * 2
-            lbl = QtWidgets.QLabel(label)
-            lbl.setObjectName("fieldLabel")
-            test_form.addWidget(lbl, row, col)
-            test_form.addWidget(widget, row, col + 1)
-        print_test_layout.addLayout(test_form)
+            ("预挤出长度", _value_widget(self._test_fiber_prime_length_input, "mm E")),
+            ("预挤出速度", _value_widget(self._test_fiber_prime_speed_input, "mm/s E")),
+            ("回抽长度", _value_widget(self._test_fiber_retract_length_input, "mm E")),
+            ("回抽速度", _value_widget(self._test_fiber_retract_speed_input, "mm/s E")),
+        ))
+        fiber_layout.addLayout(fiber_form)
+        head_columns.addWidget(fiber_column, 1, QtCore.Qt.AlignTop)
+        print_test_layout.addLayout(head_columns)
 
         self._test_correction_label = QtWidgets.QLabel("RSI 修正量: 未收到")
         self._test_correction_label.setObjectName("fieldLabel")
         self._test_correction_label.setWordWrap(True)
         print_test_layout.addWidget(self._test_correction_label)
 
-        self._btn_test_prepare = QtWidgets.QPushButton("进入测试准备")
+        self._btn_test_prepare = QtWidgets.QPushButton("进入树脂测试准备")
         self._btn_test_prepare.setMinimumHeight(30)
         self._btn_test_prepare.setCursor(QtCore.Qt.PointingHandCursor)
-        print_test_layout.addWidget(self._btn_test_prepare)
 
         z_row_up = QtWidgets.QHBoxLayout()
         z_row_down = QtWidgets.QHBoxLayout()
         self._test_z_buttons = []
-        for text_label, delta in (("上升 0.1", 0.1), ("上升 1", 1.0), ("上升 5", 5.0)):
+        for text_label, delta in (
+            ("Z +0.1", 0.1),
+            ("Z +1", 1.0),
+            ("Z +5", 5.0),
+        ):
             btn = QtWidgets.QPushButton(text_label)
+            btn.setMinimumHeight(28)
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.setEnabled(False)
             btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
             z_row_up.addWidget(btn)
             self._test_z_buttons.append(btn)
-        for text_label, delta in (("下降 0.1", -0.1), ("下降 1", -1.0), ("下降 5", -5.0)):
+        for text_label, delta in (
+            ("Z -0.1", -0.1),
+            ("Z -1", -1.0),
+            ("Z -5", -5.0),
+        ):
             btn = QtWidgets.QPushButton(text_label)
+            btn.setMinimumHeight(28)
+            btn.setCursor(QtCore.Qt.PointingHandCursor)
             btn.setEnabled(False)
             btn.clicked.connect(lambda _checked=False, d=delta: self._on_print_test_z(d))
             z_row_down.addWidget(btn)
             self._test_z_buttons.append(btn)
-        print_test_layout.addLayout(z_row_up)
-        print_test_layout.addLayout(z_row_down)
 
-        action_grid = QtWidgets.QGridLayout()
-        action_grid.setHorizontalSpacing(6)
-        action_grid.setVerticalSpacing(6)
-        self._btn_test_confirm_resin_height = QtWidgets.QPushButton("确认树脂打印高度")
-        self._btn_test_continue_fiber = QtWidgets.QPushButton("继续调整纤维头")
-        self._btn_test_print_resin = QtWidgets.QPushButton("开始测试树脂打印")
-        self._btn_test_apply_fiber_offset = QtWidgets.QPushButton("应用纤维偏置")
-        self._btn_test_confirm_fiber_offset = QtWidgets.QPushButton("确认纤维头偏置")
+        self._btn_test_confirm_resin_height = QtWidgets.QPushButton("确认打印高度")
+        self._btn_test_continue_fiber = QtWidgets.QPushButton("切换到纤维头")
+        self._btn_test_print_resin = QtWidgets.QPushButton("开始树脂测试")
+        self._btn_test_apply_fiber_offset = QtWidgets.QPushButton("应用偏置")
+        self._btn_test_confirm_fiber_offset = QtWidgets.QPushButton("确认偏置")
         self._btn_test_print_fiber = QtWidgets.QPushButton("直接打印纤维")
         self._btn_test_print_composite = QtWidgets.QPushButton("复合打印")
         self._btn_test_cut = QtWidgets.QPushButton("剪切")
         self._btn_test_confirm_height = QtWidgets.QPushButton("确认高度并打印测试线")
         self._btn_test_confirm_height.setVisible(False)
-        for index, btn in enumerate((
-            self._btn_test_confirm_resin_height,
-            self._btn_test_continue_fiber,
-            self._btn_test_print_resin,
-            self._btn_test_apply_fiber_offset,
-            self._btn_test_confirm_fiber_offset,
-            self._btn_test_print_fiber,
-            self._btn_test_print_composite,
-            self._btn_test_cut,
-        )):
-            btn.setMinimumHeight(30)
-            btn.setCursor(QtCore.Qt.PointingHandCursor)
-            btn.setEnabled(False)
-            action_grid.addWidget(btn, index // 2, index % 2)
-        print_test_layout.addLayout(action_grid)
+
+        resin_offset_grid = QtWidgets.QGridLayout()
+        resin_offset_grid.setHorizontalSpacing(6)
+        resin_offset_grid.setVerticalSpacing(4)
+        resin_z_label = QtWidgets.QLabel("Z 补偿")
+        resin_z_label.setObjectName("fieldLabel")
+        resin_offset_grid.addWidget(resin_z_label, 0, 0)
+        self._test_resin_z_comp_input.setEnabled(False)
+        self._test_resin_z_comp_input.setMinimumHeight(28)
+        resin_offset_grid.addWidget(
+            self._test_resin_z_comp_input, 0, 1, QtCore.Qt.AlignLeft
+        )
+        resin_offset_grid.setColumnStretch(2, 1)
+
+        fiber_offset_grid = QtWidgets.QGridLayout()
+        fiber_offset_grid.setHorizontalSpacing(6)
+        fiber_offset_grid.setVerticalSpacing(4)
+        fiber_offset_rows = (
+            ("X 偏置", self._test_fiber_x_comp_input),
+            ("Y 偏置", self._test_fiber_y_comp_input),
+            ("Z 补偿", self._test_fiber_z_comp_input),
+        )
+        for index, (label_text, input_widget) in enumerate(fiber_offset_rows):
+            col = index * 2
+            label = QtWidgets.QLabel(label_text)
+            label.setObjectName("fieldLabel")
+            fiber_offset_grid.addWidget(label, 0, col)
+            input_widget.setEnabled(False)
+            input_widget.setMinimumHeight(28)
+            fiber_offset_grid.addWidget(input_widget, 0, col + 1)
+            fiber_offset_grid.setColumnStretch(col + 1, 1)
+
+        action_columns = QtWidgets.QHBoxLayout()
+        action_columns.setSpacing(14)
+
+        def _action_column(title, buttons, extra_layouts=()):
+            column = QtWidgets.QWidget()
+            layout = QtWidgets.QVBoxLayout(column)
+            layout.setContentsMargins(0, 0, 0, 0)
+            layout.setSpacing(4)
+            layout.addWidget(_section_title(title))
+            for extra in extra_layouts:
+                layout.addLayout(extra)
+            grid = QtWidgets.QGridLayout()
+            grid.setHorizontalSpacing(6)
+            grid.setVerticalSpacing(4)
+            for index, btn in enumerate(buttons):
+                btn.setMinimumHeight(28)
+                btn.setCursor(QtCore.Qt.PointingHandCursor)
+                btn.setEnabled(False)
+                grid.addWidget(btn, index // 2, index % 2)
+            layout.addLayout(grid)
+            return column
+
+        self._btn_test_prepare.setEnabled(True)
+        print_test_layout.addWidget(self._btn_test_prepare)
+        action_columns.addWidget(_action_column(
+            "树脂头动作",
+            (
+                self._btn_test_confirm_resin_height,
+                self._btn_test_print_resin,
+            ),
+            (resin_offset_grid, z_row_up, z_row_down),
+        ), 2)
+        action_columns.addWidget(_action_column(
+            "纤维头动作",
+            (
+                self._btn_test_continue_fiber,
+                self._btn_test_apply_fiber_offset,
+                self._btn_test_confirm_fiber_offset,
+                self._btn_test_print_fiber,
+                self._btn_test_print_composite,
+                self._btn_test_cut,
+            ),
+            (fiber_offset_grid,),
+        ), 2)
+        print_test_layout.addLayout(action_columns)
 
         self._btn_export_uart_log = QtWidgets.QPushButton("导出诊断日志")
         self._btn_export_uart_log.setMinimumHeight(36)
@@ -3448,6 +3566,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         base_ready = bool(enabled and not self._print_test_busy)
         for btn in getattr(self, "_test_z_buttons", []):
             btn.setEnabled(base_ready)
+        if hasattr(self, "_test_resin_z_comp_input"):
+            self._test_resin_z_comp_input.setEnabled(base_ready)
         if hasattr(self, "_btn_test_confirm_height"):
             self._btn_test_confirm_height.setEnabled(base_ready)
         if not hasattr(self, "_btn_test_confirm_resin_height"):
@@ -3460,6 +3580,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
             base_ready and self._print_test_resin_height_confirmed
         )
         fiber_ready = base_ready and self.current_tool_id() == 1
+        for inp in (
+            self._test_fiber_x_comp_input,
+            self._test_fiber_y_comp_input,
+            self._test_fiber_z_comp_input,
+        ):
+            inp.setEnabled(fiber_ready)
         self._btn_test_apply_fiber_offset.setEnabled(fiber_ready)
         self._btn_test_confirm_fiber_offset.setEnabled(fiber_ready)
         self._btn_test_print_fiber.setEnabled(

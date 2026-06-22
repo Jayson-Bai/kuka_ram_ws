@@ -303,16 +303,34 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
     )[0]
 
     for text in (
-        "确认树脂打印高度",
-        "继续调整纤维头",
-        "开始测试树脂打印",
-        "应用纤维偏置",
-        "确认纤维头偏置",
+        "打印测试",
+        "全局测试参数",
+        "树脂头参数",
+        "纤维头参数",
+        "进入树脂测试准备",
+        "树脂头动作",
+        "纤维头动作",
+        "切换到纤维头",
+        "Z +0.1",
+        "Z -0.1",
+        "确认打印高度",
+        "开始树脂测试",
+        "X 偏置",
+        "Y 偏置",
+        "Z 补偿",
+        "应用偏置",
+        "确认偏置",
         "直接打印纤维",
-        "复合打印",
         "剪切",
+        "复合打印",
     ):
         assert text in test_section
+
+    assert "打印测试（树脂）" not in test_section
+    assert "全局动作" not in test_section
+    assert "纤维头：继续调整" not in test_section
+    assert "树脂头：" not in test_section
+    assert "纤维头：" not in test_section
 
     for attr in (
         "_test_resin_z_comp_input",
