@@ -3747,9 +3747,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         start = self._print_test_current_correction
         target = (
-            calibration.fiber_x_print_compensation_mm,
-            calibration.fiber_y_print_compensation_mm,
-            calibration.fiber_z_print_compensation_mm,
+            start[0] + calibration.fiber_x_print_compensation_mm,
+            start[1] + calibration.fiber_y_print_compensation_mm,
+            start[2] + calibration.fiber_z_print_compensation_mm,
             start[3],
             start[4],
             start[5],

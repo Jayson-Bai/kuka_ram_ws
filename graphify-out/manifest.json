@@ -1,2507 +1,2527 @@
 {
-  "/home/jayson/kuka_ram_ws/scripts/estimate_npz_rows.py": {
+  "scripts/estimate_npz_rows.py": {
     "mtime": 1770711443.5395277,
     "ast_hash": "e8627dbb3d875525acb08064e36155dc",
     "semantic_hash": "e8627dbb3d875525acb08064e36155dc"
   },
-  "/home/jayson/kuka_ram_ws/scripts/heartbeat_sim.py": {
+  "scripts/heartbeat_sim.py": {
     "mtime": 1766638882.3718863,
     "ast_hash": "91e785deb9b5c6d89c6f33e69aaf3084",
     "semantic_hash": "91e785deb9b5c6d89c6f33e69aaf3084"
   },
-  "/home/jayson/kuka_ram_ws/scripts/plot_gcode_xy.py": {
+  "scripts/plot_gcode_xy.py": {
     "mtime": 1770726339.1533003,
     "ast_hash": "ded721b27bfb9c570931e0893deedc5d",
     "semantic_hash": "ded721b27bfb9c570931e0893deedc5d"
   },
-  "/home/jayson/kuka_ram_ws/scripts/plot_layers_from_manifest.py": {
+  "scripts/plot_layers_from_manifest.py": {
     "mtime": 1770730642.7700589,
     "ast_hash": "ec4af61411e1190e2aae869268478e09",
     "semantic_hash": "ec4af61411e1190e2aae869268478e09"
   },
-  "/home/jayson/kuka_ram_ws/scripts/plot_npz_xy.py": {
+  "scripts/plot_npz_xy.py": {
     "mtime": 1770725937.5966043,
     "ast_hash": "663d6ebc939c5fd7025f77e7ab851223",
     "semantic_hash": "663d6ebc939c5fd7025f77e7ab851223"
   },
-  "/home/jayson/kuka_ram_ws/scripts/split_gcode_by_layer.py": {
+  "scripts/split_gcode_by_layer.py": {
     "mtime": 1770709273.9793434,
     "ast_hash": "a523dcb5d6864dd6b0d2bc36ee1ef80b",
     "semantic_hash": "a523dcb5d6864dd6b0d2bc36ee1ef80b"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/include/control_center/npz_loader.hpp": {
-    "mtime": 1781752692.5635428,
-    "ast_hash": "a47c226067fc49500ce505f75b1a94ee",
-    "semantic_hash": "a47c226067fc49500ce505f75b1a94ee"
+  "src/my_project/control_center/include/control_center/npz_loader.hpp": {
+    "mtime": 1782032268.475487,
+    "ast_hash": "3b0c90a545fc5b55c4399bee1302c2a2",
+    "semantic_hash": "3b0c90a545fc5b55c4399bee1302c2a2"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/include/control_center/queue_manager.hpp": {
+  "src/my_project/control_center/include/control_center/queue_manager.hpp": {
     "mtime": 1781752692.5635428,
     "ast_hash": "f8472af0149986f9ebc2d92f5c627f20",
     "semantic_hash": "f8472af0149986f9ebc2d92f5c627f20"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/src/center_node.cpp": {
+  "src/my_project/control_center/src/center_node.cpp": {
     "mtime": 1781752692.5635428,
     "ast_hash": "447dccc13aca83978eb1246cd52a136a",
     "semantic_hash": "447dccc13aca83978eb1246cd52a136a"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/src/extruder_latency_monitor_node.cpp": {
+  "src/my_project/control_center/src/extruder_latency_monitor_node.cpp": {
     "mtime": 1781752692.5635428,
     "ast_hash": "f4eacebea9b350508feb8d63d9306963",
     "semantic_hash": "f4eacebea9b350508feb8d63d9306963"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/src/npz_loader.cpp": {
-    "mtime": 1781752692.5635428,
-    "ast_hash": "5b61570de470f6b63d9bee6bb0a94075",
-    "semantic_hash": "5b61570de470f6b63d9bee6bb0a94075"
+  "src/my_project/control_center/src/npz_loader.cpp": {
+    "mtime": 1782032268.475487,
+    "ast_hash": "b9ebeb73e5748f1f7d700e6ed6216bf1",
+    "semantic_hash": "b9ebeb73e5748f1f7d700e6ed6216bf1"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/src/queue_manager.cpp": {
-    "mtime": 1781752692.5635428,
-    "ast_hash": "b65e0c85c2f235502044fd3967d132d2",
-    "semantic_hash": "b65e0c85c2f235502044fd3967d132d2"
+  "src/my_project/control_center/src/queue_manager.cpp": {
+    "mtime": 1782032268.475487,
+    "ast_hash": "8e0f3c608fc425c4a3c60d2035b92b69",
+    "semantic_hash": "8e0f3c608fc425c4a3c60d2035b92b69"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/src/system_manager_node.cpp": {
-    "mtime": 1781752692.5635428,
-    "ast_hash": "ac7e6dfa44b2e9794d222ec7388631d9",
-    "semantic_hash": "ac7e6dfa44b2e9794d222ec7388631d9"
+  "src/my_project/control_center/src/system_manager_node.cpp": {
+    "mtime": 1782032268.475487,
+    "ast_hash": "f56ce29d74a2ed2de5037d8220eff30f",
+    "semantic_hash": "f56ce29d74a2ed2de5037d8220eff30f"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/third_party/cnpy/cnpy.cpp": {
+  "src/my_project/control_center/third_party/cnpy/cnpy.cpp": {
     "mtime": 1781752692.5635428,
     "ast_hash": "20a0d8ad4417873529c75a4254e94eb8",
     "semantic_hash": "20a0d8ad4417873529c75a4254e94eb8"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/third_party/cnpy/cnpy.h": {
+  "src/my_project/control_center/third_party/cnpy/cnpy.h": {
     "mtime": 1781752692.5635428,
     "ast_hash": "dbd9c3135d37865368d09e4eea51f81a",
     "semantic_hash": "dbd9c3135d37865368d09e4eea51f81a"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/__init__.py": {
+  "src/my_project/gcode_planner/gcode_planner/__init__.py": {
     "mtime": 1765199933.3300657,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/BaseFunction.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/BaseFunction.py": {
     "mtime": 1781752692.5635428,
     "ast_hash": "fba3d909779b00914cfbb2899256e34d",
     "semantic_hash": "fba3d909779b00914cfbb2899256e34d"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/__init__.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/__init__.py": {
     "mtime": 1781752692.5635428,
     "ast_hash": "e26e5f95b28fd386359a4d08be590ff0",
     "semantic_hash": "e26e5f95b28fd386359a4d08be590ff0"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/bspline_curve.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/bspline_curve.py": {
     "mtime": 1781752692.5635428,
     "ast_hash": "5c95992a179858e1f2828d912ffdc346",
     "semantic_hash": "5c95992a179858e1f2828d912ffdc346"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/bspline_surface.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/bspline_surface.py": {
     "mtime": 1781752692.5635428,
     "ast_hash": "7314d461517e18a29f49500afd80dc0b",
     "semantic_hash": "7314d461517e18a29f49500afd80dc0b"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/parameter_selection.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/parameter_selection.py": {
     "mtime": 1781752692.5635428,
     "ast_hash": "a2e51e925afef01443269305e921de80",
     "semantic_hash": "a2e51e925afef01443269305e921de80"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline_approximation.py": {
+  "src/my_project/gcode_planner/gcode_planner/bspline_approximation.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "0ea2c650acf6d6ed852c106b80f53c71",
     "semantic_hash": "0ea2c650acf6d6ed852c106b80f53c71"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/cli.py": {
+  "src/my_project/gcode_planner/gcode_planner/cli.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "1d47bf61a285c3f54c1e1af66adaaf39",
     "semantic_hash": "1d47bf61a285c3f54c1e1af66adaaf39"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/gcode_parser.py": {
+  "src/my_project/gcode_planner/gcode_planner/gcode_parser.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "59e2425d6067d9c891f9e713357216bf",
     "semantic_hash": "59e2425d6067d9c891f9e713357216bf"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/npz_exporter.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "08ec2e4ba29863a20ff31478a502718b",
-    "semantic_hash": "08ec2e4ba29863a20ff31478a502718b"
+  "src/my_project/gcode_planner/gcode_planner/npz_exporter.py": {
+    "mtime": 1782032606.4447076,
+    "ast_hash": "88cc8091e8932f0b297b079b410987f2",
+    "semantic_hash": "88cc8091e8932f0b297b079b410987f2"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/polynomial_interpolator.py": {
+  "src/my_project/gcode_planner/gcode_planner/polynomial_interpolator.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "5df3713279d13b9975dda70d64f8b645",
     "semantic_hash": "5df3713279d13b9975dda70d64f8b645"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/print_test_generator.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "1df2a503d0cc60402c5894d72ea1e764",
-    "semantic_hash": "1df2a503d0cc60402c5894d72ea1e764"
+  "src/my_project/gcode_planner/gcode_planner/print_test_generator.py": {
+    "mtime": 1782045789.9606907,
+    "ast_hash": "8b9f9bff48964a7f7b3be072794acace",
+    "semantic_hash": "8b9f9bff48964a7f7b3be072794acace"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/types.py": {
+  "src/my_project/gcode_planner/gcode_planner/types.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "f65d31dcb8e5875dea8a06187f0ef9ee",
     "semantic_hash": "f65d31dcb8e5875dea8a06187f0ef9ee"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/setup.py": {
+  "src/my_project/gcode_planner/setup.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "f4d8afcba414d31878a013c8ce2a6026",
     "semantic_hash": "f4d8afcba414d31878a013c8ce2a6026"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/conftest.py": {
+  "src/my_project/gcode_planner/test/conftest.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "fd9403d6488ed11e48c93bafb8c01122",
     "semantic_hash": "fd9403d6488ed11e48c93bafb8c01122"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_copyright.py": {
+  "src/my_project/gcode_planner/test/test_copyright.py": {
     "mtime": 1765199933.3300657,
     "ast_hash": "4996344e5b6b7ac0c99a267f121398f4",
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_extrude_reset_payload.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "b83748100ec8856b5b82fd9a7873bc5f",
-    "semantic_hash": "b83748100ec8856b5b82fd9a7873bc5f"
+  "src/my_project/gcode_planner/test/test_extrude_reset_payload.py": {
+    "mtime": 1782032606.4447076,
+    "ast_hash": "36d31c08acc1743348b4668cb6c1d447",
+    "semantic_hash": "36d31c08acc1743348b4668cb6c1d447"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_flake8.py": {
+  "src/my_project/gcode_planner/test/test_flake8.py": {
     "mtime": 1765199933.3343332,
     "ast_hash": "aa129cddddd383a922ed54000fb385e5",
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_g92_pose_initialization.py": {
+  "src/my_project/gcode_planner/test/test_g92_pose_initialization.py": {
     "mtime": 1781752692.567543,
     "ast_hash": "a13e78324b75450c1b94822ff90a8e16",
     "semantic_hash": "a13e78324b75450c1b94822ff90a8e16"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_pep257.py": {
+  "src/my_project/gcode_planner/test/test_pep257.py": {
     "mtime": 1765199933.3343332,
     "ast_hash": "1a5086842153d5f68611ba9f8cb7e443",
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/test/test_print_test_generator.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "68eec3ede6c324d05cbd99a1949ed0d5",
-    "semantic_hash": "68eec3ede6c324d05cbd99a1949ed0d5"
+  "src/my_project/gcode_planner/test/test_print_test_generator.py": {
+    "mtime": 1782045748.829853,
+    "ast_hash": "3716064992fef195506113d542b0051e",
+    "semantic_hash": "3716064992fef195506113d542b0051e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/launch/startup.launch.py": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "5b1752339723af9350a4384b989bdc0e",
-    "semantic_hash": "5b1752339723af9350a4384b989bdc0e"
+  "src/my_project/my_project_startup/launch/startup.launch.py": {
+    "mtime": 1782032268.475487,
+    "ast_hash": "cd64876df2fa62d5a58b09248407ec9e",
+    "semantic_hash": "cd64876df2fa62d5a58b09248407ec9e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/my_project_startup/__init__.py": {
+  "src/my_project/my_project_startup/my_project_startup/__init__.py": {
     "mtime": 1766988319.2576852,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/setup.py": {
+  "src/my_project/my_project_startup/setup.py": {
     "mtime": 1766989467.0199463,
     "ast_hash": "b0bfb6318242c2da84c5268c8387309b",
     "semantic_hash": "b0bfb6318242c2da84c5268c8387309b"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/test/test_copyright.py": {
+  "src/my_project/my_project_startup/test/test_copyright.py": {
     "mtime": 1766988319.2576852,
     "ast_hash": "4996344e5b6b7ac0c99a267f121398f4",
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/test/test_flake8.py": {
+  "src/my_project/my_project_startup/test/test_flake8.py": {
     "mtime": 1766988319.2576852,
     "ast_hash": "aa129cddddd383a922ed54000fb385e5",
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/test/test_pep257.py": {
+  "src/my_project/my_project_startup/test/test_pep257.py": {
     "mtime": 1766988319.2576852,
     "ast_hash": "1a5086842153d5f68611ba9f8cb7e443",
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/my_project_ui/__init__.py": {
+  "src/my_project/my_project_ui/my_project_ui/__init__.py": {
     "mtime": 1766999178.9613922,
     "ast_hash": "aaf04bbf6860ac2c66ea46e2d51312e0",
     "semantic_hash": "aaf04bbf6860ac2c66ea46e2d51312e0"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/my_project_ui/ui_panel.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "f2a73fee763fb539d326572e52f7bc37",
-    "semantic_hash": "f2a73fee763fb539d326572e52f7bc37"
+  "src/my_project/my_project_ui/my_project_ui/ui_panel.py": {
+    "mtime": 1782106452.4106064,
+    "ast_hash": "647a9667f3c84fe4f7f20b78f20df9fd",
+    "semantic_hash": ""
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/setup.py": {
+  "src/my_project/my_project_ui/setup.py": {
     "mtime": 1766999120.3027332,
     "ast_hash": "a9b2df8c5e1e1ae5ea5397fe5ce61996",
     "semantic_hash": "a9b2df8c5e1e1ae5ea5397fe5ce61996"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_copyright.py": {
+  "src/my_project/my_project_ui/test/test_copyright.py": {
     "mtime": 1766999029.2208998,
     "ast_hash": "4996344e5b6b7ac0c99a267f121398f4",
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_flake8.py": {
+  "src/my_project/my_project_ui/test/test_flake8.py": {
     "mtime": 1766999029.2208998,
     "ast_hash": "aa129cddddd383a922ed54000fb385e5",
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_log_detail_and_alignment.py": {
+  "src/my_project/my_project_ui/test/test_log_detail_and_alignment.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "a86ac6e6dda5eb7ba8d523c62014916d",
     "semantic_hash": "a86ac6e6dda5eb7ba8d523c62014916d"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_mode_selection_layout.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "63cf64ea200f2ef9c95feb4500cec8f8",
-    "semantic_hash": "63cf64ea200f2ef9c95feb4500cec8f8"
+  "src/my_project/my_project_ui/test/test_mode_selection_layout.py": {
+    "mtime": 1782106480.0858476,
+    "ast_hash": "a4e8edec523b2280b4f2c978b6172e45",
+    "semantic_hash": ""
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_pep257.py": {
+  "src/my_project/my_project_ui/test/test_pep257.py": {
     "mtime": 1766999029.2252998,
     "ast_hash": "1a5086842153d5f68611ba9f8cb7e443",
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_print_test_matrix_export.py": {
-    "mtime": 1781752692.5715432,
-    "ast_hash": "6d86ff78d5e4d5dd89b2b8497b8b28de",
-    "semantic_hash": "6d86ff78d5e4d5dd89b2b8497b8b28de"
+  "src/my_project/my_project_ui/test/test_print_test_matrix_export.py": {
+    "mtime": 1782046702.1489918,
+    "ast_hash": "7db724c22011788e215639c505c923b0",
+    "semantic_hash": "7db724c22011788e215639c505c923b0"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_print_test_temperature_threshold.py": {
+  "src/my_project/my_project_ui/test/test_print_test_temperature_threshold.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "61c839105be034191a78ddaabc352b8e",
     "semantic_hash": "61c839105be034191a78ddaabc352b8e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_rqt_context_node_lifecycle.py": {
+  "src/my_project/my_project_ui/test/test_rqt_context_node_lifecycle.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "4a1abcff4ef6217cddcc4aeca89ed0bf",
     "semantic_hash": "4a1abcff4ef6217cddcc4aeca89ed0bf"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/test/test_rsi_log_readability.py": {
+  "src/my_project/my_project_ui/test/test_rsi_log_readability.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "8705c59b39900842ba229ee0308a4c42",
     "semantic_hash": "8705c59b39900842ba229ee0308a4c42"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/rsi_server/src/rsi_node.cpp": {
+  "src/my_project/rsi_server/src/rsi_node.cpp": {
     "mtime": 1781752692.5715432,
     "ast_hash": "871975d020db654bcf405db9b13ba24f",
     "semantic_hash": "871975d020db654bcf405db9b13ba24f"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/uart_bridge/src/uart_node.cpp": {
+  "src/my_project/uart_bridge/src/uart_node.cpp": {
     "mtime": 1781752692.5715432,
     "ast_hash": "cf6706ecfef6f40943300d8ae499c651",
     "semantic_hash": "cf6706ecfef6f40943300d8ae499c651"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/uart_bridge/test/test_extrude_reset_handshake.py": {
+  "src/my_project/uart_bridge/test/test_extrude_reset_handshake.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "3ee00e16453daf4c471397c4a23b68b7",
     "semantic_hash": "3ee00e16453daf4c471397c4a23b68b7"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/uart_bridge/test/test_temperature_ready_threshold.py": {
+  "src/my_project/uart_bridge/test/test_temperature_ready_threshold.py": {
     "mtime": 1781752692.5715432,
     "ast_hash": "d1a0efa0ec3feeac8ec7a7d73bee269d",
     "semantic_hash": "d1a0efa0ec3feeac8ec7a7d73bee269d"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/launch/simulation.launch.py": {
+  "src/my_project_simulation/launch/simulation.launch.py": {
     "mtime": 1781752692.5755432,
     "ast_hash": "cf89332848cb40323babd9e53e9a9d4e",
     "semantic_hash": "cf89332848cb40323babd9e53e9a9d4e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/my_project_simulation/__init__.py": {
+  "src/my_project_simulation/my_project_simulation/__init__.py": {
     "mtime": 1779706747.9385948,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/my_project_simulation/mock_kuka.py": {
+  "src/my_project_simulation/my_project_simulation/mock_kuka.py": {
     "mtime": 1781752692.5755432,
     "ast_hash": "b5e375931bd4d2d288ea9e7035167265",
     "semantic_hash": "b5e375931bd4d2d288ea9e7035167265"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/my_project_simulation/mock_mcu.py": {
+  "src/my_project_simulation/my_project_simulation/mock_mcu.py": {
     "mtime": 1781752692.5755432,
     "ast_hash": "efa156234a813a6348a5eefd3c568b5e",
     "semantic_hash": "efa156234a813a6348a5eefd3c568b5e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/setup.py": {
+  "src/my_project_simulation/setup.py": {
     "mtime": 1781752692.5755432,
     "ast_hash": "e927a560491347342ce55adee91f1efc",
     "semantic_hash": "e927a560491347342ce55adee91f1efc"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/test/test_copyright.py": {
+  "src/my_project_simulation/test/test_copyright.py": {
     "mtime": 1779706747.9427242,
     "ast_hash": "4996344e5b6b7ac0c99a267f121398f4",
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/test/test_flake8.py": {
+  "src/my_project_simulation/test/test_flake8.py": {
     "mtime": 1779706747.9427242,
     "ast_hash": "aa129cddddd383a922ed54000fb385e5",
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project_simulation/test/test_pep257.py": {
+  "src/my_project_simulation/test/test_pep257.py": {
     "mtime": 1779706747.9427242,
     "ast_hash": "1a5086842153d5f68611ba9f8cb7e443",
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/gpio_config.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/gpio_config.h": {
     "mtime": 1765196209.455741,
     "ast_hash": "5dc97d59b799edf76b6db8ed57c8e239",
     "semantic_hash": "5dc97d59b799edf76b6db8ed57c8e239"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/gpio_value.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/gpio_value.h": {
     "mtime": 1765196209.455741,
     "ast_hash": "1b5e5b594f6d24055b0559bb1be2b0e0",
     "semantic_hash": "1b5e5b594f6d24055b0559bb1be2b0e0"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/irobot.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/irobot.h": {
     "mtime": 1765196209.455741,
     "ast_hash": "bf41be1ae382e02dce90c06aaf69062f",
     "semantic_hash": "bf41be1ae382e02dce90c06aaf69062f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/message_builder.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/message_builder.h": {
     "mtime": 1765196209.455741,
     "ast_hash": "e651b3c6df4269c3a9f57fc141fcb704",
     "semantic_hash": "e651b3c6df4269c3a9f57fc141fcb704"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/status.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/include/kuka/external-control-sdk/common/status.h": {
     "mtime": 1765196209.455741,
     "ast_hash": "e49b6aa382bbe7fd75ba38453e5454d5",
     "semantic_hash": "e49b6aa382bbe7fd75ba38453e5454d5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/src/status.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/common/src/status.cc": {
     "mtime": 1765196209.455741,
     "ast_hash": "cce3225ce1a3bc6c70ef379b7f4f2862",
     "semantic_hash": "cce3225ce1a3bc6c70ef379b7f4f2862"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/arena_wrapper.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/arena_wrapper.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "8e4b512580b4e49d9062543a64941ea6",
     "semantic_hash": "8e4b512580b4e49d9062543a64941ea6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/configuration.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/configuration.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "3d88952bfafb820651c727722ea743ef",
     "semantic_hash": "3d88952bfafb820651c727722ea743ef"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/message_builder.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/message_builder.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "a6e90082a40f6732e74c9b3d04d29f6b",
     "semantic_hash": "a6e90082a40f6732e74c9b3d04d29f6b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/robot.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/robot.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "a0f7f0fe2c30e2ae4a7afcb2a0353cae",
     "semantic_hash": "a0f7f0fe2c30e2ae4a7afcb2a0353cae"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/sdk.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/include/kuka/external-control-sdk/iiqka/sdk.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "d9f009362853fa7923de409571cf3956",
     "semantic_hash": "d9f009362853fa7923de409571cf3956"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/src/robot.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/src/robot.cc": {
     "mtime": 1765196209.4642324,
     "ast_hash": "575a9edf2bf542bd98ad956ede137f14",
     "semantic_hash": "575a9edf2bf542bd98ad956ede137f14"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test-assets/fake_command_handling_service.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test-assets/fake_command_handling_service.cc": {
     "mtime": 1765196209.4642324,
     "ast_hash": "bb5449237177f5998f40a5fa6b537e04",
     "semantic_hash": "bb5449237177f5998f40a5fa6b537e04"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test-assets/fake_command_handling_service.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test-assets/fake_command_handling_service.h": {
     "mtime": 1765196209.4642324,
     "ast_hash": "8918490b79a5daff690b89f553d36b90",
     "semantic_hash": "8918490b79a5daff690b89f553d36b90"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test_message_builder.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test_message_builder.cc": {
     "mtime": 1765196209.468478,
     "ast_hash": "22dff837c56cad82e514c860d0bfba26",
     "semantic_hash": "22dff837c56cad82e514c860d0bfba26"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test_robot.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/test/test_robot.cc": {
     "mtime": 1765196209.468478,
     "ast_hash": "692e6d140c551ffb35a35d98c007371b",
     "semantic_hash": "692e6d140c551ffb35a35d98c007371b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/configuration.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/configuration.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "738be97e6de7d9cdc2a0e951fcdec1c3",
     "semantic_hash": "738be97e6de7d9cdc2a0e951fcdec1c3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/client.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/client.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "b2438208adca32016ed4ed537e79d677",
     "semantic_hash": "b2438208adca32016ed4ed537e79d677"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/extension.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/extension.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "b27292785af307b13b684d79747a2c95",
     "semantic_hash": "b27292785af307b13b684d79747a2c95"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/robot_interface.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/eki/robot_interface.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "4fa90b2c5d74e9d63c19164b9f4d787a",
     "semantic_hash": "4fa90b2c5d74e9d63c19164b9f4d787a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/gpio_config.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/gpio_config.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "f43fe8120546542dfe65b45a8305e64d",
     "semantic_hash": "f43fe8120546542dfe65b45a8305e64d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/gpio_value.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/gpio_value.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "d568e1f2e71c6e9e351fbe0f398af355",
     "semantic_hash": "d568e1f2e71c6e9e351fbe0f398af355"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/message_builder.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/message_builder.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "69ef8fea941c289bb673e4bf2ccd73d4",
     "semantic_hash": "69ef8fea941c289bb673e4bf2ccd73d4"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/robot.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/robot.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "de58dec159a74c5371c95a50011ab496",
     "semantic_hash": "de58dec159a74c5371c95a50011ab496"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/rsi/endpoint.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/rsi/endpoint.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "6832969f682241629482693a291f29f8",
     "semantic_hash": "6832969f682241629482693a291f29f8"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/rsi/robot_interface.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/include/kuka/external-control-sdk/kss/rsi/robot_interface.h": {
     "mtime": 1765196209.4727237,
     "ast_hash": "1df025b07c8d7b71920bd991864354bf",
     "semantic_hash": "1df025b07c8d7b71920bd991864354bf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/eki/client.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/eki/client.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "4de604f644174cae44b18797790b9a81",
     "semantic_hash": "4de604f644174cae44b18797790b9a81"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/eki/robot_interface.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/eki/robot_interface.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "e64fd63228c86d316cdb1c53bf3b4cdd",
     "semantic_hash": "e64fd63228c86d316cdb1c53bf3b4cdd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/message_builder.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/message_builder.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "275116f3ad5718ba04cb68f66ff99aad",
     "semantic_hash": "275116f3ad5718ba04cb68f66ff99aad"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/robot.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/robot.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "ef92ae420316cf96c130ba2b59f010fe",
     "semantic_hash": "ef92ae420316cf96c130ba2b59f010fe"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/rsi/endpoint.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/rsi/endpoint.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "436b90647804cae6c46c561efb1eb9cd",
     "semantic_hash": "436b90647804cae6c46c561efb1eb9cd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/rsi/robot_interface.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/src/rsi/robot_interface.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "bd331a892ae03fc90174d8a05b68a8fa",
     "semantic_hash": "bd331a892ae03fc90174d8a05b68a8fa"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/test/test_message_builder.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/test/test_message_builder.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "f42fc496241589f84a5d80478152360e",
     "semantic_hash": "f42fc496241589f84a5d80478152360e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/test/test_robot.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/test/test_robot.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "563721ef67943b1ed6c25ce0b48ec38e",
     "semantic_hash": "563721ef67943b1ed6c25ce0b48ec38e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/dissector.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/dissector.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "ed39c8d3d81d3d0379a9affe691bf7d2",
     "semantic_hash": "ed39c8d3d81d3d0379a9affe691bf7d2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/publisher.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/publisher.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "e5a3f1ce217b6a9c13e11dfaff8b1d08",
     "semantic_hash": "e5a3f1ce217b6a9c13e11dfaff8b1d08"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/replier.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/replier.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "7583ff8d16a940cd2c62bb5c9228d958",
     "semantic_hash": "7583ff8d16a940cd2c62bb5c9228d958"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/requester.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/requester.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "51fb70decd61232a0f356be0f40c6b88",
     "semantic_hash": "51fb70decd61232a0f356be0f40c6b88"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/secure_replier.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/secure_replier.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "a46da8f9b39aba61f46a097e36d93d45",
     "semantic_hash": "a46da8f9b39aba61f46a097e36d93d45"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/secure_socket.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/secure_socket.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "f9adde1fd718a30e58f952f6cc676430",
     "semantic_hash": "f9adde1fd718a30e58f952f6cc676430"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/socket.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/socket.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "acb8fc1f2600ca8f2aafa6bc6c851377",
     "semantic_hash": "acb8fc1f2600ca8f2aafa6bc6c851377"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/subscriber.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/subscriber.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "67b7f487c7dfc99f1a366955eead95ee",
     "semantic_hash": "67b7f487c7dfc99f1a366955eead95ee"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/tcp_client.h": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/include/kuka/external-control-sdk/utils/os-core-udp-communication/tcp_client.h": {
     "mtime": 1765196209.4769695,
     "ast_hash": "72de3aa86c8ba2e30bdc89b25c92a7d8",
     "semantic_hash": "72de3aa86c8ba2e30bdc89b25c92a7d8"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/dissector.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/dissector.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "76091a4bfe934febfdfb2a79b382b547",
     "semantic_hash": "76091a4bfe934febfdfb2a79b382b547"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/publisher.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/publisher.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "687d31904b3f20ca690e9171dc2dcd77",
     "semantic_hash": "687d31904b3f20ca690e9171dc2dcd77"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/replier.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/replier.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "acd97c373d47f126fb9484ea5ba333ba",
     "semantic_hash": "acd97c373d47f126fb9484ea5ba333ba"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/requester.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/requester.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "3056dafe7047df77b8bba96c12a1aa24",
     "semantic_hash": "3056dafe7047df77b8bba96c12a1aa24"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/secure_replier.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/secure_replier.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "b3c685544a271abfbc52179b7e6d4691",
     "semantic_hash": "b3c685544a271abfbc52179b7e6d4691"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/secure_socket.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/secure_socket.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "453f3de1b59f9082208db8ddac6bf0e2",
     "semantic_hash": "453f3de1b59f9082208db8ddac6bf0e2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/socket.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/socket.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "305ed5f59a243df6e52d5eeba3ada6f9",
     "semantic_hash": "305ed5f59a243df6e52d5eeba3ada6f9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/subscriber.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/subscriber.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "d6a1243203695597bb42ae30e26fb2e4",
     "semantic_hash": "d6a1243203695597bb42ae30e26fb2e4"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/tcp_client.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/utils/src/os-core-udp-communication/tcp_client.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "e20b99d1790b9025bc24bd5c92dd5f71",
     "semantic_hash": "e20b99d1790b9025bc24bd5c92dd5f71"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/include/event-handlers/control_event_handler.hpp": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/include/event-handlers/control_event_handler.hpp": {
     "mtime": 1765196209.4769695,
     "ast_hash": "e41b8b1ef7e7651922e002877693ef4e",
     "semantic_hash": "e41b8b1ef7e7651922e002877693ef4e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/include/event-handlers/kss_event_handler.hpp": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/include/event-handlers/kss_event_handler.hpp": {
     "mtime": 1765196209.4769695,
     "ast_hash": "94dbc115a724b52ba9a2ae9d409a233c",
     "semantic_hash": "94dbc115a724b52ba9a2ae9d409a233c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/control_example.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/control_example.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "353f785a2b3eea348d447d02ce62f8e3",
     "semantic_hash": "353f785a2b3eea348d447d02ce62f8e3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/eki_rsi_example.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/eki_rsi_example.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "42a81df13b79b4e587e1fd9e7beecf9e",
     "semantic_hash": "42a81df13b79b4e587e1fd9e7beecf9e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/monitoring_example.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/monitoring_example.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "000db0e89e5740d28b20b32499e5b20a",
     "semantic_hash": "000db0e89e5740d28b20b32499e5b20a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/multi_rsi_robot_example.cc": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/src/multi_rsi_robot_example.cc": {
     "mtime": 1765196209.4769695,
     "ast_hash": "6fbbd5f80ec0d2b27604396640351a87",
     "semantic_hash": "6fbbd5f80ec0d2b27604396640351a87"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_configuration_controller/include/fri_configuration_controller/fri_configuration_controller.hpp": {
+  "src/third_party/kuka_drivers/controllers/fri_configuration_controller/include/fri_configuration_controller/fri_configuration_controller.hpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "df4f81cb737b55d1cd45076d9ecc56aa",
     "semantic_hash": "df4f81cb737b55d1cd45076d9ecc56aa"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_configuration_controller/include/fri_configuration_controller/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/fri_configuration_controller/include/fri_configuration_controller/visibility_control.h": {
     "mtime": 1765196119.085226,
     "ast_hash": "7df0cd20e9491240e00d8fbaa64d3ed5",
     "semantic_hash": "7df0cd20e9491240e00d8fbaa64d3ed5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_configuration_controller/src/fri_configuration_controller.cpp": {
+  "src/third_party/kuka_drivers/controllers/fri_configuration_controller/src/fri_configuration_controller.cpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "39583c45840cf50368bf7047a4b7a74b",
     "semantic_hash": "39583c45840cf50368bf7047a4b7a74b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_state_broadcaster/include/fri_state_broadcaster/fri_state_broadcaster.hpp": {
+  "src/third_party/kuka_drivers/controllers/fri_state_broadcaster/include/fri_state_broadcaster/fri_state_broadcaster.hpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "3f1b984fc77ff7fd1bca7b5e533bbd9d",
     "semantic_hash": "3f1b984fc77ff7fd1bca7b5e533bbd9d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_state_broadcaster/include/fri_state_broadcaster/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/fri_state_broadcaster/include/fri_state_broadcaster/visibility_control.h": {
     "mtime": 1765196119.085226,
     "ast_hash": "fb8567e5ecc2f8415fa808a2551953d4",
     "semantic_hash": "fb8567e5ecc2f8415fa808a2551953d4"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_state_broadcaster/src/fri_state_broadcaster.cpp": {
+  "src/third_party/kuka_drivers/controllers/fri_state_broadcaster/src/fri_state_broadcaster.cpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "76fd725d09e2e00d975ff518e07fecdb",
     "semantic_hash": "76fd725d09e2e00d975ff518e07fecdb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/include/joint_group_impedance_controller/joint_group_impedance_controller.hpp": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/include/joint_group_impedance_controller/joint_group_impedance_controller.hpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "8447dbb292c00b979f76c37e57f72c45",
     "semantic_hash": "8447dbb292c00b979f76c37e57f72c45"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/include/joint_group_impedance_controller/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/include/joint_group_impedance_controller/visibility_control.h": {
     "mtime": 1765196119.085226,
     "ast_hash": "a83e3c0f4ef9e6a30429956092e6c771",
     "semantic_hash": "a83e3c0f4ef9e6a30429956092e6c771"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/src/joint_group_impedance_controller.cpp": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/src/joint_group_impedance_controller.cpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "584c0f4b4e829fc9ddc2bb8666e49d19",
     "semantic_hash": "584c0f4b4e829fc9ddc2bb8666e49d19"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/include/kuka_control_mode_handler/kuka_control_mode_handler.hpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/include/kuka_control_mode_handler/kuka_control_mode_handler.hpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "563687732a59dad9a4fb1b2287b5b8ee",
     "semantic_hash": "563687732a59dad9a4fb1b2287b5b8ee"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/include/kuka_control_mode_handler/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/include/kuka_control_mode_handler/visibility_control.h": {
     "mtime": 1765196119.085226,
     "ast_hash": "d807e59894109612dac56b3535c5df67",
     "semantic_hash": "d807e59894109612dac56b3535c5df67"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/src/kuka_control_mode_handler.cpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/src/kuka_control_mode_handler.cpp": {
     "mtime": 1765196119.085226,
     "ast_hash": "c035aeef0a496ac22619fd5545076fae",
     "semantic_hash": "c035aeef0a496ac22619fd5545076fae"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/include/kuka_event_broadcaster/kuka_event_broadcaster.hpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/include/kuka_event_broadcaster/kuka_event_broadcaster.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "97f8702b51888fe0856cf429cbca0732",
     "semantic_hash": "97f8702b51888fe0856cf429cbca0732"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/include/kuka_event_broadcaster/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/include/kuka_event_broadcaster/visibility_control.h": {
     "mtime": 1765196119.0894725,
     "ast_hash": "511d7ed4adc1bcd2fc85dacaa7b927f6",
     "semantic_hash": "511d7ed4adc1bcd2fc85dacaa7b927f6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/src/kuka_event_broadcaster.cpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/src/kuka_event_broadcaster.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "a996d1e14db7fc93f91b87af1e922628",
     "semantic_hash": "a996d1e14db7fc93f91b87af1e922628"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/include/kuka_kss_message_handler/kuka_kss_message_handler.hpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/include/kuka_kss_message_handler/kuka_kss_message_handler.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "f97437b15a6208fcb26ba5d72741b3b3",
     "semantic_hash": "f97437b15a6208fcb26ba5d72741b3b3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/include/kuka_kss_message_handler/visibility_control.h": {
+  "src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/include/kuka_kss_message_handler/visibility_control.h": {
     "mtime": 1765196119.0894725,
     "ast_hash": "af5a5473657820068eb938afd2a7671f",
     "semantic_hash": "af5a5473657820068eb938afd2a7671f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/src/kuka_kss_message_handler.cpp": {
+  "src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/src/kuka_kss_message_handler.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "3bd0a9b75ffa9854d3e7139b363c88f8",
     "semantic_hash": "3bd0a9b75ffa9854d3e7139b363c88f8"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/include/iiqka_moveit_example/moveit_example.hpp": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/include/iiqka_moveit_example/moveit_example.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "cf87e39569235e502ec61519b6c2e651",
     "semantic_hash": "cf87e39569235e502ec61519b6c2e651"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/launch_trajectory_publisher.launch.py": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/launch_trajectory_publisher.launch.py": {
     "mtime": 1765196119.0894725,
     "ast_hash": "ae26735259fb0f71db4041e3c676962e",
     "semantic_hash": "ae26735259fb0f71db4041e3c676962e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/moveit_planning_example.launch.py": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/moveit_planning_example.launch.py": {
     "mtime": 1765196119.0894725,
     "ast_hash": "6160ad7cd6240c2ba1d633d4664aec12",
     "semantic_hash": "6160ad7cd6240c2ba1d633d4664aec12"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/multi_robot_startup.launch.py": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/launch/multi_robot_startup.launch.py": {
     "mtime": 1765196119.0894725,
     "ast_hash": "05702a73ae15e38691c11588580367a4",
     "semantic_hash": "05702a73ae15e38691c11588580367a4"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_basic_planners_example.cpp": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_basic_planners_example.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "bc0c2417542ed5ac492f98fd8a3226aa",
     "semantic_hash": "bc0c2417542ed5ac492f98fd8a3226aa"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_collision_avoidance_example.cpp": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_collision_avoidance_example.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "2d4025a84d3ebbd7e3d4fb61ec838bcc",
     "semantic_hash": "2d4025a84d3ebbd7e3d4fb61ec838bcc"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_constrained_planning_example.cpp": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_constrained_planning_example.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "7a9c1bd5a85cfef2362a8c80b2cbe2e3",
     "semantic_hash": "7a9c1bd5a85cfef2362a8c80b2cbe2e3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_depalletizing_example.cpp": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/src/moveit_depalletizing_example.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "e33f35dce372c1c8492ffa9a2836f28d",
     "semantic_hash": "e33f35dce372c1c8492ffa9a2836f28d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/communication_helpers/ros2_control_tools.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/communication_helpers/ros2_control_tools.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "35977ab679a7dc579397822e34e24fbf",
     "semantic_hash": "35977ab679a7dc579397822e34e24fbf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/communication_helpers/service_tools.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/communication_helpers/service_tools.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "9c7c11262959958f2f57a1540d8e9857",
     "semantic_hash": "9c7c11262959958f2f57a1540d8e9857"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/control_mode.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/control_mode.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "71bea72e2b110b9365fd8c2a34d0c1b6",
     "semantic_hash": "71bea72e2b110b9365fd8c2a34d0c1b6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/controller_handler.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/controller_handler.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "2a2f2bb56889d11c9d6a2178c362a697",
     "semantic_hash": "2a2f2bb56889d11c9d6a2178c362a697"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/controller_names.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/controller_names.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "b11d5fa8febdcea0630197baed4dc82e",
     "semantic_hash": "b11d5fa8febdcea0630197baed4dc82e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/hardware_event.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/hardware_event.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "205d8b46a91dd7a184da084f4f86d093",
     "semantic_hash": "205d8b46a91dd7a184da084f4f86d093"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/hardware_interface_types.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/hardware_interface_types.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "c96084cdb50fd9c674bdfda32ed15855",
     "semantic_hash": "c96084cdb50fd9c674bdfda32ed15855"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/parameter_handler.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/parameter_handler.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "ae80391cd3d2e0ad7113bc1a5eec5360",
     "semantic_hash": "ae80391cd3d2e0ad7113bc1a5eec5360"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/ros2_base_lc_node.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/ros2_base_lc_node.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "59de41a76ecab2e0030805abbb956501",
     "semantic_hash": "59de41a76ecab2e0030805abbb956501"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/ros2_base_node.hpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/include/kuka_drivers_core/ros2_base_node.hpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "96fff55e0e95f0aa1b68d5b8caca5493",
     "semantic_hash": "96fff55e0e95f0aa1b68d5b8caca5493"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/src/control_node.cpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/src/control_node.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "bcc1415d8732a515e2db3bae1af2feb6",
     "semantic_hash": "bcc1415d8732a515e2db3bae1af2feb6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/src/controller_handler.cpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/src/controller_handler.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "a65415d14ef8e5f33698eea3cec97855",
     "semantic_hash": "a65415d14ef8e5f33698eea3cec97855"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/src/parameter_handler.cpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/src/parameter_handler.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "032dc426739e23dc7ff4ab8249cd451a",
     "semantic_hash": "032dc426739e23dc7ff4ab8249cd451a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/src/ros2_base_lc_node.cpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/src/ros2_base_lc_node.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "000bf5d9358200a0d889dd57cb97f740",
     "semantic_hash": "000bf5d9358200a0d889dd57cb97f740"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/src/ros2_base_node.cpp": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/src/ros2_base_node.cpp": {
     "mtime": 1765196119.0894725,
     "ast_hash": "b8e8bd7efdd7cd3e59c089f9b9fce7e3",
     "semantic_hash": "b8e8bd7efdd7cd3e59c089f9b9fce7e3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/event_observer.hpp": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/event_observer.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "a3fdd215ae9361798645878cd3789161",
     "semantic_hash": "a3fdd215ae9361798645878cd3789161"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/hardware_interface.hpp": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/hardware_interface.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "8ceda1984044e364c4af5ac54181cdda",
     "semantic_hash": "8ceda1984044e364c4af5ac54181cdda"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/robot_manager_node.hpp": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/robot_manager_node.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "43e547a9b8df9a10d0f571d1f0045428",
     "semantic_hash": "43e547a9b8df9a10d0f571d1f0045428"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/visibility_control.h": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/include/kuka_iiqka_eac_driver/visibility_control.h": {
     "mtime": 1765196119.0937188,
     "ast_hash": "5adf5b665b49af66e099163c78a09917",
     "semantic_hash": "5adf5b665b49af66e099163c78a09917"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/launch/startup.launch.py": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/launch/startup.launch.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "55d3bebd10d0cab738fb7ab755c92025",
     "semantic_hash": "55d3bebd10d0cab738fb7ab755c92025"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/launch/startup_with_rviz.launch.py": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/launch/startup_with_rviz.launch.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "82fcddf55e325992641758a8160c7507",
     "semantic_hash": "82fcddf55e325992641758a8160c7507"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/src/hardware_interface.cpp": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/src/hardware_interface.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "8fc4bc2b5e7084505e6794224a1bc21a",
     "semantic_hash": "8fc4bc2b5e7084505e6794224a1bc21a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/src/robot_manager_node.cpp": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/src/robot_manager_node.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "ba5ff809c113da1da6edbe2c49808cca",
     "semantic_hash": "ba5ff809c113da1da6edbe2c49808cca"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_driver_activation.py": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_driver_activation.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "a11bb7f70634d4f622154ec3c89a4a56",
     "semantic_hash": "a11bb7f70634d4f622154ec3c89a4a56"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_driver_startup.py": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_driver_startup.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "4b917a6d5216b9ae6df3dffd2d658091",
     "semantic_hash": "4b917a6d5216b9ae6df3dffd2d658091"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_multi_robot_startup.py": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/test_multi_robot_startup.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "9a05f30598912e93e6a91630e06ffd02",
     "semantic_hash": "9a05f30598912e93e6a91630e06ffd02"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/event_observer_eki_rsi.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/event_observer_eki_rsi.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "1a6340ffbf6ccd6aac2f02bb459d27d5",
     "semantic_hash": "1a6340ffbf6ccd6aac2f02bb459d27d5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/hardware_interface_eki_rsi.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/hardware_interface_eki_rsi.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "a5c3b27878f23f295c36524c08c18aa3",
     "semantic_hash": "a5c3b27878f23f295c36524c08c18aa3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/hardware_interface_rsi_only.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/hardware_interface_rsi_only.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "9131955ff96ca8e4b40894be321b11c7",
     "semantic_hash": "9131955ff96ca8e4b40894be321b11c7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_manager_node_eki_rsi.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_manager_node_eki_rsi.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "48d340212046a1167408c064dbd0f61b",
     "semantic_hash": "48d340212046a1167408c064dbd0f61b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_manager_node_rsi_only.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_manager_node_rsi_only.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "3f1c0a12b7ccddc0fe70f7dda69fb5db",
     "semantic_hash": "3f1c0a12b7ccddc0fe70f7dda69fb5db"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_status_manager.hpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/robot_status_manager.hpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "b344f123bafaf487dbb89fee183e4e12",
     "semantic_hash": "b344f123bafaf487dbb89fee183e4e12"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/visibility_control.h": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/include/kuka_rsi_driver/visibility_control.h": {
     "mtime": 1765196119.0937188,
     "ast_hash": "fca8d0fa1dd7569b89fb0576e0150d56",
     "semantic_hash": "fca8d0fa1dd7569b89fb0576e0150d56"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/launch/startup.launch.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/launch/startup.launch.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "0fa0ec79d8d43ca32f7c0f0d38d8d86a",
     "semantic_hash": "0fa0ec79d8d43ca32f7c0f0d38d8d86a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/launch/startup_with_rviz.launch.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/launch/startup_with_rviz.launch.py": {
     "mtime": 1765196119.0937188,
     "ast_hash": "195cbca4a6a8e66ced9af662c1d0dccd",
     "semantic_hash": "195cbca4a6a8e66ced9af662c1d0dccd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/src/hardware_interface_eki_rsi.cpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/src/hardware_interface_eki_rsi.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "3e236335922a55ee313e1e4ea15ca39d",
     "semantic_hash": "3e236335922a55ee313e1e4ea15ca39d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/src/hardware_interface_rsi_only.cpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/src/hardware_interface_rsi_only.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "6d662accbf431a4a5752d0d5bdb5a7ef",
     "semantic_hash": "6d662accbf431a4a5752d0d5bdb5a7ef"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/src/robot_manager_node_eki_rsi.cpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/src/robot_manager_node_eki_rsi.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "e187832f1906edfd38fe8968702f5b15",
     "semantic_hash": "e187832f1906edfd38fe8968702f5b15"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/src/robot_manager_node_rsi_only.cpp": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/src/robot_manager_node_rsi_only.cpp": {
     "mtime": 1765196119.0937188,
     "ast_hash": "464b08d0de5d16c529cc74399d9191df",
     "semantic_hash": "464b08d0de5d16c529cc74399d9191df"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_activation.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_activation.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "b3c4b047c6e703aeedb45cd8564d6a0d",
     "semantic_hash": "b3c4b047c6e703aeedb45cd8564d6a0d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_startup_eki_rsi.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_startup_eki_rsi.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "79a100ac402fcede5b37f380605002fe",
     "semantic_hash": "79a100ac402fcede5b37f380605002fe"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_startup_rsi_only.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/test_driver_startup_rsi_only.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "048d16ce67fe9652c2897c4e375aaa54",
     "semantic_hash": "048d16ce67fe9652c2897c4e375aaa54"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/test_multi_robot_startup.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/test_multi_robot_startup.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "1992cfcebfb6d11af9ccb0c13e60756f",
     "semantic_hash": "1992cfcebfb6d11af9ccb0c13e60756f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_simulator/kuka_rsi_simulator/__init__.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_simulator/kuka_rsi_simulator/__init__.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_simulator/kuka_rsi_simulator/rsi_simulator.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_simulator/kuka_rsi_simulator/rsi_simulator.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "6d60cbd14fb059f3da758c1dadf69efe",
     "semantic_hash": "6d60cbd14fb059f3da758c1dadf69efe"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_simulator/launch/kuka_rsi_simulator.launch.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_simulator/launch/kuka_rsi_simulator.launch.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "2458507e344bece4a0162d0b5246c73e",
     "semantic_hash": "2458507e344bece4a0162d0b5246c73e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_simulator/setup.py": {
+  "src/third_party/kuka_drivers/kuka_rsi_simulator/setup.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "162be6f89e804667b13a6fdd71fadb98",
     "semantic_hash": "162be6f89e804667b13a6fdd71fadb98"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/HWIFClientApplication.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/HWIFClientApplication.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "3d1e158add5f50e6df30af464086e313",
     "semantic_hash": "3d1e158add5f50e6df30af464086e313"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friClientApplication.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friClientApplication.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "7a728bd1596cffe5c7d7c34429d3c9ad",
     "semantic_hash": "7a728bd1596cffe5c7d7c34429d3c9ad"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friClientIf.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friClientIf.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "60654fa87a70dae9a3a623bf69087d3c",
     "semantic_hash": "60654fa87a70dae9a3a623bf69087d3c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friConnectionIf.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friConnectionIf.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "712bc1b7134fb116692f18f825cc84e9",
     "semantic_hash": "712bc1b7134fb116692f18f825cc84e9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friException.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friException.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "c5b1a53fe8981531c755098ea6cadc73",
     "semantic_hash": "c5b1a53fe8981531c755098ea6cadc73"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRClient.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRClient.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "f6eb4bc934df519519b32c93b0e9a9c2",
     "semantic_hash": "f6eb4bc934df519519b32c93b0e9a9c2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRCommand.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRCommand.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "413dfc0a5ce399d4919c92636ae30658",
     "semantic_hash": "413dfc0a5ce399d4919c92636ae30658"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRState.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friLBRState.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "97eeb375e776cfbbbd5d028611099d0b",
     "semantic_hash": "97eeb375e776cfbbbd5d028611099d0b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friTransformationClient.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friTransformationClient.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "f0c77b7427897b082d102e45b205285c",
     "semantic_hash": "f0c77b7427897b082d102e45b205285c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friUdpConnection.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/fri_client_sdk/friUdpConnection.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "c80f378156fa19192a7a7766c2197f25",
     "semantic_hash": "c80f378156fa19192a7a7766c2197f25"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/fri_connection.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/fri_connection.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "7249abe43fc3890adf308fd3ae881a03",
     "semantic_hash": "7249abe43fc3890adf308fd3ae881a03"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/hardware_interface.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/hardware_interface.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "8f9f188b7c6cae6c6540b340cb309d14",
     "semantic_hash": "8f9f188b7c6cae6c6540b340cb309d14"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/robot_manager_node.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/robot_manager_node.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "e46aaa87f10e6517da351a560bcbf0af",
     "semantic_hash": "e46aaa87f10e6517da351a560bcbf0af"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/serialization.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/serialization.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "bc196ce8745896134b4b810c3bc56e5d",
     "semantic_hash": "bc196ce8745896134b4b810c3bc56e5d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/tcp_connection.hpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/tcp_connection.hpp": {
     "mtime": 1765196119.0979652,
     "ast_hash": "f9b310f777e52c3abd97396a05459f02",
     "semantic_hash": "f9b310f777e52c3abd97396a05459f02"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/visibility_control.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/include/kuka_sunrise_fri_driver/visibility_control.h": {
     "mtime": 1765196119.0979652,
     "ast_hash": "9acf669041d9ebb70aa7aef896bdfba2",
     "semantic_hash": "9acf669041d9ebb70aa7aef896bdfba2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/launch/startup.launch.py": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/launch/startup.launch.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "dc7459f51bc0faa6f666d87c2eb391a5",
     "semantic_hash": "dc7459f51bc0faa6f666d87c2eb391a5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/launch/startup_with_rviz.launch.py": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/launch/startup_with_rviz.launch.py": {
     "mtime": 1765196119.0979652,
     "ast_hash": "b9af1e35e7d5141a7512e53dbe6b46f7",
     "semantic_hash": "b9af1e35e7d5141a7512e53dbe6b46f7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/application/ROS2_Control.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/application/ROS2_Control.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "a541485e2b758030bc5d841885829500",
     "semantic_hash": "a541485e2b758030bc5d841885829500"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/com/kuka/generated/ioAccess/MediaFlangeIOGroup.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/com/kuka/generated/ioAccess/MediaFlangeIOGroup.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "c7597643715f96138a08b52bf9a54264",
     "semantic_hash": "c7597643715f96138a08b52bf9a54264"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/FRIManager.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/FRIManager.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "b82f8992ac2fdc7bb87beb455010d42f",
     "semantic_hash": "b82f8992ac2fdc7bb87beb455010d42f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/ROS2Connection.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/ROS2Connection.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "7c92682a1f559bc6cb66918fd4aa346b",
     "semantic_hash": "7c92682a1f559bc6cb66918fd4aa346b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/TCPConnection.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/modules/TCPConnection.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "e186064f03223db6a7001c500bad3271",
     "semantic_hash": "e186064f03223db6a7001c500bad3271"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/ControlModeParams.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/ControlModeParams.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "2e18b7b29bce0c95758117d93d236b46",
     "semantic_hash": "2e18b7b29bce0c95758117d93d236b46"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/FRIConfigurationParams.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/FRIConfigurationParams.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "d6b5bd3a51f7ece9eba14d23b7ed2772",
     "semantic_hash": "d6b5bd3a51f7ece9eba14d23b7ed2772"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/JointImpedanceControlModeExternalizable.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/JointImpedanceControlModeExternalizable.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "b94a47def38743b796d471c7fc6d12b7",
     "semantic_hash": "b94a47def38743b796d471c7fc6d12b7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/MessageEncoding.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/serialization/MessageEncoding.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "9e4cafd8c5402a4cee8a1fb0435190e9",
     "semantic_hash": "9e4cafd8c5402a4cee8a1fb0435190e9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/tools/Conversions.java": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/robot_application/src/ros2/tools/Conversions.java": {
     "mtime": 1765196119.1022117,
     "ast_hash": "33b19396b6c5b3c9d2e79c039dda68cc",
     "semantic_hash": "33b19396b6c5b3c9d2e79c039dda68cc"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/connection_helpers/fri_connection.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/connection_helpers/fri_connection.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "df92eae4c6342e55a9e465ba3cee7092",
     "semantic_hash": "df92eae4c6342e55a9e465ba3cee7092"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/connection_helpers/tcp_connection.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/connection_helpers/tcp_connection.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "303a46dd8b233eaeeae690c5009c3c5b",
     "semantic_hash": "303a46dd8b233eaeeae690c5009c3c5b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/FRIMessages.pb.c": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/FRIMessages.pb.c": {
     "mtime": 1765196119.1022117,
     "ast_hash": "6fa4ef0129f5535978d6385f79a058d5",
     "semantic_hash": "6fa4ef0129f5535978d6385f79a058d5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/FRIMessages.pb.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/FRIMessages.pb.h": {
     "mtime": 1765196119.1022117,
     "ast_hash": "32acdde30243767dddaa36a6a9c25fc9",
     "semantic_hash": "32acdde30243767dddaa36a6a9c25fc9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/HWIFClientApplication.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/HWIFClientApplication.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "a7da194ec318780784eeba0644fd17bc",
     "semantic_hash": "a7da194ec318780784eeba0644fd17bc"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friClientApplication.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friClientApplication.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "f0250e8237680b9e0a7d344fc83c078f",
     "semantic_hash": "f0250e8237680b9e0a7d344fc83c078f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friClientData.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friClientData.h": {
     "mtime": 1765196119.1022117,
     "ast_hash": "67eeae6a32011216bd4bdbd6d399e515",
     "semantic_hash": "67eeae6a32011216bd4bdbd6d399e515"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friCommandMessageEncoder.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friCommandMessageEncoder.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "17e6c668fabd5c3f8a33d691fbf3917e",
     "semantic_hash": "17e6c668fabd5c3f8a33d691fbf3917e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friCommandMessageEncoder.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friCommandMessageEncoder.h": {
     "mtime": 1765196119.1022117,
     "ast_hash": "dabdb04da0399b8f548bd4c506474def",
     "semantic_hash": "dabdb04da0399b8f548bd4c506474def"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRClient.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRClient.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "a8c687902dd8ff082f44ba9e543654db",
     "semantic_hash": "a8c687902dd8ff082f44ba9e543654db"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRCommand.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRCommand.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "189b81db8d69b6f824a8e3ad0675d940",
     "semantic_hash": "189b81db8d69b6f824a8e3ad0675d940"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRState.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friLBRState.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "032cacc91ec46fa702b67618cfc21daa",
     "semantic_hash": "032cacc91ec46fa702b67618cfc21daa"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friMonitoringMessageDecoder.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friMonitoringMessageDecoder.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "0a0751d81fc70fc466fb6520aa057615",
     "semantic_hash": "0a0751d81fc70fc466fb6520aa057615"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friMonitoringMessageDecoder.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friMonitoringMessageDecoder.h": {
     "mtime": 1765196119.1022117,
     "ast_hash": "4a934374b6b50dd1c139c779b603a506",
     "semantic_hash": "4a934374b6b50dd1c139c779b603a506"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friTransformationClient.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friTransformationClient.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "46ba6ba514a95048d713438ffbe275aa",
     "semantic_hash": "46ba6ba514a95048d713438ffbe275aa"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friUdpConnection.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/friUdpConnection.cpp": {
     "mtime": 1765196119.1022117,
     "ast_hash": "0265cce11566de2476fd6b95ea30b5eb",
     "semantic_hash": "0265cce11566de2476fd6b95ea30b5eb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/pb_frimessages_callbacks.c": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/pb_frimessages_callbacks.c": {
     "mtime": 1765196119.1022117,
     "ast_hash": "bffb151fdeb092fe7f1bac84eee922e4",
     "semantic_hash": "bffb151fdeb092fe7f1bac84eee922e4"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/pb_frimessages_callbacks.h": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/fri_client_sdk/pb_frimessages_callbacks.h": {
     "mtime": 1765196119.1064582,
     "ast_hash": "b66fee86fa943842d67cbc4b7b826e92",
     "semantic_hash": "b66fee86fa943842d67cbc4b7b826e92"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/hardware_interface.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/hardware_interface.cpp": {
     "mtime": 1765196119.1064582,
     "ast_hash": "1425bb6c231774c8280ee27c2a7f10c7",
     "semantic_hash": "1425bb6c231774c8280ee27c2a7f10c7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/robot_manager_node.cpp": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/src/robot_manager_node.cpp": {
     "mtime": 1765196119.1064582,
     "ast_hash": "290df046481f74b05a76eb27f4af3896",
     "semantic_hash": "290df046481f74b05a76eb27f4af3896"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_driver_activation.py": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_driver_activation.py": {
     "mtime": 1765196119.1064582,
     "ast_hash": "22205b5d7f235b5e62e683a88029bc62",
     "semantic_hash": "22205b5d7f235b5e62e683a88029bc62"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_driver_startup.py": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_driver_startup.py": {
     "mtime": 1765196119.1064582,
     "ast_hash": "a4d15c499cd8eba954ef060c4e0ba3af",
     "semantic_hash": "a4d15c499cd8eba954ef060c4e0ba3af"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_multi_robot_startup.py": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/test_multi_robot_startup.py": {
     "mtime": 1765196119.1064582,
     "ast_hash": "3ce7ea67fc85c8e5a49e01925f8dc025",
     "semantic_hash": "3ce7ea67fc85c8e5a49e01925f8dc025"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.ci_config/hooks/before_run_target_test.sh": {
+  "src/third_party/kuka_robot_descriptions/.ci_config/hooks/before_run_target_test.sh": {
     "mtime": 1765196222.5641162,
     "ast_hash": "ea28342bbb71189d0e7a15424c0da6ef",
     "semantic_hash": "ea28342bbb71189d0e7a15424c0da6ef"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr10r1100_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr10r1100_2.launch.py": {
     "mtime": 1765196222.5641162,
     "ast_hash": "2d21ccd35a418e36106dea61cf7facb2",
     "semantic_hash": "2d21ccd35a418e36106dea61cf7facb2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r700_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r700_2.launch.py": {
     "mtime": 1765196222.5641162,
     "ast_hash": "5b4c037130298b565491768e7adf8a81",
     "semantic_hash": "5b4c037130298b565491768e7adf8a81"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r700_sixx.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r700_sixx.launch.py": {
     "mtime": 1765196222.5641162,
     "ast_hash": "8dbb70ac147fa514c1f7f7134b8b0304",
     "semantic_hash": "8dbb70ac147fa514c1f7f7134b8b0304"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r900_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r900_2.launch.py": {
     "mtime": 1765196222.5641162,
     "ast_hash": "0b7aa07a7f467a0b6b9c1af6b0eb0b22",
     "semantic_hash": "0b7aa07a7f467a0b6b9c1af6b0eb0b22"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r900_sixx.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/launch/test_kr6_r900_sixx.launch.py": {
     "mtime": 1765196222.5641162,
     "ast_hash": "d08a4e09a6308110f99354a48e0a2a57",
     "semantic_hash": "d08a4e09a6308110f99354a48e0a2a57"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/test/test_kr_agilus.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/test/test_kr_agilus.py": {
     "mtime": 1765196222.6830006,
     "ast_hash": "f075c41536c5a5d18ef5f1b660273abb",
     "semantic_hash": "f075c41536c5a5d18ef5f1b660273abb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr12_r1450_3_hw.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr12_r1450_3_hw.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "0b94bd5bc7a87f50b16396b77cf47483",
     "semantic_hash": "0b94bd5bc7a87f50b16396b77cf47483"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr16_r1610_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr16_r1610_2.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "3204867849627a9bfe116a8a44150725",
     "semantic_hash": "3204867849627a9bfe116a8a44150725"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr16_r2010_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr16_r2010_2.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "a8dfad4a63fb4c3d90600c09705a2015",
     "semantic_hash": "a8dfad4a63fb4c3d90600c09705a2015"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr20_r1810_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr20_r1810_2.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "475eff2aa4b3816a49d575b306c2b805",
     "semantic_hash": "475eff2aa4b3816a49d575b306c2b805"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr8_r1440_2_arc_hw.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr8_r1440_2_arc_hw.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "0c0ea587be6180e7098d06e81580561e",
     "semantic_hash": "0c0ea587be6180e7098d06e81580561e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr8_r2100_2_arc_hw.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/launch/test_kr8_r2100_2_arc_hw.launch.py": {
     "mtime": 1765196222.6872463,
     "ast_hash": "cbf9ea27a1032e3b0ef9f8ef309e67f5",
     "semantic_hash": "cbf9ea27a1032e3b0ef9f8ef309e67f5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/test/test_kr_cybertech.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/test/test_kr_cybertech.py": {
     "mtime": 1765196222.9929488,
     "ast_hash": "e0d75adeca9beefa7f5dfead0f033688",
     "semantic_hash": "e0d75adeca9beefa7f5dfead0f033688"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr240r3330.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr240r3330.launch.py": {
     "mtime": 1765196222.9929488,
     "ast_hash": "ab3db95a8c3469a1af2e7c620b9543c9",
     "semantic_hash": "ab3db95a8c3469a1af2e7c620b9543c9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr300_r2800_2_mt.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr300_r2800_2_mt.launch.py": {
     "mtime": 1765196222.9929488,
     "ast_hash": "6d44a806f0302d1fb1b4ea3ada2bd585",
     "semantic_hash": "6d44a806f0302d1fb1b4ea3ada2bd585"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr560r3100_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/launch/test_kr560r3100_2.launch.py": {
     "mtime": 1765196222.9929488,
     "ast_hash": "e7f7b41ce80cdedeb7922389579380ed",
     "semantic_hash": "e7f7b41ce80cdedeb7922389579380ed"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/test/test_kr_fortec.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/test/test_kr_fortec.py": {
     "mtime": 1765196223.2986512,
     "ast_hash": "0b832cd606a1a5adcca178da5e30e12b",
     "semantic_hash": "0b832cd606a1a5adcca178da5e30e12b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/include/kuka_gazebo/moveit_example.hpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/include/kuka_gazebo/moveit_example.hpp": {
     "mtime": 1765196223.302897,
     "ast_hash": "03a6ad0c50967320efa3387a803d4a64",
     "semantic_hash": "03a6ad0c50967320efa3387a803d4a64"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/gazebo.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/gazebo.launch.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "450a1f3c0018740dbad2d205cf0b1732",
     "semantic_hash": "450a1f3c0018740dbad2d205cf0b1732"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/run_gazebo_tests.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/run_gazebo_tests.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "a884ae813a23bb3b1999b61793bfe8be",
     "semantic_hash": "a884ae813a23bb3b1999b61793bfe8be"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/test_gazebo.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/launch/test_gazebo.launch.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "21860d25e8713b22e670225d1b21c7a8",
     "semantic_hash": "21860d25e8713b22e670225d1b21c7a8"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/src/gazebo_lbr_iisy3_r760_moveit_example.cpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/src/gazebo_lbr_iisy3_r760_moveit_example.cpp": {
     "mtime": 1765196223.302897,
     "ast_hash": "2e9cdd469f3bff2888cf0761dc4793a5",
     "semantic_hash": "2e9cdd469f3bff2888cf0761dc4793a5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/test/gazebo_support_test.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/test/gazebo_support_test.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "a176d699348031448f7b93bd7e4e7acd",
     "semantic_hash": "a176d699348031448f7b93bd7e4e7acd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/test/gazebo_test_keep_alive.cpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/test/gazebo_test_keep_alive.cpp": {
     "mtime": 1765196223.302897,
     "ast_hash": "e4d4f063510f248694378680ba9a7539",
     "semantic_hash": "e4d4f063510f248694378680ba9a7539"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/test/test_gazebo_robot_support.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/test/test_gazebo_robot_support.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "16ac697114400d12754b777987031694",
     "semantic_hash": "16ac697114400d12754b777987031694"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_iontec_support/launch/test_kr70r2100.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_iontec_support/launch/test_kr70r2100.launch.py": {
     "mtime": 1765196223.302897,
     "ast_hash": "e6218414aee21bef4b733b695971cdee",
     "semantic_hash": "e6218414aee21bef4b733b695971cdee"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_iontec_support/test/test_kr_iontec.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_iontec_support/test/test_kr_iontec.py": {
     "mtime": 1765196223.3878145,
     "ast_hash": "8b271ddc12452d2df256c9dc0b84079a",
     "semantic_hash": "8b271ddc12452d2df256c9dc0b84079a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
     "mtime": 1765196223.3878145,
     "ast_hash": "783b6b7a5af4a881f4c3a20ea0ca8c47",
     "semantic_hash": "783b6b7a5af4a881f4c3a20ea0ca8c47"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/launch/moveit_planning_gazebo.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/launch/moveit_planning_gazebo.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "84a10ca8cffa108a578c4d9378399547",
     "semantic_hash": "84a10ca8cffa108a578c4d9378399547"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "5ec7df6428483f8fa1c66ee1c1b3375b",
     "semantic_hash": "5ec7df6428483f8fa1c66ee1c1b3375b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/launch/moveit_planning_gazebo.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/launch/moveit_planning_gazebo.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "3d5a77fafe35d864dddd706069bf8747",
     "semantic_hash": "3d5a77fafe35d864dddd706069bf8747"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy11_r1300.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy11_r1300.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "df77c8e6fa0322a4df8841b443ad20c1",
     "semantic_hash": "df77c8e6fa0322a4df8841b443ad20c1"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy15_r930.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy15_r930.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "8029e2422ffe3bab73c249c2d6a262b7",
     "semantic_hash": "8029e2422ffe3bab73c249c2d6a262b7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy3_r760.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/launch/test_lbr_iisy3_r760.launch.py": {
     "mtime": 1765196223.3920603,
     "ast_hash": "0e0b6e4f2cdfd78fcdaca15d11d87ede",
     "semantic_hash": "0e0b6e4f2cdfd78fcdaca15d11d87ede"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/test/test_lbr_iisy.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/test/test_lbr_iisy.py": {
     "mtime": 1765196223.4982069,
     "ast_hash": "7d1a22d10e4537080e489732c74487ca",
     "semantic_hash": "7d1a22d10e4537080e489732c74487ca"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/launch/moveit_planning_fake_hardware.launch.py": {
     "mtime": 1765196223.4982069,
     "ast_hash": "2a2fa6b6a9f144ceebc6daa892377b84",
     "semantic_hash": "2a2fa6b6a9f144ceebc6daa892377b84"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/launch/test_lbr_iiwa14_r820.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/launch/test_lbr_iiwa14_r820.launch.py": {
     "mtime": 1765196223.5024529,
     "ast_hash": "192f5b171ae71022336519c5723fa6f6",
     "semantic_hash": "192f5b171ae71022336519c5723fa6f6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/test/test_lbr_iiwa.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/test/test_lbr_iiwa.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "ac79cd605ad31fc73949eb594efd4de2",
     "semantic_hash": "ac79cd605ad31fc73949eb594efd4de2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/hardware_interface.hpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/hardware_interface.hpp": {
     "mtime": 1765196223.527928,
     "ast_hash": "0ad9b4f6b13c60c711cd5e0351908fb3",
     "semantic_hash": "0ad9b4f6b13c60c711cd5e0351908fb3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/hardware_interface_types.hpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/hardware_interface_types.hpp": {
     "mtime": 1765196223.527928,
     "ast_hash": "7dc2cc8539ef98a954dc277fb39d52e2",
     "semantic_hash": "7dc2cc8539ef98a954dc277fb39d52e2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/visibility_control.h": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/include/kuka_mock_hardware_interface/visibility_control.h": {
     "mtime": 1765196223.527928,
     "ast_hash": "699ed0c1ad7587c523113a0566556ce9",
     "semantic_hash": "699ed0c1ad7587c523113a0566556ce9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/src/hardware_interface.cpp": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/src/hardware_interface.cpp": {
     "mtime": 1765196223.527928,
     "ast_hash": "aae7570494ba1f4dfc1a8e12707e9571",
     "semantic_hash": "aae7570494ba1f4dfc1a8e12707e9571"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr150_r3100_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr150_r3100_2.launch.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "4c444a6048b962e9bb53b184b0f00a82",
     "semantic_hash": "4c444a6048b962e9bb53b184b0f00a82"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr210_r2700_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr210_r2700_2.launch.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "d2c337d90c25ffba74fbaac83695380d",
     "semantic_hash": "d2c337d90c25ffba74fbaac83695380d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr210_r3100_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr210_r3100_2.launch.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "fccb510c002d52ea3d8698b7388e7d82",
     "semantic_hash": "fccb510c002d52ea3d8698b7388e7d82"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr240_r2900_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr240_r2900_2.launch.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "262b5d9cb07c7332ebcbc6fdc1e6fbdb",
     "semantic_hash": "262b5d9cb07c7332ebcbc6fdc1e6fbdb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr300_r2700_2.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/launch/test_kr300_r2700_2.launch.py": {
     "mtime": 1765196223.527928,
     "ast_hash": "6c8f6a16aa98063e9f903e313b969ded",
     "semantic_hash": "6c8f6a16aa98063e9f903e313b969ded"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/test/test_kr_quantec.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/test/test_kr_quantec.py": {
     "mtime": 1765196224.041678,
     "ast_hash": "7d59d620f13d12d3970936638bb5e1f7",
     "semantic_hash": "7d59d620f13d12d3970936638bb5e1f7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_resources/launch/fake_hardware_planning_template.launch.py": {
+  "src/third_party/kuka_robot_descriptions/kuka_resources/launch/fake_hardware_planning_template.launch.py": {
     "mtime": 1765196224.041678,
     "ast_hash": "24d2af4b777ea9261ba87e87a60a8a70",
     "semantic_hash": "24d2af4b777ea9261ba87e87a60a8a70"
   },
-  "/home/jayson/kuka_ram_ws/test/scripts/RSI_test_180.py": {
+  "test/scripts/RSI_test_180.py": {
     "mtime": 1765786836.7090364,
     "ast_hash": "8fb79d0a05207cbf1d4959bff77386c5",
     "semantic_hash": "8fb79d0a05207cbf1d4959bff77386c5"
   },
-  "/home/jayson/kuka_ram_ws/test/scripts/RSI_udp.py": {
+  "test/scripts/RSI_udp.py": {
     "mtime": 1765865456.7642648,
     "ast_hash": "17495e2f422646ec81e38f293d9de815",
     "semantic_hash": "17495e2f422646ec81e38f293d9de815"
   },
-  "/home/jayson/kuka_ram_ws/test/scripts/pid_autotune.py": {
+  "test/scripts/pid_autotune.py": {
     "mtime": 1780218711.7673635,
     "ast_hash": "8ed325e82459eaf5e9d353fe3cb769d0",
     "semantic_hash": "8ed325e82459eaf5e9d353fe3cb769d0"
   },
-  "/home/jayson/kuka_ram_ws/test/scripts/test_z_curve.py": {
+  "test/scripts/test_z_curve.py": {
     "mtime": 1765781766.6440005,
     "ast_hash": "e9c1064bf008721ea18508adc9f759d8",
     "semantic_hash": "e9c1064bf008721ea18508adc9f759d8"
   },
-  "/home/jayson/kuka_ram_ws/README.md": {
-    "mtime": 1778206867.7333312,
-    "ast_hash": "264d97d688401485354f3f5b19b86e36",
-    "semantic_hash": "264d97d688401485354f3f5b19b86e36"
+  "README.md": {
+    "mtime": 1781761274.0047061,
+    "ast_hash": "4a8e379c4467ef46a4e3a904a203ac80",
+    "semantic_hash": "4a8e379c4467ef46a4e3a904a203ac80"
   },
-  "/home/jayson/kuka_ram_ws/docs/superpowers/plans/2026-05-28-layer-preview-viewer.md": {
+  "docs/superpowers/plans/2026-05-28-layer-preview-viewer.md": {
     "mtime": 1779976157.5083442,
     "ast_hash": "e7ecacdfaf754811a7cec0983f2d1a8f",
     "semantic_hash": "e7ecacdfaf754811a7cec0983f2d1a8f"
   },
-  "/home/jayson/kuka_ram_ws/docs/superpowers/specs/2026-05-28-layer-preview-viewer-design.md": {
+  "docs/superpowers/specs/2026-05-28-layer-preview-viewer-design.md": {
     "mtime": 1779976042.9164636,
     "ast_hash": "195fd8fa0cbd6fc204f2a09975cb8000",
     "semantic_hash": "195fd8fa0cbd6fc204f2a09975cb8000"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/control_center/CMakeLists.txt": {
+  "src/my_project/control_center/CMakeLists.txt": {
     "mtime": 1780378149.5547047,
     "ast_hash": "830c22eb12fe53f0d5353957a3363623",
     "semantic_hash": "830c22eb12fe53f0d5353957a3363623"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/README.md": {
+  "src/my_project/gcode_planner/README.md": {
     "mtime": 1781752692.5635428,
     "ast_hash": "2378f897878defcbc6397ec1c3073be9",
     "semantic_hash": "2378f897878defcbc6397ec1c3073be9"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline/README.md": {
+  "src/my_project/gcode_planner/gcode_planner/bspline/README.md": {
     "mtime": 1773889923.6569567,
     "ast_hash": "fb355c034d2115564ed792b03faa3418",
     "semantic_hash": "fb355c034d2115564ed792b03faa3418"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_interfaces/CMakeLists.txt": {
+  "src/my_project/my_project_interfaces/CMakeLists.txt": {
     "mtime": 1780378020.3542078,
     "ast_hash": "29f0d392e7473a02e44cc0549d111aff",
     "semantic_hash": "29f0d392e7473a02e44cc0549d111aff"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_startup/README.md": {
-    "mtime": 1781752692.567543,
-    "ast_hash": "9514a4cbd2525bfbc357b162860bed47",
-    "semantic_hash": "9514a4cbd2525bfbc357b162860bed47"
+  "src/my_project/my_project_startup/README.md": {
+    "mtime": 1782032606.4447076,
+    "ast_hash": "089e3e2710ba494a66dd4c6220614363",
+    "semantic_hash": "089e3e2710ba494a66dd4c6220614363"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/my_project_ui/UI_ARCHITECTURE.md": {
-    "mtime": 1779694607.0846357,
-    "ast_hash": "ea02bf14b34df0a5d8b76031c9626dbd",
-    "semantic_hash": "ea02bf14b34df0a5d8b76031c9626dbd"
+  "src/my_project/my_project_ui/UI_ARCHITECTURE.md": {
+    "mtime": 1782051892.7965567,
+    "ast_hash": "bc7a5a8e9c65b93a5bdae07fa9d8018b",
+    "semantic_hash": "bc7a5a8e9c65b93a5bdae07fa9d8018b"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/rsi_server/CMakeLists.txt": {
+  "src/my_project/rsi_server/CMakeLists.txt": {
     "mtime": 1781752692.5715432,
     "ast_hash": "0bfa41cdda321aa124e0d5f0c92ebf3e",
     "semantic_hash": "0bfa41cdda321aa124e0d5f0c92ebf3e"
   },
-  "/home/jayson/kuka_ram_ws/src/my_project/uart_bridge/CMakeLists.txt": {
+  "src/my_project/uart_bridge/CMakeLists.txt": {
     "mtime": 1766573719.940816,
     "ast_hash": "f1f15cbfe8a702d2cf8b21e432661c52",
     "semantic_hash": "f1f15cbfe8a702d2cf8b21e432661c52"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/.github/workflows/ci_debian.yml": {
+  "src/third_party/kuka-external-control-sdk/.github/workflows/ci_debian.yml": {
     "mtime": 1765196209.455741,
     "ast_hash": "ce3e3f194eaf0b611c7abdd5de8fa964",
     "semantic_hash": "ce3e3f194eaf0b611c7abdd5de8fa964"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/.github/workflows/ci_fedora.yml": {
+  "src/third_party/kuka-external-control-sdk/.github/workflows/ci_fedora.yml": {
     "mtime": 1765196209.455741,
     "ast_hash": "c82966bcd000b6c97e8606d49efec06b",
     "semantic_hash": "c82966bcd000b6c97e8606d49efec06b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/.github/workflows/ci_rhel.yml": {
+  "src/third_party/kuka-external-control-sdk/.github/workflows/ci_rhel.yml": {
     "mtime": 1765196209.455741,
     "ast_hash": "ea6ff2342b746dffe79a6cb19e24e113",
     "semantic_hash": "ea6ff2342b746dffe79a6cb19e24e113"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/.github/workflows/ci_ubuntu.yml": {
+  "src/third_party/kuka-external-control-sdk/.github/workflows/ci_ubuntu.yml": {
     "mtime": 1765196209.455741,
     "ast_hash": "f5111dcf523721c4b3a7313b1bb63006",
     "semantic_hash": "f5111dcf523721c4b3a7313b1bb63006"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/.github/workflows/industrial_ci.yml": {
+  "src/third_party/kuka-external-control-sdk/.github/workflows/industrial_ci.yml": {
     "mtime": 1765196209.455741,
     "ast_hash": "b5425f4233c5c1fcd934e9d407a686a8",
     "semantic_hash": "b5425f4233c5c1fcd934e9d407a686a8"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/LICENSE.txt": {
+  "src/third_party/kuka-external-control-sdk/LICENSE.txt": {
     "mtime": 1765196209.455741,
     "ast_hash": "175792518e4ac015ab6696d16c4f607e",
     "semantic_hash": "175792518e4ac015ab6696d16c4f607e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/README.md": {
+  "src/third_party/kuka-external-control-sdk/README.md": {
     "mtime": 1765196209.455741,
     "ast_hash": "15528fdff8a1f12e53df2194f30bc79c",
     "semantic_hash": "15528fdff8a1f12e53df2194f30bc79c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/CHANGELOG.rst": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/CHANGELOG.rst": {
     "mtime": 1765196209.455741,
     "ast_hash": "c1cc8ce7d04cc03ebb0677a24c24e054",
     "semantic_hash": "c1cc8ce7d04cc03ebb0677a24c24e054"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/CMakeLists.txt": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/CMakeLists.txt": {
     "mtime": 1765196209.455741,
     "ast_hash": "1ab31e914a73701a454c926e41ce4d63",
     "semantic_hash": "1ab31e914a73701a454c926e41ce4d63"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/Raw_proto_mapping.md": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/Raw_proto_mapping.md": {
     "mtime": 1765196209.455741,
     "ast_hash": "eb1cdabf4ed1a72499c4a68b5845aa9f",
     "semantic_hash": "eb1cdabf4ed1a72499c4a68b5845aa9f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/iiqka_implementation.md": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/iiqka_implementation.md": {
     "mtime": 1765196209.4599867,
     "ast_hash": "ec5e4210f10592a69942b1e5b81f4bfb",
     "semantic_hash": "ec5e4210f10592a69942b1e5b81f4bfb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/iiqka_setup.md": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/iiqka_setup.md": {
     "mtime": 1765196209.4599867,
     "ast_hash": "2299c6951b351efcf7538476645ecdda",
     "semantic_hash": "2299c6951b351efcf7538476645ecdda"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/kss_eki_setup.md": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/kss_eki_setup.md": {
     "mtime": 1765196209.4599867,
     "ast_hash": "b63d7917b0f909c802add723443ac438",
     "semantic_hash": "b63d7917b0f909c802add723443ac438"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/kss_implementation.md": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/kss_implementation.md": {
     "mtime": 1765196209.4599867,
     "ast_hash": "58a2b5988efe447fc844d50a6f40b66d",
     "semantic_hash": "58a2b5988efe447fc844d50a6f40b66d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/CMakeLists.txt": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/iiqka/CMakeLists.txt": {
     "mtime": 1765196209.4599867,
     "ast_hash": "d8e7b426755c04ce8e2f3b5099fa9a80",
     "semantic_hash": "d8e7b426755c04ce8e2f3b5099fa9a80"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/CMakeLists.txt": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/kss/CMakeLists.txt": {
     "mtime": 1765196209.4727237,
     "ast_hash": "2f61926ede2a7947d62036d5baf930b0",
     "semantic_hash": "2f61926ede2a7947d62036d5baf930b0"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/CHANGELOG.rst": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/CHANGELOG.rst": {
     "mtime": 1765196209.4769695,
     "ast_hash": "d77fc37d9deb88f6c302a612811c3781",
     "semantic_hash": "d77fc37d9deb88f6c302a612811c3781"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/CMakeLists.txt": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk_examples/CMakeLists.txt": {
     "mtime": 1765196209.4769695,
     "ast_hash": "3bfb05453ac0b5c8ca0caa8f7081cda2",
     "semantic_hash": "3bfb05453ac0b5c8ca0caa8f7081cda2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.github/ISSUE_TEMPLATE/bug_report.yml": {
+  "src/third_party/kuka_drivers/.github/ISSUE_TEMPLATE/bug_report.yml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "3cd9554aa56cc14f1457cdeec2f9a63d",
     "semantic_hash": "3cd9554aa56cc14f1457cdeec2f9a63d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.github/workflows/deploy_wiki.yml": {
+  "src/third_party/kuka_drivers/.github/workflows/deploy_wiki.yml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "1fbadd7cdc735e10081045a6c65b79ca",
     "semantic_hash": "1fbadd7cdc735e10081045a6c65b79ca"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.github/workflows/industrial_ci_humble.yml": {
+  "src/third_party/kuka_drivers/.github/workflows/industrial_ci_humble.yml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "ce7b75cb3c1d64a953bd0ccb0722bfde",
     "semantic_hash": "ce7b75cb3c1d64a953bd0ccb0722bfde"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.github/workflows/industrial_ci_jazzy.yml": {
+  "src/third_party/kuka_drivers/.github/workflows/industrial_ci_jazzy.yml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "1711b091506f5066994120b3980b1dac",
     "semantic_hash": "1711b091506f5066994120b3980b1dac"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.github/workflows/pre-commit.yml": {
+  "src/third_party/kuka_drivers/.github/workflows/pre-commit.yml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "befc7abeee56e1783397b2b19c61a678",
     "semantic_hash": "befc7abeee56e1783397b2b19c61a678"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/.pre-commit-config.yaml": {
+  "src/third_party/kuka_drivers/.pre-commit-config.yaml": {
     "mtime": 1765196119.0809796,
     "ast_hash": "9b819e2d3fd747dc10d0e06fafd4c6f5",
     "semantic_hash": "9b819e2d3fd747dc10d0e06fafd4c6f5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/CONTRIBUTING.md": {
+  "src/third_party/kuka_drivers/CONTRIBUTING.md": {
     "mtime": 1765196119.0809796,
     "ast_hash": "7f6bc4cbd2671e52f7ac7de9a30570a1",
     "semantic_hash": "7f6bc4cbd2671e52f7ac7de9a30570a1"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/README.md": {
+  "src/third_party/kuka_drivers/README.md": {
     "mtime": 1765196119.085226,
     "ast_hash": "a8e095ffdaf458c53bbf339b573d2817",
     "semantic_hash": "a8e095ffdaf458c53bbf339b573d2817"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_configuration_controller/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/fri_configuration_controller/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "961ee6050761a9d5e042b4097a1f7927",
     "semantic_hash": "961ee6050761a9d5e042b4097a1f7927"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_configuration_controller/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/fri_configuration_controller/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "e3330bbce0ee7cf323e067352b8df4cf",
     "semantic_hash": "e3330bbce0ee7cf323e067352b8df4cf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_state_broadcaster/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/fri_state_broadcaster/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "8e7ea4ec13ac65208bb9b9948ac40958",
     "semantic_hash": "8e7ea4ec13ac65208bb9b9948ac40958"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/fri_state_broadcaster/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/fri_state_broadcaster/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "0ab6af3e1096ce2062bfb8727dab0d32",
     "semantic_hash": "0ab6af3e1096ce2062bfb8727dab0d32"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "4b5939a6e254997e61a993b7ae146baf",
     "semantic_hash": "4b5939a6e254997e61a993b7ae146baf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "d1c4ac624a6e143ab934c69afbae5d72",
     "semantic_hash": "d1c4ac624a6e143ab934c69afbae5d72"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/src/joint_group_impedance_controller_parameters.yaml": {
+  "src/third_party/kuka_drivers/controllers/joint_group_impedance_controller/src/joint_group_impedance_controller_parameters.yaml": {
     "mtime": 1765196119.085226,
     "ast_hash": "ba7a97679174895a51c1979af2c07b9e",
     "semantic_hash": "ba7a97679174895a51c1979af2c07b9e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "41d341272f818d32c79c572a8d634f99",
     "semantic_hash": "41d341272f818d32c79c572a8d634f99"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/kuka_control_mode_handler/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "c62955ad8ed6c48e9ad823868c5382b7",
     "semantic_hash": "c62955ad8ed6c48e9ad823868c5382b7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_controllers/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/kuka_controllers/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "934b64db4df019bf2d485aa4bb15a753",
     "semantic_hash": "934b64db4df019bf2d485aa4bb15a753"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_controllers/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/kuka_controllers/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "88d43491411fb8246049569d64b73483",
     "semantic_hash": "88d43491411fb8246049569d64b73483"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/CHANGELOG.rst": {
     "mtime": 1765196119.085226,
     "ast_hash": "db48f168c575d91c68441e3cc5ca47ba",
     "semantic_hash": "db48f168c575d91c68441e3cc5ca47ba"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/kuka_event_broadcaster/CMakeLists.txt": {
     "mtime": 1765196119.085226,
     "ast_hash": "b6c4564d6912e59a1b3b2c201394aa5e",
     "semantic_hash": "b6c4564d6912e59a1b3b2c201394aa5e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "2ff1a72d02d5f143515b3e9417562e69",
     "semantic_hash": "2ff1a72d02d5f143515b3e9417562e69"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/controllers/kuka_kss_message_handler/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "1ed9966059b409cdceb4fd903a14879d",
     "semantic_hash": "1ed9966059b409cdceb4fd903a14879d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/1_iiQKA_EAC.md": {
+  "src/third_party/kuka_drivers/doc/wiki/1_iiQKA_EAC.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "4152650712d5685c94a466c7a2d10bf2",
     "semantic_hash": "4152650712d5685c94a466c7a2d10bf2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/2_KSS_RSI.md": {
+  "src/third_party/kuka_drivers/doc/wiki/2_KSS_RSI.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "988bf9c9050f7a8f693283e83d002f45",
     "semantic_hash": "988bf9c9050f7a8f693283e83d002f45"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/3_iiQKA.OS2_RSI.md": {
+  "src/third_party/kuka_drivers/doc/wiki/3_iiQKA.OS2_RSI.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "4e99d1730a9e4614bc695bd1c6e4b3e9",
     "semantic_hash": "4e99d1730a9e4614bc695bd1c6e4b3e9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/4_Sunrise_FRI.md": {
+  "src/third_party/kuka_drivers/doc/wiki/4_Sunrise_FRI.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "8396ec2dfa47f89290669d7dd8ed2b6c",
     "semantic_hash": "8396ec2dfa47f89290669d7dd8ed2b6c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/5_Controllers.md": {
+  "src/third_party/kuka_drivers/doc/wiki/5_Controllers.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "d1f98b8e783ad491d6874e303dcb34ab",
     "semantic_hash": "d1f98b8e783ad491d6874e303dcb34ab"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/6_Realtime.md": {
+  "src/third_party/kuka_drivers/doc/wiki/6_Realtime.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "0310f478eb105aceecf5f71801702e4b",
     "semantic_hash": "0310f478eb105aceecf5f71801702e4b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/doc/wiki/Home.md": {
+  "src/third_party/kuka_drivers/doc/wiki/Home.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "4d354398b1239ca9293d66e60f7befac",
     "semantic_hash": "4d354398b1239ca9293d66e60f7befac"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "30ec103e86b55f78014c68f5f5a9fd81",
     "semantic_hash": "30ec103e86b55f78014c68f5f5a9fd81"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "d55194670a60963646fa7d8fea4a5e47",
     "semantic_hash": "d55194670a60963646fa7d8fea4a5e47"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/config/dummy_publisher.yaml": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/config/dummy_publisher.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "61448dd1b66effd066292372a121cf29",
     "semantic_hash": "61448dd1b66effd066292372a121cf29"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/examples/iiqka_moveit_example/config/moveit_controllers.yaml": {
+  "src/third_party/kuka_drivers/examples/iiqka_moveit_example/config/moveit_controllers.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "52db47ce2bb4979d09fd7897e55123ce",
     "semantic_hash": "52db47ce2bb4979d09fd7897e55123ce"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_driver_interfaces/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_driver_interfaces/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "9dc7e56ce3f9d8c576b69e5967fdf6fb",
     "semantic_hash": "9dc7e56ce3f9d8c576b69e5967fdf6fb"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_driver_interfaces/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_driver_interfaces/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "a43dcd2bb5f3bcc5fadca99adeed860c",
     "semantic_hash": "a43dcd2bb5f3bcc5fadca99adeed860c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_drivers/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "845b55ee9c9fabbd564e98e728bceabd",
     "semantic_hash": "845b55ee9c9fabbd564e98e728bceabd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_drivers/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "e1cb4b9b9c3eb463203083e1e1572a41",
     "semantic_hash": "e1cb4b9b9c3eb463203083e1e1572a41"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "7c131f275c2715f41431ae722fe803ac",
     "semantic_hash": "7c131f275c2715f41431ae722fe803ac"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "ce27ac34e75ff31b4b6b8145d56048ae",
     "semantic_hash": "ce27ac34e75ff31b4b6b8145d56048ae"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_drivers_core/README.md": {
+  "src/third_party/kuka_drivers/kuka_drivers_core/README.md": {
     "mtime": 1765196119.0894725,
     "ast_hash": "f497ba860bc570593075e876f9811ac2",
     "semantic_hash": "f497ba860bc570593075e876f9811ac2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/CHANGELOG.rst": {
     "mtime": 1765196119.0894725,
     "ast_hash": "a379a8c1b16191d68d1a09b333ab4da9",
     "semantic_hash": "a379a8c1b16191d68d1a09b333ab4da9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/CMakeLists.txt": {
     "mtime": 1765196119.0894725,
     "ast_hash": "3683989d2af56c9a618312360eb8b6c5",
     "semantic_hash": "3683989d2af56c9a618312360eb8b6c5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/driver_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/driver_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "4ec5a2bc0f95437ad0cf6cdcca453bbc",
     "semantic_hash": "4ec5a2bc0f95437ad0cf6cdcca453bbc"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/effort_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/effort_controller_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "8458b6d70be5c74c72db6831d8d48316",
     "semantic_hash": "8458b6d70be5c74c72db6831d8d48316"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/joint_impedance_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/joint_impedance_controller_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "ed3d2b9ad7c80e5041469473ab7aa377",
     "semantic_hash": "ed3d2b9ad7c80e5041469473ab7aa377"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "968af1e54045813aa57b7abeea201770",
     "semantic_hash": "968af1e54045813aa57b7abeea201770"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/qos_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/qos_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "a9c2e2ca2e6f9f17baf556798f06ca47",
     "semantic_hash": "a9c2e2ca2e6f9f17baf556798f06ca47"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/config/ros2_controller_config.yaml": {
     "mtime": 1765196119.0894725,
     "ast_hash": "eb4d031fe8cc3e2dd99b45e3e30e2949",
     "semantic_hash": "eb4d031fe8cc3e2dd99b45e3e30e2949"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_effort_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_effort_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "4c5eb6d85fccefd03a813953fa062f7b",
     "semantic_hash": "4c5eb6d85fccefd03a813953fa062f7b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_joint_impedance_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_joint_impedance_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "3c27e2659b4b5313bd77e0724b371e9b",
     "semantic_hash": "3c27e2659b4b5313bd77e0724b371e9b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "6fae9017643a456f14a54764468f77df",
     "semantic_hash": "6fae9017643a456f14a54764468f77df"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test1_ros2_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "aef5349b9c7dea8478cbe47c99d7442b",
     "semantic_hash": "aef5349b9c7dea8478cbe47c99d7442b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_effort_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_effort_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "af7463146a8172f652ec9a4a238c7779",
     "semantic_hash": "af7463146a8172f652ec9a4a238c7779"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_joint_impedance_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_joint_impedance_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "cded46172335a57cb21f7173cf4dd539",
     "semantic_hash": "cded46172335a57cb21f7173cf4dd539"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "313683b617e91e76e21842d146ce248d",
     "semantic_hash": "313683b617e91e76e21842d146ce248d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_iiqka_eac_driver/test/config/test2_ros2_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "421221ba77787750efa2de2178bd2b96",
     "semantic_hash": "421221ba77787750efa2de2178bd2b96"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/CHANGELOG.rst": {
     "mtime": 1765196119.0937188,
     "ast_hash": "db78f886286f0b4ff18a471ff845046b",
     "semantic_hash": "db78f886286f0b4ff18a471ff845046b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/CMakeLists.txt": {
     "mtime": 1765196119.0937188,
     "ast_hash": "16928fbd86a7c71f9e99959ed38ea858",
     "semantic_hash": "16928fbd86a7c71f9e99959ed38ea858"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/README.md": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/README.md": {
     "mtime": 1765196119.0937188,
     "ast_hash": "939c0ae7e8cc7aa921b34c43ca3c7cf1",
     "semantic_hash": "939c0ae7e8cc7aa921b34c43ca3c7cf1"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/config/driver_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/config/driver_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "8018446a9a87cddd012440975b4724f2",
     "semantic_hash": "8018446a9a87cddd012440975b4724f2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/config/gpio_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/config/gpio_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "159c8ed1c08c8d2c444aeb6d37c7dfdf",
     "semantic_hash": "159c8ed1c08c8d2c444aeb6d37c7dfdf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/config/joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/config/joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "968af1e54045813aa57b7abeea201770",
     "semantic_hash": "968af1e54045813aa57b7abeea201770"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/config/ros2_controller_config_eki_rsi.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/config/ros2_controller_config_eki_rsi.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "c483658aad7867d6d70d98cc1aa7b215",
     "semantic_hash": "c483658aad7867d6d70d98cc1aa7b215"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/config/ros2_controller_config_rsi_only.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/config/ros2_controller_config_rsi_only.yaml": {
     "mtime": 1765196119.0937188,
     "ast_hash": "c2dcf8811ac9aaf9bdbc77e81cc56b4f",
     "semantic_hash": "c2dcf8811ac9aaf9bdbc77e81cc56b4f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "6fae9017643a456f14a54764468f77df",
     "semantic_hash": "6fae9017643a456f14a54764468f77df"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test1_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test1_ros2_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "7a89b7225f1e5309dc4325ea1b60614a",
     "semantic_hash": "7a89b7225f1e5309dc4325ea1b60614a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "313683b617e91e76e21842d146ce248d",
     "semantic_hash": "313683b617e91e76e21842d146ce248d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test2_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_rsi_driver/test/config/test2_ros2_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "89dec930027bb14c87e0308a54dc9a9a",
     "semantic_hash": "89dec930027bb14c87e0308a54dc9a9a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_rsi_simulator/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_rsi_simulator/CHANGELOG.rst": {
     "mtime": 1765196119.0979652,
     "ast_hash": "bb8ff57705355c45d4debd826e69de48",
     "semantic_hash": "bb8ff57705355c45d4debd826e69de48"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/CHANGELOG.rst": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/CHANGELOG.rst": {
     "mtime": 1765196119.0979652,
     "ast_hash": "b52b190726544c6e87f89e9d6807901b",
     "semantic_hash": "b52b190726544c6e87f89e9d6807901b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/CMakeLists.txt": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/CMakeLists.txt": {
     "mtime": 1765196119.0979652,
     "ast_hash": "85ad8adade1c3f0f2811f17a02b2d69e",
     "semantic_hash": "85ad8adade1c3f0f2811f17a02b2d69e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/driver_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/driver_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "7332083c7073000f3e71e90636dbfc54",
     "semantic_hash": "7332083c7073000f3e71e90636dbfc54"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/effort_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/effort_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "c85fbafd67d968a428321cdf594b0aed",
     "semantic_hash": "c85fbafd67d968a428321cdf594b0aed"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/external_torque_broadcaster_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/external_torque_broadcaster_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "60af86209ccdcdf56513699d1825e8a9",
     "semantic_hash": "60af86209ccdcdf56513699d1825e8a9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/joint_impedance_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/joint_impedance_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "b681baaa2698f5863c4894f9467c44c2",
     "semantic_hash": "b681baaa2698f5863c4894f9467c44c2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "4e18f72bd68739e8186b7f14d24827e7",
     "semantic_hash": "4e18f72bd68739e8186b7f14d24827e7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/config/ros2_controller_config.yaml": {
     "mtime": 1765196119.0979652,
     "ast_hash": "775af1f722e30b903d3192e5f1f6a446",
     "semantic_hash": "775af1f722e30b903d3192e5f1f6a446"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test1_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.1064582,
     "ast_hash": "6fae9017643a456f14a54764468f77df",
     "semantic_hash": "6fae9017643a456f14a54764468f77df"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test1_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test1_ros2_controller_config.yaml": {
     "mtime": 1765196119.1064582,
     "ast_hash": "7a89b7225f1e5309dc4325ea1b60614a",
     "semantic_hash": "7a89b7225f1e5309dc4325ea1b60614a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test2_joint_trajectory_controller_config.yaml": {
     "mtime": 1765196119.1064582,
     "ast_hash": "313683b617e91e76e21842d146ce248d",
     "semantic_hash": "313683b617e91e76e21842d146ce248d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test2_ros2_controller_config.yaml": {
+  "src/third_party/kuka_drivers/kuka_sunrise_fri_driver/test/config/test2_ros2_controller_config.yaml": {
     "mtime": 1765196119.1064582,
     "ast_hash": "89dec930027bb14c87e0308a54dc9a9a",
     "semantic_hash": "89dec930027bb14c87e0308a54dc9a9a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.github/mergify.yml": {
+  "src/third_party/kuka_robot_descriptions/.github/mergify.yml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "95e8bcb7579f5c2a5886af679df6739f",
     "semantic_hash": "95e8bcb7579f5c2a5886af679df6739f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.github/pull_request_template.md": {
+  "src/third_party/kuka_robot_descriptions/.github/pull_request_template.md": {
     "mtime": 1765196222.5641162,
     "ast_hash": "7aa983b84502a6e5c8514a6a05293f59",
     "semantic_hash": "7aa983b84502a6e5c8514a6a05293f59"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.github/workflows/industrial_ci.yml": {
+  "src/third_party/kuka_robot_descriptions/.github/workflows/industrial_ci.yml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "17c404e9a2bfac5765d47d82162780ab",
     "semantic_hash": "17c404e9a2bfac5765d47d82162780ab"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.github/workflows/industrial_ci_humble.yml": {
+  "src/third_party/kuka_robot_descriptions/.github/workflows/industrial_ci_humble.yml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "a28fd5c3bfd3efd4eb6fc57199645524",
     "semantic_hash": "a28fd5c3bfd3efd4eb6fc57199645524"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.github/workflows/pre-commit.yml": {
+  "src/third_party/kuka_robot_descriptions/.github/workflows/pre-commit.yml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "c4ad7f47b7949b0976c9e4ca935f1d0c",
     "semantic_hash": "c4ad7f47b7949b0976c9e4ca935f1d0c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/.pre-commit-config.yaml": {
+  "src/third_party/kuka_robot_descriptions/.pre-commit-config.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "cc9c7084eccbe3bd50a89608e1ab1804",
     "semantic_hash": "cc9c7084eccbe3bd50a89608e1ab1804"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/CONTRIBUTING.md": {
+  "src/third_party/kuka_robot_descriptions/CONTRIBUTING.md": {
     "mtime": 1765196222.5641162,
     "ast_hash": "706dc3591090b7b83e34b76b6920ec29",
     "semantic_hash": "706dc3591090b7b83e34b76b6920ec29"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/README.md": {
+  "src/third_party/kuka_robot_descriptions/README.md": {
     "mtime": 1765196222.5641162,
     "ast_hash": "d679ac76dc035d54a2d906a613926e47",
     "semantic_hash": "d679ac76dc035d54a2d906a613926e47"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/CHANGELOG.rst": {
     "mtime": 1765196222.5641162,
     "ast_hash": "f53f5e8ad519819aa014a7a1391912f9",
     "semantic_hash": "f53f5e8ad519819aa014a7a1391912f9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/CMakeLists.txt": {
     "mtime": 1765196222.5641162,
     "ast_hash": "ea9bf27e0ca000110b1c7126a42fb0db",
     "semantic_hash": "ea9bf27e0ca000110b1c7126a42fb0db"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr10_r1100_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr10_r1100_2_joint_limits.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "5911f6241413d31799335846246f82bd",
     "semantic_hash": "5911f6241413d31799335846246f82bd"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r700_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r700_2_joint_limits.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "04da6c7f55ed7caf51158ee0c0210d87",
     "semantic_hash": "04da6c7f55ed7caf51158ee0c0210d87"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r700_sixx_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r700_sixx_joint_limits.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "a2bec89f4b86d2f8d60d8b9aabc7259e",
     "semantic_hash": "a2bec89f4b86d2f8d60d8b9aabc7259e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r900_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r900_2_joint_limits.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "91ffc395e2af5540f420c60b6f5a1361",
     "semantic_hash": "91ffc395e2af5540f420c60b6f5a1361"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r900_sixx_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/kr6_r900_sixx_joint_limits.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "45d398daa6269d75d0589598aff16759",
     "semantic_hash": "45d398daa6269d75d0589598aff16759"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/opw_kinematics_kr6r700sixx.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/opw_kinematics_kr6r700sixx.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "20092a165f8077dcdb91c868b1bf5638",
     "semantic_hash": "20092a165f8077dcdb91c868b1bf5638"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/opw_parameters_kr6r900_2.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_agilus_support/config/opw_parameters_kr6r900_2.yaml": {
     "mtime": 1765196222.5641162,
     "ast_hash": "4d9e5a20925c0b3501c0d307b70c78a2",
     "semantic_hash": "4d9e5a20925c0b3501c0d307b70c78a2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/CHANGELOG.rst": {
     "mtime": 1765196222.6872463,
     "ast_hash": "27791798f5781c05b4dceb10256f22b3",
     "semantic_hash": "27791798f5781c05b4dceb10256f22b3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/CMakeLists.txt": {
     "mtime": 1765196222.6872463,
     "ast_hash": "e069e3743eb1bf1e372f27294e5181ea",
     "semantic_hash": "e069e3743eb1bf1e372f27294e5181ea"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr12_r1450_3_hw_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr12_r1450_3_hw_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "16306ff9faaeaae6a3e46bb58c735344",
     "semantic_hash": "16306ff9faaeaae6a3e46bb58c735344"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr16_r1610_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr16_r1610_2_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "7dc2347be46ec58ed994c497f8f36c1b",
     "semantic_hash": "7dc2347be46ec58ed994c497f8f36c1b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr16_r2010_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr16_r2010_2_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "27c1d119525aff3863b4af69a40ecd8b",
     "semantic_hash": "27c1d119525aff3863b4af69a40ecd8b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr20_r1810_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr20_r1810_2_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "91251220b905f3fee44544f9c0b129f2",
     "semantic_hash": "91251220b905f3fee44544f9c0b129f2"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr8_r1440_2_arc_hw_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr8_r1440_2_arc_hw_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "9a88ef0d4551868f04365098b0415087",
     "semantic_hash": "9a88ef0d4551868f04365098b0415087"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr8_r2100_2_arc_hw_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_cybertech_support/config/kr8_r2100_2_arc_hw_joint_limits.yaml": {
     "mtime": 1765196222.6872463,
     "ast_hash": "5c093c9cd9ceb129272d9f67cf4ec589",
     "semantic_hash": "5c093c9cd9ceb129272d9f67cf4ec589"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/CHANGELOG.rst": {
     "mtime": 1765196222.9929488,
     "ast_hash": "669098c850826c7d0c4c4802ae366da5",
     "semantic_hash": "669098c850826c7d0c4c4802ae366da5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/CMakeLists.txt": {
     "mtime": 1765196222.9929488,
     "ast_hash": "be4ab4d6ebb8a6dbc1b0c9028c1e6391",
     "semantic_hash": "be4ab4d6ebb8a6dbc1b0c9028c1e6391"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr240_r3330_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr240_r3330_joint_limits.yaml": {
     "mtime": 1765196222.9929488,
     "ast_hash": "4817c8206c002db10aa726bef44bce90",
     "semantic_hash": "4817c8206c002db10aa726bef44bce90"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr300_r2800_2_mt_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr300_r2800_2_mt_joint_limits.yaml": {
     "mtime": 1765196222.9929488,
     "ast_hash": "67ec52452b4ef6539f231a064b20632a",
     "semantic_hash": "67ec52452b4ef6539f231a064b20632a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr560_r3100_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_fortec_support/config/kr560_r3100_2_joint_limits.yaml": {
     "mtime": 1765196222.9929488,
     "ast_hash": "f5b7469e5a7db1d2a23d11c62c3c9083",
     "semantic_hash": "f5b7469e5a7db1d2a23d11c62c3c9083"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/CHANGELOG.rst": {
     "mtime": 1765196223.2986512,
     "ast_hash": "97886a48c7b6c79c04d5a89546e54e28",
     "semantic_hash": "97886a48c7b6c79c04d5a89546e54e28"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_gazebo/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_gazebo/CMakeLists.txt": {
     "mtime": 1765196223.2986512,
     "ast_hash": "daee2761838be7703373169a20aaf5ce",
     "semantic_hash": "daee2761838be7703373169a20aaf5ce"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_iontec_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_iontec_support/CHANGELOG.rst": {
     "mtime": 1765196223.302897,
     "ast_hash": "768955bfdf9cbad27d49318282c2662e",
     "semantic_hash": "768955bfdf9cbad27d49318282c2662e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_iontec_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_iontec_support/CMakeLists.txt": {
     "mtime": 1765196223.302897,
     "ast_hash": "fda32a4405b1c296179545585bc31df6",
     "semantic_hash": "fda32a4405b1c296179545585bc31df6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_iontec_support/config/kr70_r2100_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_iontec_support/config/kr70_r2100_joint_limits.yaml": {
     "mtime": 1765196223.302897,
     "ast_hash": "89e3ff108d9397bc0a08f8b40e511053",
     "semantic_hash": "89e3ff108d9397bc0a08f8b40e511053"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/CHANGELOG.rst": {
     "mtime": 1765196223.3878145,
     "ast_hash": "d67bf33affb400f8822978d767c7166e",
     "semantic_hash": "d67bf33affb400f8822978d767c7166e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/CMakeLists.txt": {
     "mtime": 1765196223.3878145,
     "ast_hash": "b7b6805ea776a3aafcd363e84c815b31",
     "semantic_hash": "b7b6805ea776a3aafcd363e84c815b31"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/chomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/chomp_planning.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "0d5fc226f7b5b455092e472af9d8819c",
     "semantic_hash": "0d5fc226f7b5b455092e472af9d8819c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/kinematics.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/kinematics.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "d3fa292aebbe9293e754092e96c5a549",
     "semantic_hash": "d3fa292aebbe9293e754092e96c5a549"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/moveit_controllers.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/moveit_controllers.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "52db47ce2bb4979d09fd7897e55123ce",
     "semantic_hash": "52db47ce2bb4979d09fd7897e55123ce"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/ompl_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/ompl_planning.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "6ed4fa51f4415041ad30876cd6546489",
     "semantic_hash": "6ed4fa51f4415041ad30876cd6546489"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/pilz_cartesian_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/pilz_cartesian_limits.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "976e243c6572fef1dba0d652560dbf24",
     "semantic_hash": "976e243c6572fef1dba0d652560dbf24"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/stomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_kr_moveit_config/config/stomp_planning.yaml": {
     "mtime": 1765196223.3878145,
     "ast_hash": "c6bdc071050de225b4bf02a82c6ff7ff",
     "semantic_hash": "c6bdc071050de225b4bf02a82c6ff7ff"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/CHANGELOG.rst": {
     "mtime": 1765196223.3920603,
     "ast_hash": "9c6fdb873c77fb583b8115e71b911ac7",
     "semantic_hash": "9c6fdb873c77fb583b8115e71b911ac7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/CMakeLists.txt": {
     "mtime": 1765196223.3920603,
     "ast_hash": "9b7b1a958a719b47b13170916f684133",
     "semantic_hash": "9b7b1a958a719b47b13170916f684133"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/chomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/chomp_planning.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "0d5fc226f7b5b455092e472af9d8819c",
     "semantic_hash": "0d5fc226f7b5b455092e472af9d8819c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/kinematics.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/kinematics.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "d3fa292aebbe9293e754092e96c5a549",
     "semantic_hash": "d3fa292aebbe9293e754092e96c5a549"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/moveit_controllers.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/moveit_controllers.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "52db47ce2bb4979d09fd7897e55123ce",
     "semantic_hash": "52db47ce2bb4979d09fd7897e55123ce"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/ompl_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/ompl_planning.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "6ed4fa51f4415041ad30876cd6546489",
     "semantic_hash": "6ed4fa51f4415041ad30876cd6546489"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/pilz_cartesian_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/pilz_cartesian_limits.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "976e243c6572fef1dba0d652560dbf24",
     "semantic_hash": "976e243c6572fef1dba0d652560dbf24"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/stomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_moveit_config/config/stomp_planning.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "c6bdc071050de225b4bf02a82c6ff7ff",
     "semantic_hash": "c6bdc071050de225b4bf02a82c6ff7ff"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/CHANGELOG.rst": {
     "mtime": 1765196223.3920603,
     "ast_hash": "0ae7fc210d2ce291244d1846a661a3cf",
     "semantic_hash": "0ae7fc210d2ce291244d1846a661a3cf"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/CMakeLists.txt": {
     "mtime": 1765196223.3920603,
     "ast_hash": "84a1a98dd2ee3039a75b5933fa3f5f50",
     "semantic_hash": "84a1a98dd2ee3039a75b5933fa3f5f50"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy11_r1300_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy11_r1300_joint_limits.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "8b391886abecca4db961e392d7f33f2f",
     "semantic_hash": "8b391886abecca4db961e392d7f33f2f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy15_r930_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy15_r930_joint_limits.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "4c832a903dbc699d40fa1acfc72c7fd9",
     "semantic_hash": "4c832a903dbc699d40fa1acfc72c7fd9"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy3_r760_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iisy_support/config/lbr_iisy3_r760_joint_limits.yaml": {
     "mtime": 1765196223.3920603,
     "ast_hash": "c3a84325095459836f7aa545fe1180e0",
     "semantic_hash": "c3a84325095459836f7aa545fe1180e0"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/CHANGELOG.rst": {
     "mtime": 1765196223.4982069,
     "ast_hash": "dd658bfb3a98ef77ead00dbef02d890b",
     "semantic_hash": "dd658bfb3a98ef77ead00dbef02d890b"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/CMakeLists.txt": {
     "mtime": 1765196223.4982069,
     "ast_hash": "1d3c882d79a4884d5d43cddbadb021f3",
     "semantic_hash": "1d3c882d79a4884d5d43cddbadb021f3"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/chomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/chomp_planning.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "0d5fc226f7b5b455092e472af9d8819c",
     "semantic_hash": "0d5fc226f7b5b455092e472af9d8819c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/kinematics.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/kinematics.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "d3fa292aebbe9293e754092e96c5a549",
     "semantic_hash": "d3fa292aebbe9293e754092e96c5a549"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/moveit_controllers.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/moveit_controllers.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "7da14fb8eed58c3970b1313269ebce3f",
     "semantic_hash": "7da14fb8eed58c3970b1313269ebce3f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/ompl_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/ompl_planning.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "6ed4fa51f4415041ad30876cd6546489",
     "semantic_hash": "6ed4fa51f4415041ad30876cd6546489"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/pilz_cartesian_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/pilz_cartesian_limits.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "976e243c6572fef1dba0d652560dbf24",
     "semantic_hash": "976e243c6572fef1dba0d652560dbf24"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/stomp_planning.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_moveit_config/config/stomp_planning.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "c6bdc071050de225b4bf02a82c6ff7ff",
     "semantic_hash": "c6bdc071050de225b4bf02a82c6ff7ff"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/CHANGELOG.rst": {
     "mtime": 1765196223.4982069,
     "ast_hash": "1bc8880eabd086700c5b70fba4f2e752",
     "semantic_hash": "1bc8880eabd086700c5b70fba4f2e752"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/CMakeLists.txt": {
     "mtime": 1765196223.4982069,
     "ast_hash": "bca1819ff0fbd4e3482befa96c5ae132",
     "semantic_hash": "bca1819ff0fbd4e3482befa96c5ae132"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/config/lbr_iiwa14_r820_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_lbr_iiwa_support/config/lbr_iiwa14_r820_joint_limits.yaml": {
     "mtime": 1765196223.4982069,
     "ast_hash": "b5e304121dc5391459bafa41d27ab251",
     "semantic_hash": "b5e304121dc5391459bafa41d27ab251"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/CHANGELOG.rst": {
     "mtime": 1765196223.527928,
     "ast_hash": "bd93025f2050b680cb4a577e2b59358c",
     "semantic_hash": "bd93025f2050b680cb4a577e2b59358c"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_mock_hardware_interface/CMakeLists.txt": {
     "mtime": 1765196223.527928,
     "ast_hash": "ba972e6e6be158b9950dae0778d6676a",
     "semantic_hash": "ba972e6e6be158b9950dae0778d6676a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/CHANGELOG.rst": {
     "mtime": 1765196223.527928,
     "ast_hash": "3481d526261f7517e28b956615ceb897",
     "semantic_hash": "3481d526261f7517e28b956615ceb897"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/CMakeLists.txt": {
     "mtime": 1765196223.527928,
     "ast_hash": "2fa8cb388b1b90375f0f0baea95a635e",
     "semantic_hash": "2fa8cb388b1b90375f0f0baea95a635e"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr150_r3100_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr150_r3100_2_joint_limits.yaml": {
     "mtime": 1765196223.527928,
     "ast_hash": "c356cde5cd9c43e7e47d0e8da14bcd98",
     "semantic_hash": "c356cde5cd9c43e7e47d0e8da14bcd98"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr210_r2700_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr210_r2700_2_joint_limits.yaml": {
     "mtime": 1765196223.527928,
     "ast_hash": "c59f5f5bc8aebe18214f11fd2cb231cc",
     "semantic_hash": "c59f5f5bc8aebe18214f11fd2cb231cc"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr210_r3100_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr210_r3100_2_joint_limits.yaml": {
     "mtime": 1765196223.527928,
     "ast_hash": "7d88458524eef76e9222f003c0ad1db5",
     "semantic_hash": "7d88458524eef76e9222f003c0ad1db5"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr240_r2900_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr240_r2900_2_joint_limits.yaml": {
     "mtime": 1765196223.527928,
     "ast_hash": "5c3a4371daff8e3e41b4969163781512",
     "semantic_hash": "5c3a4371daff8e3e41b4969163781512"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr300_r2700_2_joint_limits.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_quantec_support/config/kr300_r2700_2_joint_limits.yaml": {
     "mtime": 1765196223.527928,
     "ast_hash": "9a49eb3eb1d59e002975e3e32fde03f7",
     "semantic_hash": "9a49eb3eb1d59e002975e3e32fde03f7"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_resources/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_resources/CHANGELOG.rst": {
     "mtime": 1765196224.041678,
     "ast_hash": "9d468142c45af15cad8b2ecfcda6e44d",
     "semantic_hash": "9d468142c45af15cad8b2ecfcda6e44d"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_resources/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_resources/CMakeLists.txt": {
     "mtime": 1765196224.041678,
     "ast_hash": "c39b77ae797a33a5407930c3ce99eec6",
     "semantic_hash": "c39b77ae797a33a5407930c3ce99eec6"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_resources/config/fake_hardware_config_6_axis.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_resources/config/fake_hardware_config_6_axis.yaml": {
     "mtime": 1765196224.041678,
     "ast_hash": "2a5fb375f7aa648a507bbdbab48ee361",
     "semantic_hash": "2a5fb375f7aa648a507bbdbab48ee361"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_resources/config/fake_hardware_config_7_axis.yaml": {
+  "src/third_party/kuka_robot_descriptions/kuka_resources/config/fake_hardware_config_7_axis.yaml": {
     "mtime": 1765196224.041678,
     "ast_hash": "162a9cbda35fa342a32c5c5ae17edc59",
     "semantic_hash": "162a9cbda35fa342a32c5c5ae17edc59"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_robot_descriptions/CHANGELOG.rst": {
+  "src/third_party/kuka_robot_descriptions/kuka_robot_descriptions/CHANGELOG.rst": {
     "mtime": 1765196224.041678,
     "ast_hash": "dbabd8871e88b9d0cb23bc1e84c03c0f",
     "semantic_hash": "dbabd8871e88b9d0cb23bc1e84c03c0f"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka_robot_descriptions/kuka_robot_descriptions/CMakeLists.txt": {
+  "src/third_party/kuka_robot_descriptions/kuka_robot_descriptions/CMakeLists.txt": {
     "mtime": 1765196224.041678,
     "ast_hash": "04dcb2d7ddf3324179fe65b2137d39db",
     "semantic_hash": "04dcb2d7ddf3324179fe65b2137d39db"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/ControlExample.png": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/ControlExample.png": {
     "mtime": 1765196209.455741,
     "ast_hash": "229fe8feb88eca65a08fb36810ffa459",
     "semantic_hash": "229fe8feb88eca65a08fb36810ffa459"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/ControlExampleWithProtos.png": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/ControlExampleWithProtos.png": {
     "mtime": 1765196209.455741,
     "ast_hash": "dc3ceadb05ce2e3dd1102624de874e7a",
     "semantic_hash": "dc3ceadb05ce2e3dd1102624de874e7a"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/MonitoringExample.png": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/MonitoringExample.png": {
     "mtime": 1765196209.4599867,
     "ast_hash": "5bc08c56183f3d459c72b77ac1b02834",
     "semantic_hash": "5bc08c56183f3d459c72b77ac1b02834"
   },
-  "/home/jayson/kuka_ram_ws/src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/MonitoringExampleWithProtos.png": {
+  "src/third_party/kuka-external-control-sdk/kuka_external_control_sdk/doc/diagrams/MonitoringExampleWithProtos.png": {
     "mtime": 1765196209.4599867,
     "ast_hash": "e2f414015199a9d9605b7aba689eed21",
     "semantic_hash": "e2f414015199a9d9605b7aba689eed21"
   },
-  "/home/jayson/kuka_ram_ws/test/images/trajectory_preview.png": {
+  "test/images/trajectory_preview.png": {
     "mtime": 1765786840.3126364,
     "ast_hash": "3fd9d309425c68d32b8cad10df020841",
     "semantic_hash": "3fd9d309425c68d32b8cad10df020841"
   },
-  "/home/jayson/kuka_ram_ws/test/images/z_curve_density_test.png": {
+  "test/images/z_curve_density_test.png": {
     "mtime": 1765781769.0902011,
     "ast_hash": "ffe28050c4b2ee0a83cf19fabe546d5a",
     "semantic_hash": "ffe28050c4b2ee0a83cf19fabe546d5a"
+  },
+  "src/my_project/gcode_planner/gcode_planner/head_calibration.py": {
+    "mtime": 1782044410.4640403,
+    "ast_hash": "be862842d162d251e395efd9da07f4c5",
+    "semantic_hash": "be862842d162d251e395efd9da07f4c5"
+  },
+  "src/my_project/gcode_planner/test/test_head_calibration.py": {
+    "mtime": 1782044393.0370543,
+    "ast_hash": "f307445a0cc7d9431cf426186d351145",
+    "semantic_hash": "f307445a0cc7d9431cf426186d351145"
+  },
+  "docs/superpowers/plans/2026-06-21-test-mode-fiber-printing.md": {
+    "mtime": 1782043615.4386768,
+    "ast_hash": "8fa25aa282906d99f5ccef95439427c6",
+    "semantic_hash": "8fa25aa282906d99f5ccef95439427c6"
+  },
+  "docs/superpowers/specs/2026-06-21-test-mode-fiber-design.md": {
+    "mtime": 1782042934.6973543,
+    "ast_hash": "12dcdb52581c9feb44faac1ffe52e226",
+    "semantic_hash": "12dcdb52581c9feb44faac1ffe52e226"
   }
 }

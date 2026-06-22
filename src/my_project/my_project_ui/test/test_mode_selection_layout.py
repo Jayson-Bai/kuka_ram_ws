@@ -362,6 +362,19 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
         assert connection in test_section
 
 
+def test_fiber_offset_apply_is_relative_to_current_rsi_correction():
+    src = _source()
+    apply_section = src.split("    def _on_print_test_apply_fiber_offset", 1)[1].split(
+        "    def _on_print_test_confirm_fiber_offset", 1
+    )[0]
+
+    assert "start = self._print_test_current_correction" in apply_section
+    assert "start[0] + calibration.fiber_x_print_compensation_mm" in apply_section
+    assert "start[1] + calibration.fiber_y_print_compensation_mm" in apply_section
+    assert "start[2] + calibration.fiber_z_print_compensation_mm" in apply_section
+    assert 'self._run_print_test_job("travel", start, target_pose=target)' in apply_section
+
+
 def test_scissor_button_checks_fiber_tool_before_uart_command():
     src = _source()
     cut_anchor = "    def _on_print_test_cut"
