@@ -1,16 +1,16 @@
 # Graph Report - kuka_ram_ws  (2026-06-22)
 
 ## Corpus Check
-- 333 files · ~198,220 words
+- 333 files · ~198,548 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3951 nodes · 5483 edges · 368 communities (309 shown, 59 thin omitted)
+- 3956 nodes · 5495 edges · 376 communities (313 shown, 63 thin omitted)
 - Extraction: 95% EXTRACTED · 5% INFERRED · 0% AMBIGUOUS · INFERRED: 284 edges (avg confidence: 0.72)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `c6c5bc24`
+- Built from commit: `648849ec`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -156,11 +156,13 @@
 - [[_COMMUNITY_source|source]]
 - [[_COMMUNITY_cnpy h|cnpy h]]
 - [[_COMMUNITY_ros2 control tools hpp|ros2 control tools hpp]]
+- [[_COMMUNITY_Community 141|Community 141]]
 - [[_COMMUNITY_kuka iiqka client library protobuf|kuka iiqka client library protobuf]]
 - [[_COMMUNITY_extension h|extension h]]
 - [[_COMMUNITY_Path Following Visualization|Path Following Visualization]]
 - [[_COMMUNITY_gpio value h|gpio value h]]
 - [[_COMMUNITY_ros2 base hpp|ros2 base hpp]]
+- [[_COMMUNITY_Community 147|Community 147]]
 - [[_COMMUNITY_plot layers from manifest py|plot layers from manifest py]]
 - [[_COMMUNITY_extruder latency monitor cpp|extruder latency monitor cpp]]
 - [[_COMMUNITY_joint group impedance controller cpp|joint group impedance controller cpp]]
@@ -180,7 +182,7 @@
 - [[_COMMUNITY_export command interfaces|export command interfaces]]
 - [[_COMMUNITY_generate test description|generate test description]]
 - [[_COMMUNITY_generate test description|generate test description]]
-- [[_COMMUNITY_generate test description|generate test description]]
+- [[_COMMUNITY_Community 168|Community 168]]
 - [[_COMMUNITY_generate test description|generate test description]]
 - [[_COMMUNITY_generate test description|generate test description]]
 - [[_COMMUNITY_generate test description|generate test description]]
@@ -194,6 +196,7 @@
 - [[_COMMUNITY_test multi robot startup py|test multi robot startup py]]
 - [[_COMMUNITY_test driver activation py|test driver activation py]]
 - [[_COMMUNITY_generate test description|generate test description]]
+- [[_COMMUNITY_Community 182|Community 182]]
 - [[_COMMUNITY_generate test description|generate test description]]
 - [[_COMMUNITY_generate test description|generate test description]]
 - [[_COMMUNITY_generate test description|generate test description]]
@@ -277,8 +280,13 @@
 - [[_COMMUNITY_generate launch description|generate launch description]]
 - [[_COMMUNITY_Community 343|Community 343]]
 - [[_COMMUNITY_Community 344|Community 344]]
+- [[_COMMUNITY_Community 369|Community 369]]
+- [[_COMMUNITY_Community 370|Community 370]]
 - [[_COMMUNITY_Community 371|Community 371]]
 - [[_COMMUNITY_Community 372|Community 372]]
+- [[_COMMUNITY_Community 373|Community 373]]
+- [[_COMMUNITY_Community 374|Community 374]]
+- [[_COMMUNITY_Community 375|Community 375]]
 
 ## God Nodes (most connected - your core abstractions)
 1. `_UiStatusWidget` - 78 edges
@@ -301,7 +309,7 @@
   docs/superpowers/specs/2026-06-21-test-mode-fiber-design.md → src/my_project/my_project_ui/UI_ARCHITECTURE.md
 - `BaseFunction()` --calls--> `evaluate_bspline_points()`  [INFERRED]
   src/my_project/gcode_planner/gcode_planner/bspline/BaseFunction.py → test/scripts/RSI_test_180.py
-- `GlobalSplinePlanner` --uses--> `ndarray`  [INFERRED]
+- `GlobalSplinePlanner` --uses--> `MoveCommand`  [INFERRED]
   src/my_project/gcode_planner/gcode_planner/bspline_approximation.py → test/scripts/RSI_test_180.py
 
 ## Import Cycles
@@ -347,7 +355,7 @@
 - **RSI Heartbeat Synchronized Execution** — readme_rsi_heartbeat_master_clock, readme_center_node, readme_rsi_node, readme_uart_node, readme_rsi_heartbeat_topic [EXTRACTED 1.00]
 - **Fiber Test Mode Calibration and Printing** — specs_2026_06_21_test_mode_fiber_design_calibration_data, specs_2026_06_21_test_mode_fiber_design_relative_compensation_model, specs_2026_06_21_test_mode_fiber_design_fiber_matrix, specs_2026_06_21_test_mode_fiber_design_composite_matrix, plans_2026_06_21_test_mode_fiber_printing_head_calibration_helper, plans_2026_06_21_test_mode_fiber_printing_generate_composite_test_matrix_gcode [INFERRED 0.85]
 
-## Communities (368 total, 59 thin omitted)
+## Communities (376 total, 63 thin omitted)
 
 ### Community 0 - "dtls cookie generate callback"
 Cohesion: 0.05
@@ -369,13 +377,9 @@ Nodes (54): array, CommandType, dissector_fn_t, Client(), Dissect(), ExtractNumb
 Cohesion: 0.04
 Nodes (54): Clock, FRI::LBRClient, GPIOReader, GPIOWriter, KukaFRIHardwareInterface, activateFrictionCompensation, active_read_, CallbackReturn (+46 more)
 
-### Community 5 - "KUKA SUNRISE FRI DRIVER PUBLIC"
-Cohesion: 0.08
-Nodes (4): _format_rsi_xml_for_display(), _UiStatusWidget, ExtruderLatencyStatus, UiStatus
-
 ### Community 6 - "last published traj seq"
-Cohesion: 0.05
-Nodes (40): QueueManager, CenterNode, aborted_, cache_mutex_, cmd_sub_, e_decimals_, event_pub_, hb_sub_ (+32 more)
+Cohesion: 0.06
+Nodes (34): QueueManager, CenterNode, aborted_, cache_mutex_, cmd_sub_, e_decimals_, event_pub_, hb_sub_ (+26 more)
 
 ### Community 7 - "robot uncertainty spacing multiplier"
 Cohesion: 0.04
@@ -438,8 +442,8 @@ Cohesion: 0.11
 Nodes (31): _basis_funs(), _build_arc_length_map(), _compute_time_profile(), _euler_xyz_to_quat(), _eval_bspline_point(), _find_span_monotonic(), InterpolatedPoint, _is_linear_fallback_curve() (+23 more)
 
 ### Community 22 - "S bspline approximation GlobalCurveCommand"
-Cohesion: 0.15
-Nodes (33): parse_gcode_lines(), _append_tool_change_compensation(), expand_test_values(), _feed(), _gcode_tool_for_head(), generate_composite_test_matrix_gcode(), generate_head_test_matrix_gcode(), generate_pose_adjust_gcode() (+25 more)
+Cohesion: 0.14
+Nodes (34): parse_gcode_lines(), _append_tool_change_compensation(), expand_test_values(), _feed(), _gcode_tool_for_head(), generate_composite_test_matrix_gcode(), generate_head_test_matrix_gcode(), generate_pose_adjust_gcode() (+26 more)
 
 ### Community 23 - "last printhead status"
 Cohesion: 0.07
@@ -463,7 +467,7 @@ Nodes (30): KukaEACHardwareInterface, CallbackReturn, cycle_count_, event_mutex_
 
 ### Community 28 - "friLBRState cpp"
 Cohesion: 0.08
-Nodes (6): _AdaptiveHeightGroupBox, _AutoScaleLabel, _load_offset_config(), _LogDetailDialog, _PanelDialog, Project-styled popup dialog with an in-window title.
+Nodes (6): _AdaptiveHeightGroupBox, _load_offset_config(), _LogDetailDialog, _NoWheelDoubleSpinBox, _PanelDialog, Project-styled popup dialog with an in-window title.
 
 ### Community 29 - "RCLCPP SHARED PTR DEFINITIONS"
 Cohesion: 0.12
@@ -490,8 +494,8 @@ Cohesion: 0.13
 Nodes (26): ClientCommandModeID, activateControl(), assertLastCommandSuccess(), connect(), connectionLostCallback(), deactivateControl(), disconnect(), endFRI() (+18 more)
 
 ### Community 35 - "tcp connection cpp"
-Cohesion: 0.13
-Nodes (20): compute_angle_deg(), _distance_xyz(), _generate_fitting_points(), 全局 B 样条拟合规划器 (Global B-Spline Planner):.  - 接收连续的 MoveCommand 序列。 - 使用 BSpline 外, 对点序列进行一次中点加密.      在每两个相邻点之间插入它们的中点（线性插值）。, - 对给定的同类型 MoveCommand 序列进行处理.          - 生成拟合数据点（包含回退点和加密点）。         - 使用 BSplin, 返回 v1 与 v2 的夹角（度），向量长度过短时返回 0., 基于原始折线顶点生成拟合点序列.      - 首/尾点保留     - 对夹角超过阈值的顶点，在两侧按比例回退插入两个点     - 直线处不额外加点 (+12 more)
+Cohesion: 0.14
+Nodes (18): compute_angle_deg(), _distance_xyz(), _generate_fitting_points(), GlobalSplinePlanner, 全局 B 样条拟合规划器 (Global B-Spline Planner):.  - 接收连续的 MoveCommand 序列。 - 使用 BSpline 外, 对点序列进行一次中点加密.      在每两个相邻点之间插入它们的中点（线性插值）。, - 对给定的同类型 MoveCommand 序列进行处理.          - 生成拟合数据点（包含回退点和加密点）。         - 使用 BSplin, 返回 v1 与 v2 的夹角（度），向量长度过短时返回 0. (+10 more)
 
 ### Community 36 - "kuka control mode handler Controller"
 Cohesion: 0.16
@@ -502,16 +506,16 @@ Cohesion: 0.09
 Nodes (24): atomic_bool, closeConnection(), listen(), listen_helper(), sendByte(), sendBytes(), TCPConnection(), TCPConnection (+16 more)
 
 ### Community 38 - "hardware interface rsi only cpp"
-Cohesion: 0.27
-Nodes (17): GCodeParser, _get_command_handlers(), _handle_comment(), _handle_g90(), _handle_g91(), _handle_g92(), _handle_m82(), _handle_m83() (+9 more)
+Cohesion: 0.24
+Nodes (15): _get_command_handlers(), _handle_comment(), _handle_g90(), _handle_g91(), _handle_g92(), _handle_m82(), _handle_m83(), _handle_m_command() (+7 more)
 
 ### Community 39 - "robot manager cpp"
 Cohesion: 0.08
 Nodes (26): AddPositionsMultipleTimes, TEST_F(), TestAddPositionsTwice, TestCInvalid, TestEmptyString, TestEntireXMLInvalid, TestFillEverything, TestFillEverything6Dof (+18 more)
 
 ### Community 40 - "MediaFlangeIOGroup java"
-Cohesion: 0.13
-Nodes (4): MyProjectUiPlugin, Plugin, TrajectoryPoint, StringMsg
+Cohesion: 0.11
+Nodes (5): MyProjectUiPlugin, Plugin, ExtruderLatencyStatus, TrajectoryPoint, StringMsg
 
 ### Community 41 - "KUKA drivers contribution process"
 Cohesion: 0.13
@@ -531,7 +535,7 @@ Nodes (24): HandleType, InterfaceType, get_interface(), initialize_storage_vecto
 
 ### Community 45 - "planning scene diff publisher"
 Cohesion: 0.15
-Nodes (14): _ask_yes_no(), _DecisionDialog, _dialog_start_dir(), _normalize_npz_launch_path(), _NoWheelDoubleSpinBox, _npz_layer_dir_from_launch_path(), _offset_sidecar_candidates(), _read_npz_export_metadata() (+6 more)
+Nodes (14): _ask_yes_no(), _DecisionDialog, _dialog_start_dir(), _format_rsi_xml_for_display(), _normalize_npz_launch_path(), _npz_layer_dir_from_launch_path(), _offset_sidecar_candidates(), _read_npz_export_metadata() (+6 more)
 
 ### Community 46 - "robot interface cc"
 Cohesion: 0.18
@@ -554,8 +558,8 @@ Cohesion: 0.14
 Nodes (21): CancelMonitoringSubscription(), CreateMonitoringSubscription(), ReceiveMotionState(), RegisterEventHandler(), Robot(), SendControlSignal(), Setup(), StartControlling() (+13 more)
 
 ### Community 51 - "robot interface cc"
-Cohesion: 0.16
-Nodes (20): build_uniform_knot(), calc_sept_poly_val(), compute_arc_length_profile(), compute_motion_time(), evaluate_bspline_points(), generate_trajectory(), main(), plot_trajectory() (+12 more)
+Cohesion: 0.14
+Nodes (22): build_uniform_knot(), calc_sept_poly_val(), compute_arc_length_profile(), compute_motion_time(), evaluate_bspline_points(), generate_trajectory(), main(), plot_trajectory() (+14 more)
 
 ### Community 52 - "test print test generator py"
 Cohesion: 0.10
@@ -590,8 +594,8 @@ Cohesion: 0.15
 Nodes (19): Configuration, ControlMode, EventHandler, function, milliseconds, CancelMonitoringSubscription(), CreateMonitoringSubscription(), ReceiveMotionState() (+11 more)
 
 ### Community 60 - "offset sidecar candidates"
-Cohesion: 0.17
-Nodes (22): _source(), test_extrusion_precision_defaults_preserve_4ms_e_values(), test_fiber_offset_apply_is_relative_to_current_rsi_correction(), test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file(), test_formal_print_layer_progress_uses_low_priority_ui_status_path(), test_formal_print_offsets_fallback_to_legacy_when_head_calibration_unreadable(), test_formal_print_offsets_load_all_values_from_head_calibration_when_available(), test_formal_print_offsets_show_resin_z_fiber_z_and_fiber_xy_only() (+14 more)
+Cohesion: 0.16
+Nodes (24): _source(), test_extrusion_precision_defaults_preserve_4ms_e_values(), test_fiber_offset_apply_is_relative_to_current_rsi_correction(), test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file(), test_formal_print_layer_progress_uses_low_priority_ui_status_path(), test_formal_print_offsets_fallback_to_legacy_when_head_calibration_unreadable(), test_formal_print_offsets_load_all_values_from_head_calibration_when_available(), test_formal_print_offsets_show_resin_z_fiber_z_and_fiber_xy_only() (+16 more)
 
 ### Community 61 - "KUKA XML KUKA RSI ABSOLUTE"
 Cohesion: 0.10
@@ -642,8 +646,8 @@ Cohesion: 0.16
 Nodes (11): ErrorHandlingAction, FRISessionState, IApplicationControl, IErrorHandler, IMotionContainer, LBR, List, FRIMotionErrorHandler (+3 more)
 
 ### Community 73 - "set print test controls enabled"
-Cohesion: 0.17
-Nodes (31): GlobalSplinePlanner, CsvRow, export_npz(), _map_gcode_tool(), _mcommand_to_event(), _npz_exporter(), _PendingEvent, _plot_flat_layer_previews() (+23 more)
+Cohesion: 0.29
+Nodes (17): export_npz(), 导出 npz（分片）.      - 按 4ms 采样（要求上游或本函数已将运动转换为 GlobalCurveCommand）。     - 事件对齐：事件指令, MoveCommand, Position, GlobalCurveCommand, _decoded_event_type_vocab(), _decoded_src_lines(), test_export_npz_applies_fiber_tool_offset_directly_after_resin_z() (+9 more)
 
 ### Community 74 - "load the npz array"
 Cohesion: 0.12
@@ -714,8 +718,8 @@ Cohesion: 0.14
 Nodes (8): HWIFClientApplication, KUKA_SUNRISE_FRI_DRIVER_LOCAL, atomic, string, vector, HWIFClientApplication(), IClient, IConnection
 
 ### Community 91 - "test robot cc"
-Cohesion: 0.33
-Nodes (11): _as_float(), calibration_relative_offsets(), HeadCalibration, load_head_calibration(), save_head_calibration(), test_calibration_relative_offsets_use_target_minus_current_head(), test_load_head_calibration_preserves_present_fields_and_defaults_missing_fields(), test_load_head_calibration_returns_defaults_for_malformed_json() (+3 more)
+Cohesion: 0.30
+Nodes (12): _as_float(), calibration_relative_offsets(), HeadCalibration, load_head_calibration(), save_head_calibration(), test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset(), test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key(), test_load_head_calibration_preserves_present_fields_and_defaults_missing_fields() (+4 more)
 
 ### Community 92 - "JOINT GROUP IMPEDANCE CONTROLLER PUBLIC"
 Cohesion: 0.15
@@ -758,8 +762,8 @@ Cohesion: 0.14
 Nodes (13): Client side, Configuration, Controller side, IP configuration, Known issues and limitations, Launch arguments, Runtime parameters, Setup (+5 more)
 
 ### Community 102 - "subscriber cc"
-Cohesion: 0.18
-Nodes (14): KSS RSI Support Release Note, center_node, control_center, gcode_planner, KUKA RAM System, Offline Planning Stage, Online Real-time Control Stage, /planned_trajectory Topic (+6 more)
+Cohesion: 0.19
+Nodes (13): Absolute E Flow, center_node, control_center, gcode_planner, KUKA RAM System, Offline Planning Stage, Online Real-time Control Stage, /planned_trajectory Topic (+5 more)
 
 ### Community 103 - "has event between"
 Cohesion: 0.15
@@ -878,8 +882,8 @@ Cohesion: 0.20
 Nodes (9): EventBroadcaster, controller_interface, event_msg_, event_publisher_, last_event_, KUKA_EVENT_BROADCASTER_PUBLIC, override, SharedPtr (+1 more)
 
 ### Community 132 - "ros2 base lc hpp"
-Cohesion: 0.20
-Nodes (9): Control Example, IRobot Interface Methods, KUKA External Control SDK, Monitoring Example, OS-Specific Implementations, Overview, SDK Usage, Select Your Setup Guide (+1 more)
+Cohesion: 0.17
+Nodes (11): KSS RSI Support Release Note, Control Example, IRobot Interface Methods, KUKA External Control SDK, Monitoring Example, OS-Specific Implementations, Overview, SDK Usage (+3 more)
 
 ### Community 135 - "publisher cc"
 Cohesion: 0.24
@@ -905,6 +909,10 @@ Nodes (9): gRPC and UDP Communication Split, iiQKA ExternalAPI Control, iiQKA Qo
 Cohesion: 0.22
 Nodes (6): EventHandlerExtension, StatusUpdateHandler, IEventHandlerExtension, IStatusUpdateHandler, InitializationData, StatusUpdate
 
+### Community 141 - "Community 141"
+Cohesion: 0.24
+Nodes (19): GCodeParser, CsvRow, _map_gcode_tool(), _mcommand_to_event(), _npz_exporter(), _PendingEvent, _plot_flat_layer_previews(), gcode_planner 的 npz 导出器（分片）.  - 解析后的指令 + 插值采样点，输出 npz 分片（二进制列存），与 RSI/uart 消费逻辑对 (+11 more)
+
 ### Community 142 - "kuka iiqka client library protobuf"
 Cohesion: 0.15
 Nodes (7): KSSControlSignal, KSSMotionState, TestControlSignal, D_TOLERANCE, TestMotionState, D_TOLERANCE, testing::Test
@@ -925,6 +933,10 @@ Nodes (7): KUKA(), setIOValue(), FriIOType, FriIOValue, FRICommandMessage, FRIMo
 Cohesion: 0.25
 Nodes (8): fri_configuration_controller changelog, fri_configuration_controller, fri_state_broadcaster changelog, fri_state_broadcaster, joint_group_impedance_controller changelog, joint_group_impedance_controller, joint_group_impedance_controller interface parameters, joint_group_impedance_controller joint parameters
 
+### Community 147 - "Community 147"
+Cohesion: 0.27
+Nodes (4): PlannedEvent, string, TrajectoryPoint, vector
+
 ### Community 148 - "plot layers from manifest py"
 Cohesion: 0.25
 Nodes (8): Robot Model Pull Request Checklist, Generated Xacro Contribution Policy, Contribution Pull Request Quality Gate, Repository Pre-Commit Quality Hooks, ROS Ament Linting Hooks, Xacro Model Naming and Frame Conventions, Master ROS-Industrial CI Workflow, Pre-Commit Format Workflow
@@ -938,8 +950,8 @@ Cohesion: 0.32
 Nodes (5): Parameter, on_change_callback_, NodeParametersInterface, function, shared_ptr
 
 ### Community 151 - "unordered set"
-Cohesion: 0.06
-Nodes (25): registerParameter(), registerStaticParameter(), ROS2BaseNode, param_callback_, param_handler_, ParamCallback, create_rsi_xml_rob(), main() (+17 more)
+Cohesion: 0.22
+Nodes (5): SharedPtr, TestKeepAlive, count_, publisher_, timer_
 
 ### Community 152 - "ros2 base cpp"
 Cohesion: 0.32
@@ -997,9 +1009,9 @@ Nodes (5): _source(), test_formal_npz_export_keeps_extrude_wait_segments(), test
 Cohesion: 0.29
 Nodes (7): Client side configuration, Configuration, Controller side configuration, I/O configuration, IP configuration, Runtime parameters, Startup configuration
 
-### Community 168 - "generate test description"
-Cohesion: 0.33
-Nodes (5): cnpy(), data(), map, namespace, T
+### Community 168 - "Community 168"
+Cohesion: 0.43
+Nodes (4): create_rsi_xml_rob(), main(), parse_rsi_xml_sen(), RSISimulator
 
 ### Community 169 - "generate test description"
 Cohesion: 0.60
@@ -1052,6 +1064,10 @@ Nodes (4): atomic, deque, mutex, unordered_set
 ### Community 181 - "generate test description"
 Cohesion: 0.40
 Nodes (5): ParamCallback(), ROS2BaseNode(), NodeOptions, SharedPtr, string
+
+### Community 182 - "Community 182"
+Cohesion: 0.32
+Nodes (3): main(), MockKuka, Node
 
 ### Community 183 - "generate test description"
 Cohesion: 0.60
@@ -1161,13 +1177,21 @@ Nodes (8): center_node （中心控制节点）, extruder_latency_monitor_node �
 Cohesion: 0.67
 Nodes (3): Cut Button, Test Mode Fiber Design, Test Mode UI
 
-### Community 371 - "Community 371"
+### Community 370 - "Community 370"
 Cohesion: 0.33
-Nodes (6): B-spline v6 Banded Cholesky Solver, curve_approximation, Absolute E Flow, B-spline Fitting Pipeline, gcode_planner_npz CLI, Split By Layer Type Export
+Nodes (5): cnpy(), data(), map, namespace, T
+
+### Community 371 - "Community 371"
+Cohesion: 0.40
+Nodes (5): B-spline v6 Banded Cholesky Solver, curve_approximation, B-spline Fitting Pipeline, gcode_planner_npz CLI, Split By Layer Type Export
 
 ### Community 372 - "Community 372"
-Cohesion: 0.31
-Nodes (8): _default_output_path(), main(), default_data_root(), load_gcode_lines(), 默认 data 目录（相对当前文件向上推到 kuka_ram_ws/data., _select_default_gcode_file(), estimate_rows(), main()
+Cohesion: 0.46
+Nodes (6): _default_output_path(), main(), default_data_root(), load_gcode_lines(), 默认 data 目录（相对当前文件向上推到 kuka_ram_ws/data., _select_default_gcode_file()
+
+### Community 373 - "Community 373"
+Cohesion: 0.23
+Nodes (11): registerParameter(), registerStaticParameter(), ROS2BaseNode, param_callback_, param_handler_, ParamCallback, function, ParameterHandler (+3 more)
 
 ## Ambiguous Edges - Review These
 - `Client Application` → `Status Update`  [AMBIGUOUS]
@@ -1176,19 +1200,19 @@ Nodes (8): _default_output_path(), main(), default_data_root(), load_gcode_lines
 ## Knowledge Gaps
 - **1397 isolated node(s):** `ndarray`, `ndarray`, `seq`, `x`, `y` (+1392 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **59 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **63 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
 - **What is the exact relationship between `Client Application` and `Status Update`?**
   _Edge tagged AMBIGUOUS (relation: shares_data_with) - confidence is low._
-- **Why does `GCodeParser` connect `hardware interface rsi only cpp` to `set print test controls enabled`, `Community 372`, `unordered set`?**
-  _High betweenness centrality (0.063) - this node is a cross-community bridge._
-- **Why does `map` connect `generate test description` to `uint8 t`, `param callback`, `kuka iiqka client library protobuf`, `last command success`, `message builder h`, `last printhead status`, `unordered set`, `peek next event trigger`?**
-  _High betweenness centrality (0.050) - this node is a cross-community bridge._
-- **Why does `UartNode` connect `current event done received` to `unordered set`?**
-  _High betweenness centrality (0.035) - this node is a cross-community bridge._
+- **Why does `GCodeParser` connect `Community 141` to `set print test controls enabled`, `Community 372`, `Community 182`, `hardware interface rsi only cpp`?**
+  _High betweenness centrality (0.066) - this node is a cross-community bridge._
+- **Why does `map` connect `Community 370` to `uint8 t`, `param callback`, `kuka iiqka client library protobuf`, `last command success`, `message builder h`, `Community 373`, `last printhead status`, `peek next event trigger`?**
+  _High betweenness centrality (0.053) - this node is a cross-community bridge._
+- **Why does `UartNode` connect `current event done received` to `Community 182`?**
+  _High betweenness centrality (0.036) - this node is a cross-community bridge._
 - **What connects `ndarray`, `ndarray`, `seq` to the rest of the system?**
   _1464 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `dtls cookie generate callback` be split into smaller, more focused modules?**

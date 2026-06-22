@@ -1652,7 +1652,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "node",
-      "community": 369,
+      "community": 182,
       "norm_label": "node"
     },
     {
@@ -3342,7 +3342,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_system_manager_node",
-      "community": 141,
+      "community": 147,
       "norm_label": "system_manager_node.cpp"
     },
     {
@@ -3362,7 +3362,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "src_system_manager_node_systemmanagernode_systemmanagernode",
-      "community": 141,
+      "community": 147,
       "norm_label": ".systemmanagernode()"
     },
     {
@@ -3372,7 +3372,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_system_manager_node_trim_queue",
-      "community": 141,
+      "community": 147,
       "norm_label": "trim_queue()"
     },
     {
@@ -3382,7 +3382,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_my_project_control_center_src_system_manager_node_cpp_deque",
-      "community": 141,
+      "community": 147,
       "norm_label": "deque"
     },
     {
@@ -3392,7 +3392,7 @@
       "source_location": "L131",
       "_origin": "ast",
       "id": "src_my_project_control_center_src_system_manager_node_cpp_t",
-      "community": 141,
+      "community": 147,
       "norm_label": "t"
     },
     {
@@ -3402,7 +3402,7 @@
       "source_location": "L138",
       "_origin": "ast",
       "id": "src_system_manager_node_systemmanagernode_publish_ui_status",
-      "community": 141,
+      "community": 147,
       "norm_label": ".publish_ui_status()"
     },
     {
@@ -3512,7 +3512,7 @@
       "source_location": "L269",
       "_origin": "ast",
       "id": "src_my_project_control_center_src_system_manager_node_cpp_mutex",
-      "community": 141,
+      "community": 147,
       "norm_label": "mutex"
     },
     {
@@ -3532,7 +3532,7 @@
       "source_location": "L270",
       "_origin": "ast",
       "id": "src_my_project_control_center_src_system_manager_node_cpp_optional",
-      "community": 141,
+      "community": 147,
       "norm_label": "optional"
     },
     {
@@ -3742,7 +3742,7 @@
       "source_location": "L286",
       "_origin": "ast",
       "id": "src_my_project_control_center_src_system_manager_node_cpp_string",
-      "community": 141,
+      "community": 147,
       "norm_label": "string"
     },
     {
@@ -3762,7 +3762,7 @@
       "source_location": "L289",
       "_origin": "ast",
       "id": "src_system_manager_node_main",
-      "community": 141,
+      "community": 147,
       "norm_label": "main()"
     },
     {
@@ -3922,7 +3922,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_my_project_control_center_third_party_cnpy_cnpy_h_cnpy_cnpy",
-      "community": 168,
+      "community": 370,
       "norm_label": "cnpy.h"
     },
     {
@@ -3932,7 +3932,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "cnpy_cnpy_cnpy",
-      "community": 168,
+      "community": 370,
       "norm_label": "cnpy()"
     },
     {
@@ -3942,7 +3942,7 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_my_project_control_center_third_party_cnpy_cnpy_h_namespace",
-      "community": 168,
+      "community": 370,
       "norm_label": "namespace"
     },
     {
@@ -3952,7 +3952,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "cnpy_cnpy_data",
-      "community": 168,
+      "community": 370,
       "norm_label": "data()"
     },
     {
@@ -3962,7 +3962,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_my_project_control_center_third_party_cnpy_cnpy_h_t",
-      "community": 168,
+      "community": 370,
       "norm_label": "t"
     },
     {
@@ -4562,7 +4562,7 @@
       "source_location": "L50",
       "_origin": "ast",
       "id": "gcode_planner_gcode_parser_parse_gcode_lines",
-      "community": 38,
+      "community": 22,
       "norm_label": "parse_gcode_lines()"
     },
     {
@@ -4582,7 +4582,7 @@
       "source_location": "L92",
       "_origin": "ast",
       "id": "gcode_planner_gcode_parser_gcodeparser",
-      "community": 38,
+      "community": 141,
       "norm_label": "gcodeparser"
     },
     {
@@ -4822,7 +4822,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter",
-      "community": 147,
+      "community": 141,
       "norm_label": "npz_exporter.py"
     },
     {
@@ -4832,7 +4832,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_csvrow",
-      "community": 147,
+      "community": 141,
       "norm_label": "csvrow"
     },
     {
@@ -4842,7 +4842,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_pendingevent",
-      "community": 38,
+      "community": 141,
       "norm_label": "_pendingevent"
     },
     {
@@ -4862,24 +4862,24 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "src_my_project_gcode_planner_gcode_planner_npz_exporter_py_parsedcommandlist",
-      "community": 38,
+      "community": 141,
       "norm_label": "parsedcommandlist"
     },
     {
       "label": "_plot_flat_layer_previews()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1259",
+      "source_location": "L1301",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_plot_flat_layer_previews",
-      "community": 147,
+      "community": 141,
       "norm_label": "_plot_flat_layer_previews()"
     },
     {
       "label": "_plot_single_layer()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1287",
+      "source_location": "L1329",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_plot_single_layer",
       "community": 159,
@@ -4889,40 +4889,40 @@
       "label": "_npz_exporter()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1360",
+      "source_location": "L1402",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_npz_exporter",
-      "community": 147,
+      "community": 141,
       "norm_label": "_npz_exporter()"
     },
     {
       "label": "_map_gcode_tool()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1450",
+      "source_location": "L1492",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_map_gcode_tool",
-      "community": 147,
+      "community": 141,
       "norm_label": "_map_gcode_tool()"
     },
     {
       "label": "_mcommand_to_event()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1459",
+      "source_location": "L1501",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_mcommand_to_event",
-      "community": 147,
+      "community": 141,
       "norm_label": "_mcommand_to_event()"
     },
     {
       "label": "MCommand",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1459",
+      "source_location": "L1501",
       "_origin": "ast",
       "id": "mcommand",
-      "community": 38,
+      "community": 141,
       "norm_label": "mcommand"
     },
     {
@@ -4932,16 +4932,16 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "gcode_planner_npz_exporter_rationale_1",
-      "community": 147,
+      "community": 141,
       "norm_label": "gcode_planner \u7684 npz \u5bfc\u51fa\u5668(\u5206\u7247).  - \u89e3\u6790\u540e\u7684\u6307\u4ee4 + \u63d2\u503c\u91c7\u6837\u70b9,\u8f93\u51fa npz \u5206\u7247(\u4e8c\u8fdb\u5236\u5217\u5b58),\u4e0e rsi/uart \u6d88\u8d39\u903b\u8f91\u5bf9"
     },
     {
       "label": "\u5bfc\u51fa npz\uff08\u5206\u7247\uff09.      - \u6309 4ms \u91c7\u6837\uff08\u8981\u6c42\u4e0a\u6e38\u6216\u672c\u51fd\u6570\u5df2\u5c06\u8fd0\u52a8\u8f6c\u6362\u4e3a GlobalCurveCommand\uff09\u3002     - \u4e8b\u4ef6\u5bf9\u9f50\uff1a\u4e8b\u4ef6\u6307\u4ee4",
       "file_type": "rationale",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L84",
+      "source_location": "L85",
       "_origin": "ast",
-      "id": "gcode_planner_npz_exporter_rationale_84",
+      "id": "gcode_planner_npz_exporter_rationale_85",
       "community": 73,
       "norm_label": "\u5bfc\u51fa npz(\u5206\u7247).      - \u6309 4ms \u91c7\u6837(\u8981\u6c42\u4e0a\u6e38\u6216\u672c\u51fd\u6570\u5df2\u5c06\u8fd0\u52a8\u8f6c\u6362\u4e3a globalcurvecommand)\u3002     - \u4e8b\u4ef6\u5bf9\u9f50:\u4e8b\u4ef6\u6307\u4ee4"
     },
@@ -4949,20 +4949,20 @@
       "label": "\u5c06 GCode \u4e2d\u7684 T0/T1 \u6620\u5c04\u5230\u5185\u90e8\u5de5\u5177\u53f7\uff1a1=\u7ea4\u7ef4(T0)\uff0c2=\u6811\u8102(T1).",
       "file_type": "rationale",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1451",
+      "source_location": "L1493",
       "_origin": "ast",
-      "id": "gcode_planner_npz_exporter_rationale_1451",
-      "community": 147,
+      "id": "gcode_planner_npz_exporter_rationale_1493",
+      "community": 141,
       "norm_label": "\u5c06 gcode \u4e2d\u7684 t0/t1 \u6620\u5c04\u5230\u5185\u90e8\u5de5\u5177\u53f7:1=\u7ea4\u7ef4(t0),2=\u6811\u8102(t1)."
     },
     {
       "label": "M \u6307\u4ee4\u6620\u5c04\u5230\u4e8b\u4ef6\u540d/\u8d1f\u8f7d\uff1b\u672a\u8986\u76d6\u7684\u8fd4\u56de None.",
       "file_type": "rationale",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1460",
+      "source_location": "L1502",
       "_origin": "ast",
-      "id": "gcode_planner_npz_exporter_rationale_1460",
-      "community": 147,
+      "id": "gcode_planner_npz_exporter_rationale_1502",
+      "community": 141,
       "norm_label": "m \u6307\u4ee4\u6620\u5c04\u5230\u4e8b\u4ef6\u540d/\u8d1f\u8f7d;\u672a\u8986\u76d6\u7684\u8fd4\u56de none."
     },
     {
@@ -5399,7 +5399,7 @@
       "label": "_gcode_tool_for_head()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L309",
+      "source_location": "L337",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_gcode_tool_for_head",
       "community": 22,
@@ -5409,7 +5409,7 @@
       "label": "_insert_tool_selection()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L318",
+      "source_location": "L346",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_insert_tool_selection",
       "community": 22,
@@ -5419,7 +5419,7 @@
       "label": "generate_head_test_matrix_gcode()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L328",
+      "source_location": "L356",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_generate_head_test_matrix_gcode",
       "community": 22,
@@ -5429,7 +5429,7 @@
       "label": "_matrix_final_pose()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L361",
+      "source_location": "L391",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_matrix_final_pose",
       "community": 22,
@@ -5439,7 +5439,7 @@
       "label": "_append_tool_change_compensation()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L380",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_append_tool_change_compensation",
       "community": 22,
@@ -5449,7 +5449,7 @@
       "label": "_matrix_body_without_header()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L412",
+      "source_location": "L446",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_matrix_body_without_header",
       "community": 22,
@@ -5459,7 +5459,7 @@
       "label": "generate_composite_test_matrix_gcode()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L416",
+      "source_location": "L450",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode",
       "community": 22,
@@ -5469,7 +5469,7 @@
       "label": "HeadCalibration",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L416",
+      "source_location": "L450",
       "_origin": "ast",
       "id": "headcalibration",
       "community": 22,
@@ -5479,7 +5479,7 @@
       "label": "format_gcode()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
-      "source_location": "L506",
+      "source_location": "L585",
       "_origin": "ast",
       "id": "gcode_planner_print_test_generator_format_gcode",
       "community": 22,
@@ -5492,7 +5492,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "gcode_planner_types",
-      "community": 35,
+      "community": 141,
       "norm_label": "types.py"
     },
     {
@@ -5522,7 +5522,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "gcode_planner_types_extrudewait",
-      "community": 38,
+      "community": 141,
       "norm_label": "extrudewait"
     },
     {
@@ -5532,7 +5532,7 @@
       "source_location": "L46",
       "_origin": "ast",
       "id": "gcode_planner_types_resetecommand",
-      "community": 38,
+      "community": 141,
       "norm_label": "resetecommand"
     },
     {
@@ -5542,7 +5542,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "gcode_planner_types_toolchangecommand",
-      "community": 38,
+      "community": 141,
       "norm_label": "toolchangecommand"
     },
     {
@@ -5552,7 +5552,7 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "gcode_planner_types_mcommand",
-      "community": 38,
+      "community": 141,
       "norm_label": "mcommand"
     },
     {
@@ -5562,7 +5562,7 @@
       "source_location": "L78",
       "_origin": "ast",
       "id": "gcode_planner_types_curvecommand",
-      "community": 35,
+      "community": 141,
       "norm_label": "curvecommand"
     },
     {
@@ -5572,7 +5572,7 @@
       "source_location": "L95",
       "_origin": "ast",
       "id": "gcode_planner_types_globalcurvecommand",
-      "community": 35,
+      "community": 141,
       "norm_label": "globalcurvecommand"
     },
     {
@@ -5582,7 +5582,7 @@
       "source_location": "L96",
       "_origin": "ast",
       "id": "gcode_planner_types_rationale_96",
-      "community": 35,
+      "community": 141,
       "norm_label": "\u5168\u5c40 b \u6837\u6761\u62df\u5408\u6307\u4ee4.      constraints: list[tuple[normalized_s, speed_limit]]     normal"
     },
     {
@@ -5756,10 +5756,30 @@
       "norm_label": "test_cli_enables_extrude_wait_for_formal_exports()"
     },
     {
+      "label": "test_export_npz_lifts_to_safe_height_before_tool_change_offset()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L390",
+      "_origin": "ast",
+      "id": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "community": 73,
+      "norm_label": "test_export_npz_lifts_to_safe_height_before_tool_change_offset()"
+    },
+    {
+      "label": "test_export_npz_applies_fiber_tool_offset_directly_after_resin_z()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L433",
+      "_origin": "ast",
+      "id": "test_test_extrude_reset_payload_test_export_npz_applies_fiber_tool_offset_directly_after_resin_z",
+      "community": 73,
+      "norm_label": "test_export_npz_applies_fiber_tool_offset_directly_after_resin_z()"
+    },
+    {
       "label": "test_export_npz_records_resin_z_compensation_sidecar()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
-      "source_location": "L388",
+      "source_location": "L462",
       "_origin": "ast",
       "id": "test_test_extrude_reset_payload_test_export_npz_records_resin_z_compensation_sidecar",
       "community": 73,
@@ -5769,7 +5789,7 @@
       "label": "test_flat_export_generates_layer_preview_without_manifest()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
-      "source_location": "L453",
+      "source_location": "L527",
       "_origin": "ast",
       "id": "test_test_extrude_reset_payload_test_flat_export_generates_layer_preview_without_manifest",
       "community": 73,
@@ -5812,7 +5832,7 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "test_test_g92_pose_initialization_test_g92_xyzabc_initializes_pose_without_motion",
-      "community": 38,
+      "community": 22,
       "norm_label": "test_g92_xyzabc_initializes_pose_without_motion()"
     },
     {
@@ -5839,7 +5859,7 @@
       "label": "test_load_head_calibration_returns_defaults_for_malformed_json()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L25",
+      "source_location": "L26",
       "_origin": "ast",
       "id": "test_test_head_calibration_test_load_head_calibration_returns_defaults_for_malformed_json",
       "community": 91,
@@ -5849,17 +5869,27 @@
       "label": "test_load_head_calibration_preserves_present_fields_and_defaults_missing_fields()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L32",
+      "source_location": "L33",
       "_origin": "ast",
       "id": "test_test_head_calibration_test_load_head_calibration_preserves_present_fields_and_defaults_missing_fields",
       "community": 91,
       "norm_label": "test_load_head_calibration_preserves_present_fields_and_defaults_missing_fields()"
     },
     {
+      "label": "test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
+      "source_location": "L58",
+      "_origin": "ast",
+      "id": "test_test_head_calibration_test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key",
+      "community": 91,
+      "norm_label": "test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key()"
+    },
+    {
       "label": "test_save_head_calibration_overwrites_current_file_with_timestamp()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L56",
+      "source_location": "L74",
       "_origin": "ast",
       "id": "test_test_head_calibration_test_save_head_calibration_overwrites_current_file_with_timestamp",
       "community": 91,
@@ -5869,21 +5899,21 @@
       "label": "test_save_head_calibration_round_trips_through_load_head_calibration()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L84",
+      "source_location": "L102",
       "_origin": "ast",
       "id": "test_test_head_calibration_test_save_head_calibration_round_trips_through_load_head_calibration",
       "community": 91,
       "norm_label": "test_save_head_calibration_round_trips_through_load_head_calibration()"
     },
     {
-      "label": "test_calibration_relative_offsets_use_target_minus_current_head()",
+      "label": "test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L98",
+      "source_location": "L116",
       "_origin": "ast",
-      "id": "test_test_head_calibration_test_calibration_relative_offsets_use_target_minus_current_head",
+      "id": "test_test_head_calibration_test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset",
       "community": 91,
-      "norm_label": "test_calibration_relative_offsets_use_target_minus_current_head()"
+      "norm_label": "test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset()"
     },
     {
       "label": "test_pep257.py",
@@ -6006,20 +6036,60 @@
       "norm_label": "test_fiber_matrix_uses_fiber_tool_and_serpentine_geometry()"
     },
     {
+      "label": "test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L218",
+      "_origin": "ast",
+      "id": "test_test_print_test_generator_test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix",
+      "community": 22,
+      "norm_label": "test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix()"
+    },
+    {
       "label": "test_composite_matrix_inserts_safe_lift_compensation_and_tool_change()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
-      "source_location": "L217",
+      "source_location": "L270",
       "_origin": "ast",
       "id": "test_test_print_test_generator_test_composite_matrix_inserts_safe_lift_compensation_and_tool_change",
       "community": 22,
       "norm_label": "test_composite_matrix_inserts_safe_lift_compensation_and_tool_change()"
     },
     {
+      "label": "test_composite_resin_lines_shift_y_without_intermediate_z_lift()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L339",
+      "_origin": "ast",
+      "id": "test_test_print_test_generator_test_composite_resin_lines_shift_y_without_intermediate_z_lift",
+      "community": 22,
+      "norm_label": "test_composite_resin_lines_shift_y_without_intermediate_z_lift()"
+    },
+    {
+      "label": "test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L404",
+      "_origin": "ast",
+      "id": "test_test_print_test_generator_test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height",
+      "community": 22,
+      "norm_label": "test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height()"
+    },
+    {
+      "label": "test_composite_fiber_starts_at_first_resin_line_with_resin_height_added()",
+      "file_type": "code",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L456",
+      "_origin": "ast",
+      "id": "test_test_print_test_generator_test_composite_fiber_starts_at_first_resin_line_with_resin_height_added",
+      "community": 22,
+      "norm_label": "test_composite_fiber_starts_at_first_resin_line_with_resin_height_added()"
+    },
+    {
       "label": "test_test_matrix_gcode_rejects_more_than_45_lines()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
-      "source_location": "L282",
+      "source_location": "L493",
       "_origin": "ast",
       "id": "test_test_print_test_generator_test_test_matrix_gcode_rejects_more_than_45_lines",
       "community": 22,
@@ -6029,7 +6099,7 @@
       "label": "test_test_matrix_gcode_adds_prime_and_retract_as_filament_lengths()",
       "file_type": "code",
       "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
-      "source_location": "L296",
+      "source_location": "L507",
       "_origin": "ast",
       "id": "test_test_print_test_generator_test_test_matrix_gcode_adds_prime_and_retract_as_filament_lengths",
       "community": 22,
@@ -6212,7 +6282,7 @@
       "source_location": "L244",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_autoscalelabel",
-      "community": 28,
+      "community": 375,
       "norm_label": "_autoscalelabel"
     },
     {
@@ -6222,7 +6292,7 @@
       "source_location": "L245",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_autoscalelabel_init",
-      "community": 28,
+      "community": 375,
       "norm_label": ".__init__()"
     },
     {
@@ -6232,7 +6302,7 @@
       "source_location": "L251",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_autoscalelabel_set_color",
-      "community": 28,
+      "community": 375,
       "norm_label": ".set_color()"
     },
     {
@@ -6242,7 +6312,7 @@
       "source_location": "L255",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_autoscalelabel_update_style",
-      "community": 28,
+      "community": 375,
       "norm_label": ".update_style()"
     },
     {
@@ -6252,7 +6322,7 @@
       "source_location": "L258",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_autoscalelabel_resizeevent",
-      "community": 28,
+      "community": 375,
       "norm_label": ".resizeevent()"
     },
     {
@@ -6412,7 +6482,7 @@
       "source_location": "L468",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_format_rsi_xml_for_display",
-      "community": 5,
+      "community": 45,
       "norm_label": "_format_rsi_xml_for_display()"
     },
     {
@@ -6422,7 +6492,7 @@
       "source_location": "L484",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_nowheeldoublespinbox",
-      "community": 45,
+      "community": 28,
       "norm_label": "_nowheeldoublespinbox"
     },
     {
@@ -6432,7 +6502,7 @@
       "source_location": "L485",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_nowheeldoublespinbox_wheelevent",
-      "community": 45,
+      "community": 28,
       "norm_label": ".wheelevent()"
     },
     {
@@ -6752,7 +6822,7 @@
       "source_location": "L2776",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_set_value",
-      "community": 28,
+      "community": 375,
       "norm_label": "._set_value()"
     },
     {
@@ -6882,7 +6952,7 @@
       "source_location": "L2897",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_update_latency",
-      "community": 5,
+      "community": 40,
       "norm_label": "._update_latency()"
     },
     {
@@ -6892,7 +6962,7 @@
       "source_location": "L2897",
       "_origin": "ast",
       "id": "src_my_project_my_project_ui_my_project_ui_ui_panel_py_extruderlatencystatus",
-      "community": 5,
+      "community": 40,
       "norm_label": "extruderlatencystatus"
     },
     {
@@ -7219,7 +7289,7 @@
       "label": "._on_offset_changed()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4010",
+      "source_location": "L4011",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_offset_changed",
       "community": 91,
@@ -7229,7 +7299,7 @@
       "label": ".get_tool_offset()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4033",
+      "source_location": "L4034",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_get_tool_offset",
       "community": 133,
@@ -7239,7 +7309,7 @@
       "label": ".current_resin_z_print_compensation()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4040",
+      "source_location": "L4041",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_current_resin_z_print_compensation",
       "community": 133,
@@ -7249,7 +7319,7 @@
       "label": ".current_fiber_z_print_compensation()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4043",
+      "source_location": "L4044",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_current_fiber_z_print_compensation",
       "community": 5,
@@ -7259,7 +7329,7 @@
       "label": "._on_browse_gcode()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4048",
+      "source_location": "L4049",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_browse_gcode",
       "community": 45,
@@ -7269,7 +7339,7 @@
       "label": "._on_gcode_path_changed()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4058",
+      "source_location": "L4059",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_gcode_path_changed",
       "community": 5,
@@ -7279,7 +7349,7 @@
       "label": "._on_export_npz()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4065",
+      "source_location": "L4066",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_export_npz",
       "community": 133,
@@ -7289,7 +7359,7 @@
       "label": "._on_export_progress()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4168",
+      "source_location": "L4169",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_export_progress",
       "community": 5,
@@ -7299,7 +7369,7 @@
       "label": "._on_export_progress_val()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4172",
+      "source_location": "L4173",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_export_progress_val",
       "community": 5,
@@ -7309,7 +7379,7 @@
       "label": "._on_export_finished()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4175",
+      "source_location": "L4176",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_export_finished",
       "community": 5,
@@ -7319,7 +7389,7 @@
       "label": "._on_view_layers()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4196",
+      "source_location": "L4197",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_view_layers",
       "community": 134,
@@ -7329,7 +7399,7 @@
       "label": "._npz_launch_relation_text()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4204",
+      "source_location": "L4205",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_npz_launch_relation_text",
       "community": 133,
@@ -7339,7 +7409,7 @@
       "label": "._changed_npz_related_launch_params()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4211",
+      "source_location": "L4212",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_changed_npz_related_launch_params",
       "community": 133,
@@ -7349,7 +7419,7 @@
       "label": "._npz_dir_selection_warnings()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4223",
+      "source_location": "L4224",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_npz_dir_selection_warnings",
       "community": 133,
@@ -7359,7 +7429,7 @@
       "label": "._confirm_npz_dir_selection()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4253",
+      "source_location": "L4254",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_confirm_npz_dir_selection",
       "community": 133,
@@ -7369,7 +7439,7 @@
       "label": "._on_select_npz_dir()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4297",
+      "source_location": "L4298",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_select_npz_dir",
       "community": 45,
@@ -7379,7 +7449,7 @@
       "label": "._on_clear_npz_dir()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4350",
+      "source_location": "L4351",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_clear_npz_dir",
       "community": 5,
@@ -7389,7 +7459,7 @@
       "label": "._update_control_buttons()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4366",
+      "source_location": "L4367",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_update_control_buttons",
       "community": 5,
@@ -7399,17 +7469,17 @@
       "label": "._on_rsi_xml()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4384",
+      "source_location": "L4385",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_rsi_xml",
-      "community": 5,
+      "community": 45,
       "norm_label": "._on_rsi_xml()"
     },
     {
       "label": "._show_rsi_log_detail()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4405",
+      "source_location": "L4406",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_show_rsi_log_detail",
       "community": 28,
@@ -7419,7 +7489,7 @@
       "label": "._on_uart_log()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4409",
+      "source_location": "L4410",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_uart_log",
       "community": 5,
@@ -7429,7 +7499,7 @@
       "label": "._on_export_diagnostic_log()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4431",
+      "source_location": "L4432",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_on_export_diagnostic_log",
       "community": 5,
@@ -7439,7 +7509,7 @@
       "label": "._show_uart_log_detail()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4451",
+      "source_location": "L4452",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_uistatuswidget_show_uart_log_detail",
       "community": 28,
@@ -7449,7 +7519,7 @@
       "label": "MyProjectUiPlugin",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4457",
+      "source_location": "L4458",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin",
       "community": 40,
@@ -7469,7 +7539,7 @@
       "label": ".__init__()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4458",
+      "source_location": "L4459",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_init",
       "community": 28,
@@ -7479,7 +7549,7 @@
       "label": "._on_status()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4534",
+      "source_location": "L4535",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_status",
       "community": 5,
@@ -7489,17 +7559,17 @@
       "label": "._on_latency_status()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4537",
+      "source_location": "L4538",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_latency_status",
-      "community": 5,
+      "community": 40,
       "norm_label": "._on_latency_status()"
     },
     {
       "label": "._on_rsi_xml()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4540",
+      "source_location": "L4541",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_rsi_xml",
       "community": 40,
@@ -7509,7 +7579,7 @@
       "label": "StringMsg",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4540",
+      "source_location": "L4541",
       "_origin": "ast",
       "id": "stringmsg",
       "community": 40,
@@ -7519,7 +7589,7 @@
       "label": "._on_uart_log_msg()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4543",
+      "source_location": "L4544",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_uart_log_msg",
       "community": 40,
@@ -7529,7 +7599,7 @@
       "label": "._on_current_correction()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4546",
+      "source_location": "L4547",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_current_correction",
       "community": 40,
@@ -7539,7 +7609,7 @@
       "label": "TrajectoryPoint",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4546",
+      "source_location": "L4547",
       "_origin": "ast",
       "id": "src_my_project_my_project_ui_my_project_ui_ui_panel_py_trajectorypoint",
       "community": 40,
@@ -7549,7 +7619,7 @@
       "label": "._publish_uart_manual_command()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4549",
+      "source_location": "L4550",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_publish_uart_manual_command",
       "community": 40,
@@ -7559,7 +7629,7 @@
       "label": "._send_current_tool_heat_off()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4554",
+      "source_location": "L4555",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_send_current_tool_heat_off",
       "community": 40,
@@ -7569,7 +7639,7 @@
       "label": "._on_command_submit()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4565",
+      "source_location": "L4566",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_command_submit",
       "community": 40,
@@ -7579,7 +7649,7 @@
       "label": "._on_uart_command_submit()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4572",
+      "source_location": "L4573",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_uart_command_submit",
       "community": 40,
@@ -7589,7 +7659,7 @@
       "label": "._on_print_test_rsi_command()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4575",
+      "source_location": "L4576",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_print_test_rsi_command",
       "community": 40,
@@ -7599,7 +7669,7 @@
       "label": "._on_print_test_load_npz()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4580",
+      "source_location": "L4581",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_print_test_load_npz",
       "community": 40,
@@ -7609,7 +7679,7 @@
       "label": "._on_scale_submit()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4585",
+      "source_location": "L4586",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_scale_submit",
       "community": 40,
@@ -7619,7 +7689,7 @@
       "label": "._spin_once()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4611",
+      "source_location": "L4612",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_spin_once",
       "community": 40,
@@ -7629,7 +7699,7 @@
       "label": "._on_launch_settings()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4624",
+      "source_location": "L4625",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_launch_settings",
       "community": 161,
@@ -7639,7 +7709,7 @@
       "label": "._on_gcode_path_changed_sync()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4629",
+      "source_location": "L4630",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_gcode_path_changed_sync",
       "community": 40,
@@ -7649,7 +7719,7 @@
       "label": "._on_export_finished_launcher()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4632",
+      "source_location": "L4633",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_export_finished_launcher",
       "community": 40,
@@ -7659,7 +7729,7 @@
       "label": "._auto_npz_launch_path()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4645",
+      "source_location": "L4646",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_auto_npz_launch_path",
       "community": 40,
@@ -7669,7 +7739,7 @@
       "label": "._current_npz_launch_path()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4666",
+      "source_location": "L4667",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_current_npz_launch_path",
       "community": 40,
@@ -7679,7 +7749,7 @@
       "label": "._check_npz_and_offset_match()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4674",
+      "source_location": "L4675",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_check_npz_and_offset_match",
       "community": 133,
@@ -7689,7 +7759,7 @@
       "label": "._launch_npz_notice()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4724",
+      "source_location": "L4725",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_launch_npz_notice",
       "community": 133,
@@ -7699,7 +7769,7 @@
       "label": "._test_mode_bootstrap_npz_path()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4778",
+      "source_location": "L4779",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_test_mode_bootstrap_npz_path",
       "community": 40,
@@ -7709,7 +7779,7 @@
       "label": "._on_launch()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4781",
+      "source_location": "L4782",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_launch",
       "community": 40,
@@ -7719,7 +7789,7 @@
       "label": "._do_launch()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4851",
+      "source_location": "L4852",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_do_launch",
       "community": 40,
@@ -7729,7 +7799,7 @@
       "label": "._on_stop_launch()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4889",
+      "source_location": "L4890",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_on_stop_launch",
       "community": 40,
@@ -7739,7 +7809,7 @@
       "label": "._check_launch_process()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4911",
+      "source_location": "L4912",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_check_launch_process",
       "community": 40,
@@ -7749,7 +7819,7 @@
       "label": ".shutdown_plugin()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/my_project_ui/ui_panel.py",
-      "source_location": "L4933",
+      "source_location": "L4934",
       "_origin": "ast",
       "id": "my_project_ui_ui_panel_myprojectuiplugin_shutdown_plugin",
       "community": 40,
@@ -8106,10 +8176,30 @@
       "norm_label": "test_test_mode_exposes_fiber_calibration_and_print_actions()"
     },
     {
+      "label": "test_print_test_resin_target_accounts_for_final_same_height_y_shift()",
+      "file_type": "code",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L393",
+      "_origin": "ast",
+      "id": "test_test_mode_selection_layout_test_print_test_resin_target_accounts_for_final_same_height_y_shift",
+      "community": 60,
+      "norm_label": "test_print_test_resin_target_accounts_for_final_same_height_y_shift()"
+    },
+    {
+      "label": "test_print_test_composite_target_uses_resin_surface_height_not_head_offset()",
+      "file_type": "code",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L403",
+      "_origin": "ast",
+      "id": "test_test_mode_selection_layout_test_print_test_composite_target_uses_resin_surface_height_not_head_offset",
+      "community": 60,
+      "norm_label": "test_print_test_composite_target_uses_resin_surface_height_not_head_offset()"
+    },
+    {
       "label": "test_fiber_offset_apply_is_relative_to_current_rsi_correction()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
-      "source_location": "L392",
+      "source_location": "L413",
       "_origin": "ast",
       "id": "test_test_mode_selection_layout_test_fiber_offset_apply_is_relative_to_current_rsi_correction",
       "community": 60,
@@ -8119,7 +8209,7 @@
       "label": "test_scissor_button_checks_fiber_tool_before_uart_command()",
       "file_type": "code",
       "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
-      "source_location": "L405",
+      "source_location": "L426",
       "_origin": "ast",
       "id": "test_test_mode_selection_layout_test_scissor_button_checks_fiber_tool_before_uart_command",
       "community": 60,
@@ -9732,7 +9822,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka",
-      "community": 369,
+      "community": 182,
       "norm_label": "mock_kuka.py"
     },
     {
@@ -9742,7 +9832,7 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_mockkuka",
-      "community": 369,
+      "community": 182,
       "norm_label": "mockkuka"
     },
     {
@@ -9752,7 +9842,7 @@
       "source_location": "L12",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_mockkuka_init",
-      "community": 369,
+      "community": 182,
       "norm_label": ".__init__()"
     },
     {
@@ -9762,7 +9852,7 @@
       "source_location": "L43",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_mockkuka_on_command",
-      "community": 369,
+      "community": 182,
       "norm_label": ".on_command()"
     },
     {
@@ -9772,7 +9862,7 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_mockkuka_udp_loop",
-      "community": 369,
+      "community": 182,
       "norm_label": ".udp_loop()"
     },
     {
@@ -9782,7 +9872,7 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_mockkuka_destroy_node",
-      "community": 369,
+      "community": 182,
       "norm_label": ".destroy_node()"
     },
     {
@@ -9792,7 +9882,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "my_project_simulation_mock_kuka_main",
-      "community": 369,
+      "community": 182,
       "norm_label": "main()"
     },
     {
@@ -9802,7 +9892,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu",
-      "community": 370,
+      "community": 369,
       "norm_label": "mock_mcu.py"
     },
     {
@@ -9812,7 +9902,7 @@
       "source_location": "L9",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_mockmcu",
-      "community": 370,
+      "community": 369,
       "norm_label": "mockmcu"
     },
     {
@@ -9822,7 +9912,7 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_mockmcu_init",
-      "community": 370,
+      "community": 369,
       "norm_label": ".__init__()"
     },
     {
@@ -9832,7 +9922,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_mockmcu_mcu_loop",
-      "community": 370,
+      "community": 369,
       "norm_label": ".mcu_loop()"
     },
     {
@@ -9842,7 +9932,7 @@
       "source_location": "L97",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_mockmcu_handle_line",
-      "community": 370,
+      "community": 369,
       "norm_label": ".handle_line()"
     },
     {
@@ -9852,7 +9942,7 @@
       "source_location": "L125",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_mockmcu_destroy_node",
-      "community": 370,
+      "community": 369,
       "norm_label": ".destroy_node()"
     },
     {
@@ -9862,7 +9952,7 @@
       "source_location": "L134",
       "_origin": "ast",
       "id": "my_project_simulation_mock_mcu_main",
-      "community": 370,
+      "community": 369,
       "norm_label": "main()"
     },
     {
@@ -10822,7 +10912,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_third_party_kuka_external_control_sdk_kuka_external_control_sdk_iiqka_test_test_message_builder_cc_test_test_message_builder",
-      "community": 374,
+      "community": 142,
       "norm_label": "test_message_builder.cc"
     },
     {
@@ -10832,7 +10922,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "test_test_message_builder_testmotionstate",
-      "community": 374,
+      "community": 142,
       "norm_label": "testmotionstate"
     },
     {
@@ -10842,7 +10932,7 @@
       "source_location": "",
       "_origin": "ast",
       "id": "testing_test",
-      "community": 374,
+      "community": 142,
       "norm_label": "testing::test"
     },
     {
@@ -10852,7 +10942,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "test_test_message_builder_testmotionstate_d_tolerance",
-      "community": 374,
+      "community": 142,
       "norm_label": "d_tolerance"
     },
     {
@@ -10862,7 +10952,7 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "test_test_message_builder_testcontrolsignal",
-      "community": 374,
+      "community": 142,
       "norm_label": "testcontrolsignal"
     },
     {
@@ -10872,7 +10962,7 @@
       "source_location": "L35",
       "_origin": "ast",
       "id": "test_test_message_builder_testcontrolsignal_d_tolerance",
-      "community": 374,
+      "community": 142,
       "norm_label": "d_tolerance"
     },
     {
@@ -11182,7 +11272,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_third_party_kuka_external_control_sdk_kuka_external_control_sdk_iiqka_test_test_robot_cc_test_test_robot",
-      "community": 29,
+      "community": 13,
       "norm_label": "test_robot.cc"
     },
     {
@@ -11192,7 +11282,7 @@
       "source_location": "L24",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot",
-      "community": 29,
+      "community": 13,
       "norm_label": "iiqkarobot"
     },
     {
@@ -11202,7 +11292,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "src_third_party_kuka_external_control_sdk_kuka_external_control_sdk_iiqka_test_test_robot_cc_configuration",
-      "community": 29,
+      "community": 13,
       "norm_label": "configuration"
     },
     {
@@ -11212,7 +11302,7 @@
       "source_location": "L26",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_eci_config",
-      "community": 29,
+      "community": 13,
       "norm_label": "eci_config_"
     },
     {
@@ -11222,7 +11312,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_third_party_kuka_external_control_sdk_kuka_external_control_sdk_iiqka_test_test_robot_cc_unique_ptr",
-      "community": 29,
+      "community": 13,
       "norm_label": "unique_ptr"
     },
     {
@@ -11232,7 +11322,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_third_party_kuka_external_control_sdk_kuka_external_control_sdk_iiqka_test_test_robot_cc_robot",
-      "community": 29,
+      "community": 13,
       "norm_label": "robot"
     },
     {
@@ -11242,7 +11332,7 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_robot",
-      "community": 29,
+      "community": 13,
       "norm_label": "robot_"
     },
     {
@@ -11252,7 +11342,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "fakecommandhandlingservice",
-      "community": 29,
+      "community": 13,
       "norm_label": "fakecommandhandlingservice"
     },
     {
@@ -11262,7 +11352,7 @@
       "source_location": "L28",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_service",
-      "community": 29,
+      "community": 13,
       "norm_label": "service_"
     },
     {
@@ -11272,7 +11362,7 @@
       "source_location": "L30",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_iiqkarobot",
-      "community": 29,
+      "community": 13,
       "norm_label": ".iiqkarobot()"
     },
     {
@@ -11282,7 +11372,7 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_setup",
-      "community": 29,
+      "community": 13,
       "norm_label": ".setup()"
     },
     {
@@ -11292,7 +11382,7 @@
       "source_location": "L42",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_teardown",
-      "community": 29,
+      "community": 13,
       "norm_label": ".teardown()"
     },
     {
@@ -11302,7 +11392,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "test_test_robot_iiqkarobot_d_tolerance",
-      "community": 29,
+      "community": 13,
       "norm_label": "d_tolerance"
     },
     {
@@ -17872,7 +17962,7 @@
       "source_location": "L71",
       "_origin": "ast",
       "id": "map",
-      "community": 168,
+      "community": 370,
       "norm_label": "map"
     },
     {
@@ -18512,7 +18602,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node",
-      "community": 13,
+      "community": 373,
       "norm_label": "ros2_base_node.hpp"
     },
     {
@@ -18522,7 +18612,7 @@
       "source_location": "L31",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_ros2basenode",
-      "community": 373,
+      "community": 374,
       "norm_label": "ros2basenode"
     },
     {
@@ -18532,7 +18622,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_registerparameter",
-      "community": 13,
+      "community": 373,
       "norm_label": "registerparameter()"
     },
     {
@@ -18542,7 +18632,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_third_party_kuka_drivers_kuka_drivers_core_include_kuka_drivers_core_ros2_base_node_hpp_string",
-      "community": 13,
+      "community": 373,
       "norm_label": "string"
     },
     {
@@ -18552,7 +18642,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_third_party_kuka_drivers_kuka_drivers_core_include_kuka_drivers_core_ros2_base_node_hpp_t",
-      "community": 13,
+      "community": 373,
       "norm_label": "t"
     },
     {
@@ -18562,7 +18652,7 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_third_party_kuka_drivers_kuka_drivers_core_include_kuka_drivers_core_ros2_base_node_hpp_function",
-      "community": 13,
+      "community": 373,
       "norm_label": "function"
     },
     {
@@ -18572,7 +18662,7 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_registerstaticparameter",
-      "community": 13,
+      "community": 373,
       "norm_label": "registerstaticparameter()"
     },
     {
@@ -18582,7 +18672,7 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_ros2basenode_paramcallback",
-      "community": 373,
+      "community": 374,
       "norm_label": "paramcallback"
     },
     {
@@ -18592,7 +18682,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "src_third_party_kuka_drivers_kuka_drivers_core_include_kuka_drivers_core_ros2_base_node_hpp_parameterhandler",
-      "community": 373,
+      "community": 374,
       "norm_label": "parameterhandler"
     },
     {
@@ -18602,7 +18692,7 @@
       "source_location": "L58",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_ros2basenode_param_handler",
-      "community": 373,
+      "community": 374,
       "norm_label": "param_handler_"
     },
     {
@@ -18612,7 +18702,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "src_third_party_kuka_drivers_kuka_drivers_core_include_kuka_drivers_core_ros2_base_node_hpp_sharedptr",
-      "community": 373,
+      "community": 374,
       "norm_label": "sharedptr"
     },
     {
@@ -18622,7 +18712,7 @@
       "source_location": "L59",
       "_origin": "ast",
       "id": "kuka_drivers_core_ros2_base_node_ros2basenode_param_callback",
-      "community": 373,
+      "community": 374,
       "norm_label": "param_callback_"
     },
     {
@@ -23672,7 +23762,7 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator",
-      "community": 182,
+      "community": 168,
       "norm_label": "rsi_simulator.py"
     },
     {
@@ -23682,7 +23772,7 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_create_rsi_xml_rob",
-      "community": 182,
+      "community": 168,
       "norm_label": "create_rsi_xml_rob()"
     },
     {
@@ -23692,7 +23782,7 @@
       "source_location": "L48",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_parse_rsi_xml_sen",
-      "community": 182,
+      "community": 168,
       "norm_label": "parse_rsi_xml_sen()"
     },
     {
@@ -23702,7 +23792,7 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_rsisimulator",
-      "community": 182,
+      "community": 168,
       "norm_label": "rsisimulator"
     },
     {
@@ -23712,7 +23802,7 @@
       "source_location": "L75",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_rsisimulator_init",
-      "community": 182,
+      "community": 168,
       "norm_label": ".__init__()"
     },
     {
@@ -23722,7 +23812,7 @@
       "source_location": "L98",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_rsisimulator_timer_callback",
-      "community": 182,
+      "community": 168,
       "norm_label": ".timer_callback()"
     },
     {
@@ -23732,7 +23822,7 @@
       "source_location": "L128",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_rsisimulator_on_shutdown",
-      "community": 182,
+      "community": 168,
       "norm_label": ".on_shutdown()"
     },
     {
@@ -23742,7 +23832,7 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "kuka_rsi_simulator_rsi_simulator_main",
-      "community": 182,
+      "community": 168,
       "norm_label": "main()"
     },
     {
@@ -33787,7 +33877,7 @@
       "label": "6. UI \u5e03\u5c40\u7ed3\u6784",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L312",
+      "source_location": "L313",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_6_ui_\u5e03\u5c40\u7ed3\u6784",
       "community": 7,
@@ -33797,7 +33887,7 @@
       "label": "6.1 \u6574\u4f53\u5e03\u5c40\uff08QGridLayout\uff0c2 \u5217\uff09",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L314",
+      "source_location": "L315",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_6_1_\u6574\u4f53\u5e03\u5c40_qgridlayout_2_\u5217",
       "community": 7,
@@ -33807,7 +33897,7 @@
       "label": "6.2 \u5e03\u5c40\u5c42\u7ea7\u5173\u7cfb",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L365",
+      "source_location": "L366",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_6_2_\u5e03\u5c40\u5c42\u7ea7\u5173\u7cfb",
       "community": 7,
@@ -33817,7 +33907,7 @@
       "label": "7. \u6570\u636e\u5b57\u6bb5\u6e05\u5355",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L413",
+      "source_location": "L414",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_\u6570\u636e\u5b57\u6bb5\u6e05\u5355",
       "community": 7,
@@ -33827,7 +33917,7 @@
       "label": "7.1 System \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L417",
+      "source_location": "L418",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_1_system_\u533a\u57df",
       "community": 7,
@@ -33837,7 +33927,7 @@
       "label": "7.2 KUKA Pos \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L423",
+      "source_location": "L424",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_2_kuka_pos_\u533a\u57df",
       "community": 7,
@@ -33847,7 +33937,7 @@
       "label": "7.3 Heartbeat \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L436",
+      "source_location": "L437",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_3_heartbeat_\u533a\u57df",
       "community": 7,
@@ -33857,7 +33947,7 @@
       "label": "7.4 Printhead \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L448",
+      "source_location": "L449",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_4_printhead_\u533a\u57df",
       "community": 7,
@@ -33867,7 +33957,7 @@
       "label": "7.5 Trajectory \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L481",
+      "source_location": "L482",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_5_trajectory_\u533a\u57df",
       "community": 7,
@@ -33877,7 +33967,7 @@
       "label": "7.6 Events \u533a\u57df",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L510",
+      "source_location": "L511",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_6_events_\u533a\u57df",
       "community": 7,
@@ -33887,7 +33977,7 @@
       "label": "7.7 Extrude Scale \u533a\u57df\uff08\u4ea4\u4e92\u63a7\u4ef6\uff0c\u4e0d\u5728 `_labels` \u5b57\u5178\u4e2d\uff09",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L539",
+      "source_location": "L540",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_7_extrude_scale_\u533a\u57df_\u4ea4\u4e92\u63a7\u4ef6_\u4e0d\u5728_labels_\u5b57\u5178\u4e2d",
       "community": 7,
@@ -33897,7 +33987,7 @@
       "label": "7.8 \u6d4b\u8bd5\u6a21\u5f0f\u4e0e\u6b63\u5f0f\u6253\u5370\u8865\u507f\u63a7\u4ef6",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L548",
+      "source_location": "L549",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_7_8_\u6d4b\u8bd5\u6a21\u5f0f\u4e0e\u6b63\u5f0f\u6253\u5370\u8865\u507f\u63a7\u4ef6",
       "community": 7,
@@ -33907,7 +33997,7 @@
       "label": "8. \u989c\u8272\u7cfb\u7edf",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L567",
+      "source_location": "L568",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_8_\u989c\u8272\u7cfb\u7edf",
       "community": 7,
@@ -33917,7 +34007,7 @@
       "label": "8.1 \u72b6\u6001\u989c\u8272\u7f16\u7801",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L569",
+      "source_location": "L570",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_8_1_\u72b6\u6001\u989c\u8272\u7f16\u7801",
       "community": 7,
@@ -33927,7 +34017,7 @@
       "label": "8.2 \u6837\u5f0f\u8868\u7ed3\u6784",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L582",
+      "source_location": "L583",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_8_2_\u6837\u5f0f\u8868\u7ed3\u6784",
       "community": 7,
@@ -33937,7 +34027,7 @@
       "label": "9. \u6d88\u606f\u5b9a\u4e49 (Interfaces)",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L603",
+      "source_location": "L604",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_9_\u6d88\u606f\u5b9a\u4e49_interfaces",
       "community": 7,
@@ -33947,7 +34037,7 @@
       "label": "9.1 UiStatus.msg \u2014 UI \u805a\u5408\u72b6\u6001\u6d88\u606f",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L607",
+      "source_location": "L608",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_9_1_uistatus_msg_ui_\u805a\u5408\u72b6\u6001\u6d88\u606f",
       "community": 7,
@@ -33957,7 +34047,7 @@
       "label": "9.2 \u5b50\u6d88\u606f\u7c7b\u578b",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L645",
+      "source_location": "L646",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_9_2_\u5b50\u6d88\u606f\u7c7b\u578b",
       "community": 7,
@@ -33967,7 +34057,7 @@
       "label": "10. \u5173\u952e\u8bbe\u8ba1\u6a21\u5f0f\u4e0e\u7ea6\u5b9a",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L657",
+      "source_location": "L658",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_\u5173\u952e\u8bbe\u8ba1\u6a21\u5f0f\u4e0e\u7ea6\u5b9a",
       "community": 7,
@@ -33977,7 +34067,7 @@
       "label": "10.1 `_labels` \u5b57\u5178\u9a71\u52a8\u6a21\u5f0f",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L659",
+      "source_location": "L660",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_1_labels_\u5b57\u5178\u9a71\u52a8\u6a21\u5f0f",
       "community": 7,
@@ -33987,7 +34077,7 @@
       "label": "10.2 `add_group()` \u8f85\u52a9\u51fd\u6570",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L667",
+      "source_location": "L668",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_2_add_group_\u8f85\u52a9\u51fd\u6570",
       "community": 7,
@@ -33997,7 +34087,7 @@
       "label": "10.3 Tool ID \u683c\u5f0f\u5316",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L683",
+      "source_location": "L684",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_3_tool_id_\u683c\u5f0f\u5316",
       "community": 7,
@@ -34007,7 +34097,7 @@
       "label": "10.4 \u6709\u6548\u6027/\u65e0\u6548\u6027\u663e\u793a\u7ea6\u5b9a",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L692",
+      "source_location": "L693",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_4_\u6709\u6548\u6027_\u65e0\u6548\u6027\u663e\u793a\u7ea6\u5b9a",
       "community": 7,
@@ -34017,7 +34107,7 @@
       "label": "10.5 \u55b7\u5934\u8865\u507f\u4e0e\u5bfc\u51fa\u7ea6\u5b9a",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L698",
+      "source_location": "L699",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_10_5_\u55b7\u5934\u8865\u507f\u4e0e\u5bfc\u51fa\u7ea6\u5b9a",
       "community": 7,
@@ -34027,7 +34117,7 @@
       "label": "11. \u4fee\u6539\u6307\u5357",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L707",
+      "source_location": "L708",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_11_\u4fee\u6539\u6307\u5357",
       "community": 7,
@@ -34037,7 +34127,7 @@
       "label": "11.1 \u65b0\u589e\u53ea\u8bfb\u663e\u793a\u5b57\u6bb5",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L709",
+      "source_location": "L710",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_11_1_\u65b0\u589e\u53ea\u8bfb\u663e\u793a\u5b57\u6bb5",
       "community": 7,
@@ -34047,7 +34137,7 @@
       "label": "11.2 \u65b0\u589e\u4ea4\u4e92\u63a7\u4ef6",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L717",
+      "source_location": "L718",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_11_2_\u65b0\u589e\u4ea4\u4e92\u63a7\u4ef6",
       "community": 7,
@@ -34057,7 +34147,7 @@
       "label": "11.3 \u4fee\u6539\u5e03\u5c40",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L725",
+      "source_location": "L726",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_11_3_\u4fee\u6539\u5e03\u5c40",
       "community": 7,
@@ -34067,7 +34157,7 @@
       "label": "11.4 \u4fee\u6539\u6837\u5f0f",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L731",
+      "source_location": "L732",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_11_4_\u4fee\u6539\u6837\u5f0f",
       "community": 7,
@@ -34077,7 +34167,7 @@
       "label": "12. \u53d8\u66f4\u65e5\u5fd7",
       "file_type": "document",
       "source_file": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
-      "source_location": "L739",
+      "source_location": "L740",
       "_origin": "ast",
       "id": "my_project_ui_ui_architecture_12_\u53d8\u66f4\u65e5\u5fd7",
       "community": 7,
@@ -36197,7 +36287,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 102,
+      "community": 132,
       "norm_label": "rsi_server",
       "id": "readme_rsi_server"
     },
@@ -36431,7 +36521,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 371,
+      "community": 102,
       "norm_label": "absolute e flow",
       "id": "readme_absolute_e_flow"
     },
@@ -36717,7 +36807,7 @@
       "captured_at": null,
       "author": null,
       "contributor": null,
-      "community": 102,
+      "community": 132,
       "norm_label": "kss rsi support release note",
       "id": "kuka_external_control_sdk_changelog_kss_rsi_support"
     },
@@ -48132,6 +48222,39 @@
       "target": "test_test_print_test_generator_test_z_adjust_gcode_starts_from_current_rsi_correction_and_uses_resin_tool"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L426",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_fiber_starts_at_first_resin_line_with_resin_height_added",
+      "target": "gcode_planner_gcode_parser_parse_gcode_lines"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L362",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_resin_lines_shift_y_without_intermediate_z_lift",
+      "target": "gcode_planner_gcode_parser_parse_gcode_lines"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L424",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height",
+      "target": "gcode_planner_gcode_parser_parse_gcode_lines"
+    },
+    {
       "relation": "references",
       "context": "parameter_type",
       "confidence": "EXTRACTED",
@@ -48785,17 +48908,6 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L99",
-      "weight": 1.0,
-      "source": "gcode_planner_head_calibration_headcalibration",
-      "target": "test_test_head_calibration_test_calibration_relative_offsets_use_target_minus_current_head"
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "confidence_score": 1.0,
-      "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
       "source_location": "L48",
       "weight": 1.0,
       "source": "gcode_planner_head_calibration_headcalibration",
@@ -48853,6 +48965,17 @@
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "gcode_planner_head_calibration_load_head_calibration",
+      "target": "gcode_planner_head_calibration_headcalibration"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
+      "source_location": "L117",
+      "weight": 1.0,
+      "source": "test_test_head_calibration_test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset",
       "target": "gcode_planner_head_calibration_headcalibration"
     },
     {
@@ -48953,6 +49076,17 @@
       "weight": 1.0,
       "source": "gcode_planner_head_calibration_load_head_calibration",
       "target": "test_test_head_calibration_test_save_head_calibration_round_trips_through_load_head_calibration"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
+      "source_location": "L70",
+      "weight": 1.0,
+      "source": "test_test_head_calibration_test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key",
+      "target": "gcode_planner_head_calibration_load_head_calibration"
     },
     {
       "relation": "references",
@@ -49147,10 +49281,10 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L106",
+      "source_location": "L124",
       "weight": 1.0,
-      "source": "gcode_planner_head_calibration_calibration_relative_offsets",
-      "target": "test_test_head_calibration_test_calibration_relative_offsets_use_target_minus_current_head"
+      "source": "test_test_head_calibration_test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset",
+      "target": "gcode_planner_head_calibration_calibration_relative_offsets"
     },
     {
       "relation": "contains",
@@ -49570,16 +49704,6 @@
       "target": "gcode_planner_npz_exporter_plot_flat_layer_previews"
     },
     {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L84",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "gcode_planner_npz_exporter_export_npz",
-      "target": "gcode_planner_npz_exporter_rationale_84"
-    },
-    {
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
@@ -49734,6 +49858,38 @@
       "target": "test_test_extrude_reset_payload_test_travel_extrude_overlap_can_be_disabled"
     },
     {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "gcode_planner_npz_exporter_rationale_85",
+      "target": "gcode_planner_npz_exporter_export_npz",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L401",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_applies_fiber_tool_offset_directly_after_resin_z",
+      "target": "gcode_planner_npz_exporter_export_npz"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L416",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "target": "gcode_planner_npz_exporter_export_npz"
+    },
+    {
       "relation": "uses",
       "confidence": "INFERRED",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
@@ -49807,21 +49963,11 @@
       "relation": "rationale_for",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1451",
+      "source_location": "L1493",
       "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "gcode_planner_npz_exporter_map_gcode_tool",
-      "target": "gcode_planner_npz_exporter_rationale_1451"
-    },
-    {
-      "relation": "rationale_for",
-      "confidence": "EXTRACTED",
-      "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
-      "source_location": "L1460",
-      "weight": 1.0,
-      "confidence_score": 1.0,
-      "source": "gcode_planner_npz_exporter_mcommand_to_event",
-      "target": "gcode_planner_npz_exporter_rationale_1460"
+      "source": "gcode_planner_npz_exporter_rationale_1493",
+      "target": "gcode_planner_npz_exporter_map_gcode_tool",
+      "confidence_score": 1.0
     },
     {
       "relation": "references",
@@ -49833,6 +49979,16 @@
       "confidence_score": 1.0,
       "source": "gcode_planner_npz_exporter_mcommand_to_event",
       "target": "mcommand"
+    },
+    {
+      "relation": "rationale_for",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/gcode_planner/npz_exporter.py",
+      "source_location": "L1502",
+      "weight": 1.0,
+      "source": "gcode_planner_npz_exporter_rationale_1502",
+      "target": "gcode_planner_npz_exporter_mcommand_to_event",
+      "confidence_score": 1.0
     },
     {
       "relation": "uses",
@@ -50824,6 +50980,17 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
+      "source_location": "L478",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode",
+      "target": "gcode_planner_print_test_generator_validate_positive_sequence"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
       "source_location": "L212",
       "weight": 1.0,
       "confidence_score": 1.0,
@@ -50928,6 +51095,17 @@
       "confidence_score": 1.0,
       "source": "gcode_planner_print_test_generator_matrix_final_pose",
       "target": "gcode_planner_print_test_generator_pose_values"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
+      "source_location": "L482",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode",
+      "target": "gcode_planner_print_test_generator_header"
     },
     {
       "relation": "calls",
@@ -51197,6 +51375,17 @@
       "relation": "calls",
       "context": "call",
       "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L219",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix",
+      "target": "gcode_planner_print_test_generator_generate_head_test_matrix_gcode"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/gcode_planner/print_test_generator.py",
       "source_location": "L455",
       "weight": 1.0,
@@ -51247,6 +51436,39 @@
       "weight": 1.0,
       "source": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode",
       "target": "test_test_print_test_generator_test_composite_matrix_inserts_safe_lift_compensation_and_tool_change"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L404",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_fiber_starts_at_first_resin_line_with_resin_height_added",
+      "target": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L340",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_resin_lines_shift_y_without_intermediate_z_lift",
+      "target": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L405",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator_test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height",
+      "target": "gcode_planner_print_test_generator_generate_composite_test_matrix_gcode"
     },
     {
       "relation": "contains",
@@ -51502,6 +51724,17 @@
       "target": "test_test_extrude_reset_payload_test_travel_extrude_overlap_can_be_disabled"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L396",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "target": "gcode_planner_types_position"
+    },
+    {
       "relation": "uses",
       "confidence": "INFERRED",
       "source_file": "test/scripts/RSI_test_180.py",
@@ -51625,6 +51858,17 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L393",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "target": "gcode_planner_types_movecommand"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
       "source_location": "L59",
       "weight": 1.0,
       "source": "gcode_planner_types_extrudewait",
@@ -51719,6 +51963,28 @@
       "target": "test_test_extrude_reset_payload_test_export_npz_records_resin_z_compensation_sidecar"
     },
     {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L392",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_applies_fiber_tool_offset_directly_after_resin_z",
+      "target": "gcode_planner_types_toolchangecommand"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L407",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "target": "gcode_planner_types_toolchangecommand"
+    },
+    {
       "relation": "inherits",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/gcode_planner/types.py",
@@ -51797,6 +52063,26 @@
       "confidence_score": 1.0,
       "source": "test_test_extrude_reset_payload",
       "target": "test_test_extrude_reset_payload_test_cli_enables_extrude_wait_for_formal_exports"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L389",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_extrude_reset_payload",
+      "target": "test_test_extrude_reset_payload_test_export_npz_applies_fiber_tool_offset_directly_after_resin_z"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_extrude_reset_payload.py",
+      "source_location": "L390",
+      "weight": 1.0,
+      "source": "test_test_extrude_reset_payload",
+      "target": "test_test_extrude_reset_payload_test_export_npz_lifts_to_safe_height_before_tool_change_offset",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -51967,11 +52253,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
-      "source_location": "L98",
+      "source_location": "L116",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "test_test_head_calibration",
-      "target": "test_test_head_calibration_test_calibration_relative_offsets_use_target_minus_current_head"
+      "target": "test_test_head_calibration_test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_head_calibration.py",
+      "source_location": "L58",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_head_calibration",
+      "target": "test_test_head_calibration_test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key"
     },
     {
       "relation": "contains",
@@ -52047,11 +52343,41 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L403",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_print_test_generator",
+      "target": "test_test_print_test_generator_test_composite_fiber_starts_at_first_resin_line_with_resin_height_added"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
       "source_location": "L217",
       "weight": 1.0,
       "confidence_score": 1.0,
       "source": "test_test_print_test_generator",
       "target": "test_test_print_test_generator_test_composite_matrix_inserts_safe_lift_compensation_and_tool_change"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L339",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_print_test_generator",
+      "target": "test_test_print_test_generator_test_composite_resin_lines_shift_y_without_intermediate_z_lift"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L404",
+      "weight": 1.0,
+      "source": "test_test_print_test_generator",
+      "target": "test_test_print_test_generator_test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height",
+      "confidence_score": 1.0
     },
     {
       "relation": "contains",
@@ -52092,6 +52418,16 @@
       "confidence_score": 1.0,
       "source": "test_test_print_test_generator",
       "target": "test_test_print_test_generator_test_pose_adjust_gcode_moves_xyzabc_without_extrusion"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L218",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_print_test_generator",
+      "target": "test_test_print_test_generator_test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix"
     },
     {
       "relation": "contains",
@@ -52185,6 +52521,17 @@
       "confidence_score": 1.0,
       "source": "test_test_print_test_generator_moves",
       "target": "test_test_print_test_generator_test_test_matrix_gcode_generates_full_combinations_with_y_spacing_and_scaled_e"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/gcode_planner/test/test_print_test_generator.py",
+      "source_location": "L234",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_print_test_generator_test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix",
+      "target": "test_test_print_test_generator_moves"
     },
     {
       "relation": "contains",
@@ -55989,11 +56336,21 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
-      "source_location": "L79",
+      "source_location": "L403",
       "weight": 1.0,
       "source": "test_test_mode_selection_layout",
-      "target": "test_test_mode_selection_layout_test_print_test_mode_uses_requested_resin_and_fiber_defaults",
+      "target": "test_test_mode_selection_layout_test_print_test_composite_target_uses_resin_surface_height_not_head_offset",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L79",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_mode_selection_layout",
+      "target": "test_test_mode_selection_layout_test_print_test_mode_uses_requested_resin_and_fiber_defaults"
     },
     {
       "relation": "contains",
@@ -56004,6 +56361,16 @@
       "confidence_score": 1.0,
       "source": "test_test_mode_selection_layout",
       "target": "test_test_mode_selection_layout_test_print_test_range_inputs_use_separate_fields_and_units"
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L393",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_mode_selection_layout",
+      "target": "test_test_mode_selection_layout_test_print_test_resin_target_accounts_for_final_same_height_y_shift"
     },
     {
       "relation": "contains",
@@ -56300,11 +56667,33 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
-      "source_location": "L80",
+      "source_location": "L404",
       "weight": 1.0,
-      "source": "test_test_mode_selection_layout_test_print_test_mode_uses_requested_resin_and_fiber_defaults",
+      "source": "test_test_mode_selection_layout_test_print_test_composite_target_uses_resin_surface_height_not_head_offset",
       "target": "test_test_mode_selection_layout_source",
       "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L80",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_mode_selection_layout_test_print_test_mode_uses_requested_resin_and_fiber_defaults",
+      "target": "test_test_mode_selection_layout_source"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "src/my_project/my_project_ui/test/test_mode_selection_layout.py",
+      "source_location": "L394",
+      "weight": 1.0,
+      "confidence_score": 1.0,
+      "source": "test_test_mode_selection_layout_test_print_test_resin_target_accounts_for_final_same_height_y_shift",
+      "target": "test_test_mode_selection_layout_source"
     },
     {
       "relation": "contains",
@@ -99469,5 +99858,5 @@
       "source_file": "docs/superpowers/specs/2026-06-21-test-mode-fiber-design.md"
     }
   ],
-  "built_at_commit": "c6c5bc24adcc6db5a61e83e54cd63d18e785cdb2"
+  "built_at_commit": "648849ec26b864dc586c972f0508463d3b94ef97"
 }

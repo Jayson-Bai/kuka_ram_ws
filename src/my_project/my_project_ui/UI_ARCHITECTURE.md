@@ -303,8 +303,8 @@ sequenceDiagram
 
 **正式打印导出约束**:
 
-- 正式打印 UI 显示并保存四类补偿输入：树脂 Z、纤维 Z、纤维 X、纤维 Y
-- 本轮正式打印导出仍沿用既有补偿行为：`export_npz()` 接收 `tool_offset=(纤维 X, 纤维 Y, 纤维 Z)` 和 `resin_z_print_compensation_mm=树脂 Z`
+- 正式打印 UI 显示并保存树脂 Z 打印补偿，以及纤维头 X/Y/Z 直接偏置
+- 本轮正式打印导出仍沿用既有补偿行为：`export_npz()` 接收 `tool_offset=(纤维头 X, 纤维头 Y, 纤维头 Z)` 和 `resin_z_print_compensation_mm=树脂 Z`；切到纤维头时 Z 向实际补偿为 `树脂 Z + 纤维头 Z 偏置`，不再使用旧的目标减当前喷头相减逻辑
 - 正式打印导出尚未接入测试模式的新复合补偿模型；复合矩阵中的树脂到纤维相对补偿只用于测试模式临时动作
 
 ---
@@ -555,12 +555,12 @@ QGridLayout (主布局, 2列)
 | 纤维测试参数输入 | QLineEdit/QDoubleSpinBox | 纤维目标温度、层高范围、挤出倍率范围、预挤出和回抽参数 |
 | `确认树脂打印高度` | QPushButton | 保存树脂 Z 标定，允许后续树脂单独矩阵或进入纤维标定流程 |
 | `继续调整纤维头` | QPushButton | 先回 RSI 全 0 correction，再切换到 CF/纤维头 |
-| `应用纤维偏置` / `确认纤维头偏置` | QPushButton | 仅在当前工具为 CF/纤维头时启用，用于移动到纤维 XYZ 补偿并保存 |
+| `应用纤维偏置` / `确认纤维头偏置` | QPushButton | 仅在当前工具为 CF/纤维头时启用，用于移动到纤维 XYZ 偏置并保存 |
 | `开始测试树脂打印` | QPushButton | 生成树脂单独矩阵临时 NPZ |
 | `直接打印纤维` | QPushButton | 生成纤维单独矩阵临时 NPZ |
 | `复合打印` | QPushButton | 生成树脂+纤维复合矩阵临时 NPZ |
 | `剪切` | QPushButton | 仅当前工具为 CF/纤维头时发送 `EV 0 cut_cf` |
-| 正式打印补偿输入 | QDoubleSpinBox | 显示并保存树脂 Z、纤维 Z、纤维 X、纤维 Y |
+| 正式打印补偿输入 | QDoubleSpinBox | 显示并保存树脂 Z 打印补偿、纤维头 X/Y/Z 偏置 |
 
 ---
 
@@ -698,9 +698,9 @@ def _format_tool(self, tool_id):
 ### 10.5 喷头补偿与导出约定
 
 - 测试模式使用 `HeadCalibration` 作为树脂/纤维喷头补偿的内存模型，默认从 `/home/jayson/kuka_ram_ws/data/head_calibration_offsets/head_offsets.json` 加载
-- `calibration_relative_offsets(calibration, from_tool="resin", to_tool="fiber")` 只用于测试模式复合矩阵中树脂矩阵到纤维矩阵的相对位姿衔接
+- `calibration_relative_offsets(calibration, from_tool="resin", to_tool="fiber")` 用于测试模式复合矩阵中的工具切换补偿，其中 Z 向为树脂 Z 打印补偿与纤维 Z 偏置之和
 - 正式打印导出继续走既有 `tool_offset` + `resin_z_print_compensation_mm` 参数路径，不读取测试模式复合矩阵中的相对补偿模型
-- 选择已导出的 NPZ 用于正式打印时，UI 会检查 sidecar 中保存的工具偏移和树脂 Z 打印补偿是否与当前界面一致
+- 选择已导出的 NPZ 用于正式打印时，UI 会检查 sidecar 中保存的纤维头偏置和树脂 Z 打印补偿是否与当前界面一致
 
 ---
 

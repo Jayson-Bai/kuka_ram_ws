@@ -16,7 +16,7 @@ DEFAULT_HEAD_CALIBRATION = {
     "fiber": {
         "x_print_compensation_mm": 0.0,
         "y_print_compensation_mm": 0.0,
-        "z_print_compensation_mm": 0.0,
+        "z_offset_mm": 0.0,
     },
 }
 
@@ -64,7 +64,7 @@ def load_head_calibration(
             fiber, "y_print_compensation_mm", 0.0
         ),
         fiber_z_print_compensation_mm=_as_float(
-            fiber, "z_print_compensation_mm", 0.0
+            fiber, "z_offset_mm", _as_float(fiber, "z_print_compensation_mm", 0.0)
         ),
     )
 
@@ -89,7 +89,7 @@ def save_head_calibration(
             "y_print_compensation_mm": float(
                 calibration.fiber_y_print_compensation_mm
             ),
-            "z_print_compensation_mm": float(
+            "z_offset_mm": float(
                 calibration.fiber_z_print_compensation_mm
             ),
         },
@@ -106,15 +106,17 @@ def calibration_relative_offsets(
     from_tool: str,
     to_tool: str,
 ) -> tuple[float, float, float]:
-    resin = (0.0, 0.0, float(calibration.resin_z_print_compensation_mm))
-    fiber = (
+    if from_tool not in ("resin", "fiber") or to_tool not in ("resin", "fiber"):
+        raise ValueError("from_tool and to_tool must be 'resin' or 'fiber'")
+    if from_tool == to_tool:
+        return (0.0, 0.0, 0.0)
+
+    fiber_offset = (
         float(calibration.fiber_x_print_compensation_mm),
         float(calibration.fiber_y_print_compensation_mm),
-        float(calibration.fiber_z_print_compensation_mm),
+        float(calibration.resin_z_print_compensation_mm)
+        + float(calibration.fiber_z_print_compensation_mm),
     )
-    tools = {"resin": resin, "fiber": fiber}
-    if from_tool not in tools or to_tool not in tools:
-        raise ValueError("from_tool and to_tool must be 'resin' or 'fiber'")
-    src = tools[from_tool]
-    dst = tools[to_tool]
-    return tuple(dst[i] - src[i] for i in range(3))
+    if from_tool == "resin" and to_tool == "fiber":
+        return fiber_offset
+    return tuple(-v for v in fiber_offset)

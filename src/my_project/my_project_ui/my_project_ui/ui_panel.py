@@ -1671,13 +1671,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout = QtWidgets.QVBoxLayout(export_box)
         export_layout.setSpacing(6)
 
-        # Resin/Fiber Z print compensation
-        resin_z_subtitle = QtWidgets.QLabel("喷头 Z 打印补偿")
+        # Resin Z print compensation and fiber head Z offset
+        resin_z_subtitle = QtWidgets.QLabel("树脂 Z 打印补偿 / 纤维 Z 偏置")
         resin_z_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         export_layout.addWidget(resin_z_subtitle)
 
-        resin_z_desc = QtWidgets.QLabel("正式打印导出时，在轨迹开头插入 Z 方向空走补偿；负值表示开始前先向下运动。")
+        resin_z_desc = QtWidgets.QLabel("树脂 Z 是打印平面起点全局补偿；纤维 XYZ 是喷头切换直接偏置。切到纤维头时，Z 向实际补偿=树脂Z+纤维Z偏置。")
         resin_z_desc.setObjectName("fieldLabel")
         resin_z_desc.setWordWrap(True)
         export_layout.addWidget(resin_z_desc)
@@ -1737,7 +1737,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_z_lay = QtWidgets.QVBoxLayout(fiber_z_w)
         fiber_z_lay.setContentsMargins(0, 0, 0, 0)
         fiber_z_lay.setSpacing(2)
-        fiber_z_label = QtWidgets.QLabel("纤维 Z")
+        fiber_z_label = QtWidgets.QLabel("纤维 Z 偏置")
         fiber_z_label.setObjectName("fieldLabel")
         fiber_z_label.setAlignment(QtCore.Qt.AlignCenter)
         self._fiber_z_print_comp_spin = _NoWheelDoubleSpinBox()
@@ -2241,7 +2241,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_offset_rows = (
             ("X 偏置", self._test_fiber_x_comp_input),
             ("Y 偏置", self._test_fiber_y_comp_input),
-            ("Z 补偿", self._test_fiber_z_comp_input),
+            ("Z 偏置", self._test_fiber_z_comp_input),
         )
         for index, (label_text, input_widget) in enumerate(fiber_offset_rows):
             col = index * 2
@@ -3823,16 +3823,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
         y_spacing = float(global_params["y_spacing"])
         safe_lift = float(global_params["tool_change_safe_lift"])
         base = tuple(float(v) for v in start[:6])
+        resin_surface_height = 0.0
         if include_resin_to_fiber_delta:
-            dx, dy, dz = calibration_relative_offsets(
-                self._head_calibration, from_tool="resin", to_tool="fiber"
-            )
-            base = (base[0] + dx, base[1] + dy, base[2] + dz, base[3], base[4], base[5])
+            resin_layers = params.get("resin", {}).get("layer_heights", [])
+            resin_surface_height = float(resin_layers[0]) if resin_layers else 0.0
         final_x = base[0] + line_length if line_count % 2 == 1 else base[0]
+        final_y_steps = line_count if head_key == "resin" else max(0, line_count - 1)
         return (
             final_x,
-            base[1] + max(0, line_count - 1) * y_spacing,
-            base[2] + last_layer_height + safe_lift,
+            base[1] + final_y_steps * y_spacing,
+            base[2] + resin_surface_height + last_layer_height + safe_lift,
             base[3],
             base[4],
             base[5],
@@ -4025,7 +4025,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 path=DEFAULT_HEAD_CALIBRATION_PATH,
             )
             self._offset_status.setText(
-                f"已保存: X={x:.2f}  Y={y:.2f}  纤维Z={fiber_z:.2f}  树脂Z={resin_z:.2f}")
+                f"已保存: X={x:.2f}  Y={y:.2f}  纤维Z偏置={fiber_z:.2f}  树脂Z补偿={resin_z:.2f}")
             self._offset_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
             self._offset_status.setText(f"保存失败: {exc}")
@@ -4227,19 +4227,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
         warnings = []
 
         if saved_offset is None:
-            warnings.append("未找到或无法读取工具偏移 sidecar（*.offset.json），无法确认该 NPZ 是否使用了当前界面偏移值。")
+            warnings.append("未找到或无法读取纤维头偏置 sidecar（*.offset.json），无法确认该 NPZ 是否使用了当前界面偏置值。")
         else:
             mismatch = any(
                 abs(a - b) > _NPZ_OFFSET_TOLERANCE_MM
                 for a, b in zip(saved_offset, current_offset)
             )
             if mismatch:
-                warnings.append("NPZ 中的工具偏移与当前界面设置不一致。")
+                warnings.append("NPZ 中的纤维头偏置与当前界面设置不一致。")
 
         if saved_resin_z_print_compensation is None:
-            warnings.append("未找到或无法读取树脂轴 Z 打印补偿，无法确认该 NPZ 是否使用了当前界面补偿值。")
+            warnings.append("未找到或无法读取树脂 Z 打印补偿，无法确认该 NPZ 是否使用了当前界面补偿值。")
         elif abs(saved_resin_z_print_compensation - current_resin_z) > _NPZ_OFFSET_TOLERANCE_MM:
-            warnings.append("NPZ 中的树脂轴 Z 打印补偿与当前界面设置不一致。")
+            warnings.append("NPZ 中的树脂 Z 打印补偿与当前界面设置不一致。")
 
         changed_launch_params = self._changed_npz_related_launch_params()
         if changed_launch_params:
@@ -4264,21 +4264,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
         detail = [
             f"NPZ 文件: {npz_file}",
             f"启动将使用: {launch_path}",
-            f"当前界面工具偏移: {_format_tool_offset(current_offset)}",
-            f"当前界面树脂轴 Z 打印补偿: {current_resin_z:.2f} mm",
+            f"当前界面纤维头偏置: {_format_tool_offset(current_offset)}",
+            f"当前界面树脂 Z 打印补偿: {current_resin_z:.2f} mm",
         ]
 
         if saved_offset is None:
-            detail.append("NPZ 保存的工具偏移: 未知")
+            detail.append("NPZ 保存的纤维头偏置: 未知")
         else:
-            detail.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+            detail.append(f"NPZ 保存的纤维头偏置: {_format_tool_offset(saved_offset)}")
             if offset_file:
                 detail.append(f"偏移文件: {offset_file}")
 
         if saved_resin_z_print_compensation is None:
-            detail.append("NPZ 保存的树脂轴 Z 打印补偿: 未知")
+            detail.append("NPZ 保存的树脂 Z 打印补偿: 未知")
         else:
-            detail.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
+            detail.append(f"NPZ 保存的树脂 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
 
         detail.append("")
         detail.append("检测到以下相关参数变化/风险:")
@@ -4736,22 +4736,22 @@ class MyProjectUiPlugin(Plugin):
         lines = [
             f"NPZ 来源: {source_text}",
             f"启动 npz_path: {npz_launch_path}",
-            f"当前界面工具偏移: {_format_tool_offset(cur_offset)}",
-            f"当前界面树脂轴 Z 打印补偿: {cur_resin_z:.2f} mm",
+            f"当前界面纤维头偏置: {_format_tool_offset(cur_offset)}",
+            f"当前界面树脂 Z 打印补偿: {cur_resin_z:.2f} mm",
         ]
         if saved_offset is not None:
-            lines.append(f"NPZ 保存的工具偏移: {_format_tool_offset(saved_offset)}")
+            lines.append(f"NPZ 保存的纤维头偏置: {_format_tool_offset(saved_offset)}")
         if saved_resin_z_print_compensation is not None:
-            lines.append(f"NPZ 保存的树脂轴 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
+            lines.append(f"NPZ 保存的树脂 Z 打印补偿: {saved_resin_z_print_compensation:.2f} mm")
         if offset_file:
             lines.append(f"偏移文件: {offset_file}")
 
         if status == "ok":
-            lines.append("工具偏移和树脂轴 Z 打印补偿校验通过。")
+            lines.append("纤维头偏置和树脂 Z 打印补偿校验通过。")
         elif status == "no_offset":
-            lines.append("警告: 未找到或无法读取工具偏移或树脂轴 Z 打印补偿 sidecar，无法确认参数是否一致。")
+            lines.append("警告: 未找到或无法读取纤维头偏置或树脂 Z 打印补偿 sidecar，无法确认参数是否一致。")
         elif status == "mismatch":
-            lines.append("警告: NPZ 中的工具偏移或树脂轴 Z 打印补偿与当前界面设置不一致。")
+            lines.append("警告: NPZ 中的纤维头偏置或树脂 Z 打印补偿与当前界面设置不一致。")
 
         related_values = []
         for name in _NPZ_RELATED_LAUNCH_PARAMS:

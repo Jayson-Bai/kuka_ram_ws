@@ -385,6 +385,37 @@ def test_cli_enables_extrude_wait_for_formal_exports():
     )
 
 
+
+
+def test_export_npz_applies_fiber_tool_offset_directly_after_resin_z(tmp_path):
+    out = tmp_path / "direct_fiber_offset.npz"
+    parsed = [
+        ToolChangeCommand(
+            type="TOOL_CHANGE",
+            tool=0,
+            line=1,
+            layer=0,
+            subtype="TRAVEL",
+        )
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=0.1,
+        default_feed_mm_s=10.0,
+        tool_offset=(5.0, 4.0, -25.0),
+        resin_z_print_compensation_mm=-20.0,
+    )
+
+    data = np.load(out)
+    assert np.any(np.isclose(data["z"], -20.0, atol=1e-4))
+    assert np.any(
+        np.isclose(data["x"], 5.0, atol=1e-4)
+        & np.isclose(data["y"], 4.0, atol=1e-4)
+        & np.isclose(data["z"], -45.0, atol=1e-4)
+    )
+
 def test_export_npz_records_resin_z_compensation_sidecar(tmp_path):
     import json
 

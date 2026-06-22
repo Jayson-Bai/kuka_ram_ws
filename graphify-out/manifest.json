@@ -120,9 +120,9 @@
     "semantic_hash": "59e2425d6067d9c891f9e713357216bf"
   },
   "src/my_project/gcode_planner/gcode_planner/npz_exporter.py": {
-    "mtime": 1782032606.4447076,
+    "mtime": 1782114248.2084513,
     "ast_hash": "88cc8091e8932f0b297b079b410987f2",
-    "semantic_hash": "88cc8091e8932f0b297b079b410987f2"
+    "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/polynomial_interpolator.py": {
     "mtime": 1781752692.567543,
@@ -130,8 +130,8 @@
     "semantic_hash": "5df3713279d13b9975dda70d64f8b645"
   },
   "src/my_project/gcode_planner/gcode_planner/print_test_generator.py": {
-    "mtime": 1782112004.64469,
-    "ast_hash": "b4cce58447b7e954265cbcd8663fcd43",
+    "mtime": 1782114268.2455254,
+    "ast_hash": "5f85898fd89cf15bacb25a9132707a5e",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/types.py": {
@@ -155,9 +155,9 @@
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
   "src/my_project/gcode_planner/test/test_extrude_reset_payload.py": {
-    "mtime": 1782032606.4447076,
-    "ast_hash": "36d31c08acc1743348b4668cb6c1d447",
-    "semantic_hash": "36d31c08acc1743348b4668cb6c1d447"
+    "mtime": 1782114248.2084513,
+    "ast_hash": "70d6c68da5f2ecbf195c9e4290c118de",
+    "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_flake8.py": {
     "mtime": 1765199933.3343332,
@@ -175,8 +175,8 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/gcode_planner/test/test_print_test_generator.py": {
-    "mtime": 1782112056.0500991,
-    "ast_hash": "c2328db5b68cb4fc2a8ffac21f825184",
+    "mtime": 1782114300.3063254,
+    "ast_hash": "d567cd63c8284332d0b2c72121f2da4d",
     "semantic_hash": ""
   },
   "src/my_project/my_project_startup/launch/startup.launch.py": {
@@ -215,8 +215,8 @@
     "semantic_hash": "aaf04bbf6860ac2c66ea46e2d51312e0"
   },
   "src/my_project/my_project_ui/my_project_ui/ui_panel.py": {
-    "mtime": 1782112090.1285207,
-    "ast_hash": "cc9187f526f9cbe22811d0fefba10491",
+    "mtime": 1782114073.828644,
+    "ast_hash": "d88bcb12c0234d0be41780207675b791",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/setup.py": {
@@ -240,8 +240,8 @@
     "semantic_hash": "a86ac6e6dda5eb7ba8d523c62014916d"
   },
   "src/my_project/my_project_ui/test/test_mode_selection_layout.py": {
-    "mtime": 1782110598.2425096,
-    "ast_hash": "ea2d4803433b29d57d68f862e302c3d1",
+    "mtime": 1782114073.828644,
+    "ast_hash": "c7e12350d3584849d4983a2d7fd94ca9",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_pep257.py": {
@@ -250,9 +250,9 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/my_project_ui/test/test_print_test_matrix_export.py": {
-    "mtime": 1782046702.1489918,
-    "ast_hash": "7db724c22011788e215639c505c923b0",
-    "semantic_hash": "7db724c22011788e215639c505c923b0"
+    "mtime": 1782113050.7637079,
+    "ast_hash": "38fa767e64fef7d634a7822568edc2f7",
+    "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_print_test_temperature_threshold.py": {
     "mtime": 1781752692.5715432,
@@ -1550,9 +1550,9 @@
     "semantic_hash": "089e3e2710ba494a66dd4c6220614363"
   },
   "src/my_project/my_project_ui/UI_ARCHITECTURE.md": {
-    "mtime": 1782051892.7965567,
-    "ast_hash": "bc7a5a8e9c65b93a5bdae07fa9d8018b",
-    "semantic_hash": "bc7a5a8e9c65b93a5bdae07fa9d8018b"
+    "mtime": 1782114300.3063254,
+    "ast_hash": "07aca198934f805b7216b960d699aad9",
+    "semantic_hash": ""
   },
   "src/my_project/rsi_server/CMakeLists.txt": {
     "mtime": 1781752692.5715432,
@@ -2505,14 +2505,14 @@
     "semantic_hash": "ffe28050c4b2ee0a83cf19fabe546d5a"
   },
   "src/my_project/gcode_planner/gcode_planner/head_calibration.py": {
-    "mtime": 1782044410.4640403,
-    "ast_hash": "be862842d162d251e395efd9da07f4c5",
-    "semantic_hash": "be862842d162d251e395efd9da07f4c5"
+    "mtime": 1782113332.806305,
+    "ast_hash": "5896956785897237b96e09cdc93d8c3f",
+    "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_head_calibration.py": {
-    "mtime": 1782044393.0370543,
-    "ast_hash": "f307445a0cc7d9431cf426186d351145",
-    "semantic_hash": "f307445a0cc7d9431cf426186d351145"
+    "mtime": 1782113332.806305,
+    "ast_hash": "162fe48e65377d061e6846d386d0b241",
+    "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-06-21-test-mode-fiber-printing.md": {
     "mtime": 1782043615.4386768,

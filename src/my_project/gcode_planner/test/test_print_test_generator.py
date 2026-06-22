@@ -301,12 +301,12 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
 
     assert ";TOOL_CHANGE_SAFE_LIFT:10.000000" in text
-    assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-5.000000" in text
+    assert ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-45.000000" in text
     assert "T0" in lines
     assert [cmd.tool for cmd in tools] == [RESIN_GCODE_TOOL, FIBER_GCODE_TOOL]
     fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
     resin_to_fiber_compensation_line = lines.index(
-        ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-5.000000"
+        ";TOOL_CHANGE_COMPENSATION:5.000000,4.000000,-45.000000"
     )
     assert lines.index("T0") < resin_to_fiber_compensation_line
 
@@ -321,7 +321,7 @@ def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     )
     assert resin_to_fiber_reposition.start_pos.x == -5.0
     assert resin_to_fiber_reposition.start_pos.y == -4.0
-    assert resin_to_fiber_reposition.start_pos.z == 15.5
+    assert resin_to_fiber_reposition.start_pos.z == 55.5
 
     first_fiber_print = next(cmd for cmd in moves_after_fiber_tool if cmd.type == "PRINT")
     descent_to_print_z = next(
@@ -399,6 +399,59 @@ def test_composite_resin_lines_shift_y_without_intermediate_z_lift():
     assert final_lift.start_pos.x == final_y_shift.pos.x
     assert final_lift.start_pos.y == final_y_shift.pos.y
 
+
+
+def test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height():
+    lines = generate_composite_test_matrix_gcode(
+        start_pose=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+        resin_layer_heights_mm=[0.5],
+        resin_extrusion_scales=[1.0, 1.0],
+        fiber_layer_heights_mm=[0.05],
+        fiber_extrusion_scales=[1.0],
+        speed_mm_s=10.0,
+        line_length_mm=100.0,
+        y_spacing_mm=10.0,
+        finish_lift_mm=10.0,
+        calibration=HeadCalibration(
+            resin_z_print_compensation_mm=-20.0,
+            fiber_x_print_compensation_mm=3.0,
+            fiber_y_print_compensation_mm=2.0,
+            fiber_z_print_compensation_mm=4.0,
+        ),
+        tool_change_safe_lift_mm=10.0,
+    )
+
+    parsed = parse_gcode_lines(lines)
+    tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    moves = [cmd for cmd in parsed if isinstance(cmd, MoveCommand)]
+    fiber_tool_line = next(cmd.line for cmd in tools if cmd.tool == FIBER_GCODE_TOOL)
+    first_fiber_print = next(
+        cmd for cmd in moves if cmd.type == "PRINT" and cmd.line > fiber_tool_line
+    )
+    assert math.isclose(first_fiber_print.start_pos.z, 0.55)
+
+    compensation_move = next(
+        cmd
+        for cmd in moves
+        if cmd.line > fiber_tool_line
+        and cmd.type == "TRAVEL"
+        and math.isclose(cmd.pos.x, 0.0)
+        and math.isclose(cmd.pos.y, 0.0)
+        and math.isclose(cmd.pos.z, 10.5)
+    )
+    assert math.isclose(compensation_move.pos.z, 10.5)
+
+    descent_to_print_z = next(
+        cmd
+        for cmd in moves
+        if cmd.line > compensation_move.line
+        and cmd.line < first_fiber_print.line
+        and cmd.type == "TRAVEL"
+        and math.isclose(cmd.start_pos.z, compensation_move.pos.z)
+        and math.isclose(cmd.pos.z, first_fiber_print.start_pos.z)
+    )
+    assert descent_to_print_z.pos.x == first_fiber_print.start_pos.x
+    assert descent_to_print_z.pos.y == first_fiber_print.start_pos.y
 
 def test_composite_fiber_starts_at_first_resin_line_with_resin_height_added():
     lines = generate_composite_test_matrix_gcode(

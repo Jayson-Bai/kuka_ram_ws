@@ -46,8 +46,8 @@ def test_npz_selection_validates_saved_resin_z_print_compensation():
 
     assert "def current_resin_z_print_compensation(self):" in src
     assert "resin_z_print_compensation_mm" in src
-    assert "NPZ 中的树脂轴 Z 打印补偿与当前界面设置不一致。" in src
-    assert "NPZ 保存的树脂轴 Z 打印补偿" in src
+    assert "NPZ 中的树脂 Z 打印补偿与当前界面设置不一致。" in src
+    assert "NPZ 保存的树脂 Z 打印补偿" in src
 
 
 def test_print_test_job_generation_supports_resin_fiber_and_composite_modes():

@@ -194,9 +194,9 @@ def test_formal_print_offsets_show_resin_z_fiber_z_and_fiber_xy_only():
         "# ======== Print Test 区域 ========", 1
     )[0]
 
-    assert "喷头 Z 打印补偿" in export_section
+    assert "树脂 Z 打印补偿 / 纤维 Z 偏置" in export_section
     assert "树脂 Z" in export_section
-    assert "纤维 Z" in export_section
+    assert "纤维 Z 偏置" in export_section
     assert "纤维头 XY 偏置" in export_section
     assert "self._fiber_z_print_comp_spin" in export_section
     assert 'for axis, default_val in [("X",' in export_section
@@ -388,6 +388,27 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
     ):
         assert connection in test_section
 
+
+
+def test_print_test_resin_target_accounts_for_final_same_height_y_shift():
+    src = _source()
+    target_section = src.split("    def _print_test_matrix_target", 1)[1].split(
+        "    def _on_print_test_cut", 1
+    )[0]
+
+    assert 'final_y_steps = line_count if head_key == "resin" else max(0, line_count - 1)' in target_section
+    assert "base[1] + final_y_steps * y_spacing" in target_section
+
+
+def test_print_test_composite_target_uses_resin_surface_height_not_head_offset():
+    src = _source()
+    target_section = src.split("    def _print_test_matrix_target", 1)[1].split(
+        "    def _on_print_test_cut", 1
+    )[0]
+
+    assert 'resin_surface_height = float(resin_layers[0]) if resin_layers else 0.0' in target_section
+    assert 'calibration_relative_offsets(' not in target_section
+    assert "base[2] + resin_surface_height + last_layer_height + safe_lift" in target_section
 
 def test_fiber_offset_apply_is_relative_to_current_rsi_correction():
     src = _source()

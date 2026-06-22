@@ -20,6 +20,7 @@ def test_load_head_calibration_returns_defaults_when_file_missing(tmp_path):
     assert cal.fiber_y_print_compensation_mm == 0.0
     assert cal.fiber_z_print_compensation_mm == 0.0
     assert DEFAULT_HEAD_CALIBRATION["resin"]["z_print_compensation_mm"] == 0.0
+    assert DEFAULT_HEAD_CALIBRATION["fiber"]["z_offset_mm"] == 0.0
 
 
 def test_load_head_calibration_returns_defaults_for_malformed_json(tmp_path):
@@ -53,6 +54,23 @@ def test_load_head_calibration_preserves_present_fields_and_defaults_missing_fie
     )
 
 
+
+def test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key(tmp_path):
+    path = tmp_path / "head_offsets.json"
+    path.write_text(
+        json.dumps(
+            {
+                "resin": {"z_print_compensation_mm": -2.5},
+                "fiber": {"z_print_compensation_mm": -7.5},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    cal = load_head_calibration(path)
+
+    assert cal.fiber_z_print_compensation_mm == -7.5
+
 def test_save_head_calibration_overwrites_current_file_with_timestamp(tmp_path):
     path = tmp_path / "head_offsets.json"
     save_head_calibration(
@@ -72,7 +90,7 @@ def test_save_head_calibration_overwrites_current_file_with_timestamp(tmp_path):
     assert data["fiber"] == {
         "x_print_compensation_mm": 5.0,
         "y_print_compensation_mm": 4.0,
-        "z_print_compensation_mm": -25.0,
+        "z_offset_mm": -25.0,
     }
 
     save_head_calibration(HeadCalibration(resin_z_print_compensation_mm=-1.0), path)
@@ -95,21 +113,21 @@ def test_save_head_calibration_round_trips_through_load_head_calibration(tmp_pat
     assert load_head_calibration(path) == expected
 
 
-def test_calibration_relative_offsets_use_target_minus_current_head():
+def test_calibration_relative_offsets_stack_resin_z_with_direct_fiber_head_offset():
     cal = HeadCalibration(
         resin_z_print_compensation_mm=-20.0,
-        fiber_x_print_compensation_mm=5.0,
-        fiber_y_print_compensation_mm=4.0,
-        fiber_z_print_compensation_mm=-25.0,
+        fiber_x_print_compensation_mm=3.0,
+        fiber_y_print_compensation_mm=2.0,
+        fiber_z_print_compensation_mm=4.0,
     )
 
     assert calibration_relative_offsets(cal, from_tool="resin", to_tool="fiber") == (
-        5.0,
-        4.0,
-        -5.0,
+        3.0,
+        2.0,
+        -16.0,
     )
     assert calibration_relative_offsets(cal, from_tool="fiber", to_tool="resin") == (
-        -5.0,
-        -4.0,
-        5.0,
+        -3.0,
+        -2.0,
+        16.0,
     )

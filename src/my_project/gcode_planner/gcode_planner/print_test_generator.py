@@ -545,13 +545,6 @@ def generate_composite_test_matrix_gcode(
     rf_dx, rf_dy, rf_dz = resin_to_fiber
     fiber_safe_x = resin_start_x + rf_dx
     fiber_safe_y = resin_start_y + rf_dy
-    fiber_safe_z = final_safe_z + rf_dz
-    lines.append(f";TOOL_CHANGE_COMPENSATION:{rf_dx:.6f},{rf_dy:.6f},{rf_dz:.6f}")
-    lines.append(
-        f"G0 X{fiber_safe_x:.6f} Y{fiber_safe_y:.6f} Z{fiber_safe_z:.6f} "
-        f"A{resin_a:.6f} B{resin_b:.6f} C{resin_c:.6f} F{feed:.3f}"
-    )
-
     # Composite fiber is laid on top of the first resin line surface.
     fiber_base_z = resin_start_z + resin_layer_heights[0] + rf_dz
     fiber_start_pose = (
@@ -562,9 +555,10 @@ def generate_composite_test_matrix_gcode(
         resin_b,
         resin_c,
     )
-    fiber_print_safe_z = fiber_base_z + fiber_layer_heights[0] + finish_lift_mm
+    fiber_safe_z = final_safe_z + rf_dz
+    lines.append(f";TOOL_CHANGE_COMPENSATION:{rf_dx:.6f},{rf_dy:.6f},{rf_dz:.6f}")
     lines.append(
-        f"G0 X{fiber_safe_x:.6f} Y{fiber_safe_y:.6f} Z{fiber_print_safe_z:.6f} "
+        f"G0 X{fiber_safe_x:.6f} Y{fiber_safe_y:.6f} Z{fiber_safe_z:.6f} "
         f"A{resin_a:.6f} B{resin_b:.6f} C{resin_c:.6f} F{feed:.3f}"
     )
 
