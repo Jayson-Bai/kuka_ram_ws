@@ -488,7 +488,7 @@ def generate_composite_test_matrix_gcode(
     fiber_layer_heights = _validate_positive_sequence(fiber_layer_heights_mm, "层高")
     x, y, z, a, b, c = _pose_values(start_pose)
     feed = _feed(speed_mm_s)
-    lines = _header(start_pose)
+    lines = _header(start_pose, reset_e=False)
 
     start_safe_z = z + tool_change_safe_lift
     lines.append(f";TOOL_CHANGE_SAFE_LIFT:{tool_change_safe_lift:.6f}")

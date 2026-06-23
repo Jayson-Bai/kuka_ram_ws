@@ -593,7 +593,8 @@ def test_fiber_offset_send_nudge_downlinks_only_delta_without_saving():
     assert "delta_y" in send_section
     assert "delta_z" in send_section
     assert "下发微调" in src
-    assert "0.1" in send_section
+    assert "_is_tenth_step" not in send_section
+    assert "整数倍" not in send_section
     assert "calibration.resin_z_print_compensation_mm" not in send_section
     assert "save_head_calibration" not in send_section
     assert 'self._run_print_test_job("travel", start, target_pose=target)' in send_section

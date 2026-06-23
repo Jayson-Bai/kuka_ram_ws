@@ -628,7 +628,7 @@ def test_composite_npz_switches_from_initial_fiber_tool_after_safe_lift(tmp_path
     assert data["z"][first_resin_print_idx] < data["z"][resin_switch_idx]
 
 
-def test_composite_npz_initial_reset_event_keeps_current_start_pose(tmp_path):
+def test_composite_npz_starts_with_resin_tool_change_before_reset(tmp_path):
     start_pose = (-0.34, -1.24, -24.45, 0.0, 0.0, 0.0)
     lines = generate_composite_test_matrix_gcode(
         start_pose=start_pose,
@@ -659,6 +659,7 @@ def test_composite_npz_initial_reset_event_keeps_current_start_pose(tmp_path):
         dt=0.004,
         default_feed_mm_s=10.0,
         enable_extrude_wait=True,
+        initial_tool_id=FIBER_TOOL_ID,
     )
 
     data = np.load(out)
@@ -670,11 +671,9 @@ def test_composite_npz_initial_reset_event_keeps_current_start_pose(tmp_path):
         )
     }
     event_types = [event_type_vocab[int(v)] for v in data["event_type"]]
-    first_reset_idx = event_types.index("extrude_reset")
+    non_empty_events = [event for event in event_types if event]
 
-    assert np.isclose(data["x"][first_reset_idx], start_pose[0])
-    assert np.isclose(data["y"][first_reset_idx], start_pose[1])
-    assert np.isclose(data["z"][first_reset_idx], start_pose[2])
+    assert non_empty_events[:2] == ["tool_change_resin", "extrude_reset"]
 
 
 def test_test_matrix_gcode_rejects_more_than_45_lines():
