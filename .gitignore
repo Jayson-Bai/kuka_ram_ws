@@ -33,3 +33,6 @@
 
 # Output NPZ data
 /data/output_npz/
+
+# Head calibration offsets
+/data/head_calibration_offsets/
