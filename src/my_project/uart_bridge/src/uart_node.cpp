@@ -77,6 +77,10 @@ private:
   Status status_;
   std::string recv_buf_;
   std::mutex serial_write_mutex_;
+  std::mutex extrude_forward_mutex_;
+  bool last_sent_e_valid_{false};
+  int32_t last_sent_e_tool_id_{0};
+  double last_sent_e_abs_{0.0};
   std::atomic<double> extrude_scale_{1.0};
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
@@ -256,11 +260,11 @@ private:
       }
     }
 
-    // 发送事件指令 EV <trigger_seq> <event_type> <arg>
+    // 固件当前按 EV 0 处理事件；内部仍用 trigger_seq 做 RSI ready 对齐。
     // current_event_ 已经设置，心跳线程会暂停 E 转发，避免 reset 未完成时刷 old_seq。
     std::string arg = ev.payload.empty() ? "0" : ev.payload;
     std::ostringstream oss;
-    oss << "EV " << ev.trigger_seq << " " << ev.event_type << " " << arg << "\n";
+    oss << "EV 0 " << ev.event_type << " " << arg << "\n";
     write_line(oss.str());
 
     // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
@@ -279,6 +283,33 @@ private:
     return current_event_.has_value();
   }
 
+  bool should_forward_extrude(int32_t tool_id, double extrude_abs)
+  {
+    constexpr double E_EPS = 1e-9;
+    std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
+    if (!last_sent_e_valid_ && std::abs(extrude_abs) <= E_EPS) {
+      return false;
+    }
+    if (last_sent_e_valid_ &&
+      last_sent_e_tool_id_ == tool_id &&
+      std::abs(last_sent_e_abs_ - extrude_abs) <= E_EPS)
+    {
+      return false;
+    }
+    last_sent_e_valid_ = true;
+    last_sent_e_tool_id_ = tool_id;
+    last_sent_e_abs_ = extrude_abs;
+    return true;
+  }
+
+  void reset_extrude_forward_state()
+  {
+    std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
+    last_sent_e_valid_ = false;
+    last_sent_e_tool_id_ = 0;
+    last_sent_e_abs_ = 0.0;
+  }
+
   void on_heartbeat(const RsiHeartBeat & hb) //心跳触发挤出
   {
     // PAUSE、ABORT 或事件等待时不转发挤出命令。
@@ -288,6 +319,9 @@ private:
     }
     const double scale = extrude_scale_.load();
     const double scaled = hb.extrude_abs * scale;
+    if (!should_forward_extrude(hb.tool_id, scaled)) {
+      return;
+    }
     send_extrude_command(hb.seq_used, hb.tool_id, static_cast<float>(scaled));
   }
 
@@ -460,12 +494,15 @@ private:
         snapshot.last_e_seq == -1 &&
         std::abs(snapshot.last_e_abs) < 1e-9 &&
         snapshot.last_e_us == 0;
-      done = current_event_ack_received_ && current_event_done_received_ && stat_cleared;
+      done = stat_cleared;
     }
 
     if (done) {
       set_ready_state(true, ev.trigger_seq, ev.event_type);
       publish_ready_state("event_done");
+      if (ev.event_type == "extrude_reset") {
+        reset_extrude_forward_state();
+      }
       current_event_.reset();
     }
   }
@@ -501,6 +538,7 @@ private:
         current_event_ack_received_ = false;
         current_event_done_received_ = false;
       }
+      reset_extrude_forward_state();
       RCLCPP_INFO(get_logger(), "测试模式RESET：复位UART事件ACK/DONE临时状态");
     }
   }
