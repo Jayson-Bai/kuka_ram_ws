@@ -11,7 +11,7 @@ FIBER_GCODE_TOOL = 0
 RESIN_TOOL_ID = 2
 RESIN_GCODE_TOOL = 1
 DEFAULT_LINE_WIDTH_MM = 2.0
-EXTRUSION_PER_MM3 = 0.14834
+EXTRUSION_PER_MM3 = 1.0 / (3.141592653589793 * (1.75 / 2.0) ** 2)
 TEST_MATRIX_MAX_LINES = 45
 TEST_MATRIX_RANGE_STEP = Decimal("0.1")
 
@@ -289,6 +289,13 @@ def generate_test_matrix_gcode(
                     f"A{a:.6f} B{b:.6f} C{c:.6f} F{feed:.3f}"
                 )
                 current_x, current_y, current_z = line_start_x, line_y, print_z
+            if extrude_by_path_length and retract_e > 0.0:
+                current_e -= retract_e
+                lines.append(
+                    f"G1 X{line_start_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "
+                    f"A{a:.6f} B{b:.6f} C{c:.6f} "
+                    f"E{current_e:.6f} F{retract_feed:.3f}"
+                )
             if prime_e > 0.0:
                 current_e += prime_e
                 lines.append(
@@ -303,7 +310,7 @@ def generate_test_matrix_gcode(
                 f"E{current_e:.6f} F{feed:.3f}"
             )
             current_x, current_y, current_z = line_end_x, line_y, print_z
-            if retract_e > 0.0:
+            if retract_e > 0.0 and not extrude_by_path_length:
                 current_e -= retract_e
                 lines.append(
                     f"G1 X{line_end_x:.6f} Y{line_y:.6f} Z{print_z:.6f} "

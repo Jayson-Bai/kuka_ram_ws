@@ -840,7 +840,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._head_calibration = load_head_calibration()
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
-        self._print_test_fiber_offset_locked = False
+        self._print_test_last_sent_fiber_offset = None
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
         self._print_test_pending_after_tool_change = None
@@ -2235,8 +2235,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_confirm_resin_height = QtWidgets.QPushButton("确认打印高度")
         self._btn_test_continue_fiber = QtWidgets.QPushButton("切换到纤维头")
         self._btn_test_print_resin = QtWidgets.QPushButton("开始树脂测试")
-        self._btn_test_apply_fiber_offset = QtWidgets.QPushButton("锁定偏置输入")
-        self._btn_test_confirm_fiber_offset = QtWidgets.QPushButton("确认偏置（叠加树脂Z并下发）")
+        self._btn_test_send_fiber_offset_nudge = QtWidgets.QPushButton("下发微调")
+        self._btn_test_confirm_fiber_offset = QtWidgets.QPushButton("确认偏置并下发")
         self._btn_test_print_fiber = QtWidgets.QPushButton("直接打印纤维")
         self._btn_test_print_composite = QtWidgets.QPushButton("复合打印")
         self._btn_test_cut = QtWidgets.QPushButton("剪切")
@@ -2279,7 +2279,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             axis = label_text[0]
             for text_label, delta in (("-", -0.1), ("+", 0.1)):
                 btn = QtWidgets.QPushButton(text_label)
-                btn.setFixedSize(22, 24)
+                btn.setFixedSize(18, 18)
                 btn.setCursor(QtCore.Qt.PointingHandCursor)
                 btn.setEnabled(False)
                 btn.setToolTip(f"{axis} 偏置 {delta:+.1f} mm")
@@ -2327,8 +2327,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "纤维头动作",
             (
                 self._btn_test_continue_fiber,
-                self._btn_test_apply_fiber_offset,
                 self._btn_test_confirm_fiber_offset,
+                self._btn_test_send_fiber_offset_nudge,
                 self._btn_test_print_fiber,
                 self._btn_test_print_composite,
                 self._btn_test_cut,
@@ -2351,7 +2351,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_confirm_resin_height.clicked.connect(self._on_print_test_confirm_resin_height)
         self._btn_test_continue_fiber.clicked.connect(self._on_print_test_continue_fiber)
         self._btn_test_print_resin.clicked.connect(self._on_print_test_print_resin)
-        self._btn_test_apply_fiber_offset.clicked.connect(self._on_print_test_apply_fiber_offset)
+        self._btn_test_send_fiber_offset_nudge.clicked.connect(self._on_print_test_send_fiber_offset_nudge)
         self._btn_test_confirm_fiber_offset.clicked.connect(self._on_print_test_confirm_fiber_offset)
         self._btn_test_print_fiber.clicked.connect(self._on_print_test_print_fiber)
         self._btn_test_print_composite.clicked.connect(self._on_print_test_print_composite)
@@ -3614,7 +3614,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._test_correction_label.setText("RSI 修正量: 未收到")
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
-        self._print_test_fiber_offset_locked = False
+        self._print_test_last_sent_fiber_offset = None
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
         self._print_test_pending_after_tool_change = None
@@ -3658,16 +3658,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
             base_ready and self._print_test_resin_height_confirmed
         )
         fiber_ready = base_ready and self.current_tool_id() == 1
-        fiber_input_ready = fiber_ready and not self._print_test_fiber_offset_locked
         for inp in (
             self._test_fiber_x_comp_input,
             self._test_fiber_y_comp_input,
             self._test_fiber_z_comp_input,
         ):
-            inp.setEnabled(fiber_input_ready)
-        self._btn_test_apply_fiber_offset.setEnabled(fiber_input_ready)
+            inp.setEnabled(fiber_ready)
         self._btn_test_confirm_fiber_offset.setEnabled(fiber_ready)
-        fiber_nudge_ready = fiber_ready and self._print_test_fiber_offset_locked
+        fiber_nudge_ready = fiber_ready
+        self._btn_test_send_fiber_offset_nudge.setEnabled(fiber_nudge_ready)
         for btn in getattr(self, "_fiber_offset_nudge_buttons", []):
             btn.setEnabled(fiber_nudge_ready)
         fiber_action_ready = base_ready and self._print_test_fiber_confirmed
@@ -3838,17 +3837,38 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
             return
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
         if self._print_test_fiber_offset_locked:
             self._set_print_test_status("纤维偏置输入已锁定，请使用 0.1 微调按钮。", "#b15e00")
             return
         try:
-            self._current_head_calibration_from_inputs()
+            calibration = self._current_head_calibration_from_inputs()
         except Exception as exc:
             self._set_print_test_status(f"纤维偏置无效: {exc}", "#b42318")
             return
+        start = self._print_test_current_correction
+        target = (
+            start[0] + calibration.fiber_x_print_compensation_mm,
+            start[1] + calibration.fiber_y_print_compensation_mm,
+            start[2]
+            + calibration.resin_z_print_compensation_mm
+            + calibration.fiber_z_print_compensation_mm,
+            start[3],
+            start[4],
+            start[5],
+        )
         self._print_test_fiber_offset_locked = True
+        self._print_test_fiber_confirmed = False
+        self._print_test_last_sent_fiber_offset = (
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+        )
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
-        self._set_print_test_status("纤维偏置输入已锁定，可用右侧按钮进行 0.1 微调。", "#1b6e3c")
+        self._run_print_test_job("travel", start, target_pose=target)
+        self._set_print_test_status("纤维偏置已锁定，并已按当前输入下发 RSI。后续 0.1 微调需要单独点击下发。", "#1b6e3c")
 
     def _on_print_test_nudge_fiber_offset(self, axis, delta):
         if self.current_tool_id() != 1:
@@ -3859,9 +3879,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
-            return
-        if not self._print_test_fiber_offset_locked:
-            self._set_print_test_status("请先输入并锁定纤维偏置。", "#b42318")
             return
         axis = str(axis).upper()
         if axis not in ("X", "Y", "Z"):
@@ -3881,7 +3898,72 @@ class _UiStatusWidget(QtWidgets.QWidget):
         except Exception as exc:
             self._set_print_test_status(f"纤维偏置微调失败: {exc}", "#b42318")
             return
-        self._set_print_test_status("纤维偏置已微调，点击确认偏置后保存并下发。", "#1b6e3c")
+        self._print_test_fiber_confirmed = False
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._set_print_test_status("纤维偏置已微调，点击“下发微调”只会发送相对上次下发值的增量。", "#1b6e3c")
+
+    def _on_print_test_send_fiber_offset_nudge(self):
+        if self.current_tool_id() != 1:
+            self._set_print_test_status("当前未使用纤维头，不能下发纤维偏置微调。", "#b42318")
+            return
+        if self._print_test_params is None:
+            self._set_print_test_status("请先进入测试准备。", "#b42318")
+            return
+        if not self._print_test_seen_correction:
+            self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
+            return
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
+        if self._print_test_last_sent_fiber_offset is None:
+            self._set_print_test_status("请先确认偏置并下发。", "#b42318")
+            return
+        try:
+            calibration = self._current_head_calibration_from_inputs()
+        except Exception as exc:
+            self._set_print_test_status(f"纤维偏置无效: {exc}", "#b42318")
+            return
+        last_x, last_y, last_z = self._print_test_last_sent_fiber_offset
+        delta_x = calibration.fiber_x_print_compensation_mm - last_x
+        delta_y = calibration.fiber_y_print_compensation_mm - last_y
+        delta_z = calibration.fiber_z_print_compensation_mm - last_z
+
+        def _is_tenth_step(value):
+            return abs(value * 10.0 - round(value * 10.0)) <= 1e-6
+
+        current_offsets = (
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+        )
+        deltas = (delta_x, delta_y, delta_z)
+        if not all(_is_tenth_step(v) for v in current_offsets + deltas):
+            self._set_print_test_status("纤维偏置及其待下发增量必须是 0.1 mm 的整数倍。", "#b42318")
+            return
+        if max(abs(delta_x), abs(delta_y), abs(delta_z)) <= 1e-9:
+            self._set_print_test_status("当前没有待下发的纤维偏置增量。", "#b15e00")
+            return
+        start = self._print_test_current_correction
+        target = (
+            start[0] + delta_x,
+            start[1] + delta_y,
+            start[2] + delta_z,
+            start[3],
+            start[4],
+            start[5],
+        )
+        self._print_test_fiber_confirmed = False
+        self._print_test_last_sent_fiber_offset = (
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+        )
+        self._set_print_test_controls_enabled(self._print_test_seen_correction)
+        self._run_print_test_job("travel", start, target_pose=target)
+        self._set_print_test_status(
+            f"已下发纤维偏置微调增量: X {delta_x:+.3f} mm, Y {delta_y:+.3f} mm, Z {delta_z:+.3f} mm。",
+            "#1b6e3c",
+        )
 
     def _on_print_test_confirm_fiber_offset(self):
         if self.current_tool_id() != 1:
@@ -3893,6 +3975,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
             return
+        if self._print_test_busy:
+            self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
+            return
         try:
             calibration = self._current_head_calibration_from_inputs()
             self._head_calibration = calibration
@@ -3901,7 +3986,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
             return
         start = self._print_test_current_correction
-        # 确认时才保存并下发：纤维 Z 偏置需要叠加树脂全局 Z 打印补偿。
         target = (
             start[0] + calibration.fiber_x_print_compensation_mm,
             start[1] + calibration.fiber_y_print_compensation_mm,
@@ -3912,10 +3996,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
             start[4],
             start[5],
         )
-        self._print_test_fiber_offset_locked = True
         self._print_test_fiber_confirmed = True
+        self._print_test_last_sent_fiber_offset = (
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+        )
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
         self._run_print_test_job("travel", start, target_pose=target)
+        self._set_print_test_status("纤维偏置已确认、保存并下发；后续微调将只发送增量。", "#1b6e3c")
 
     def _on_print_test_print_fiber(self):
         if self._print_test_params is None:

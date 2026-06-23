@@ -351,9 +351,8 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
         "X 偏置",
         "Y 偏置",
         "Z 补偿",
-        "锁定偏置输入",
-        "确认偏置（叠加树脂Z并下发）",
-        "确认偏置",
+        "下发微调",
+        "确认偏置并下发",
         "直接打印纤维",
         "剪切",
         "复合打印",
@@ -384,8 +383,8 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
         "self._btn_test_continue_fiber.clicked.connect("
         "self._on_print_test_continue_fiber)",
         "self._btn_test_print_resin.clicked.connect(self._on_print_test_print_resin)",
-        "self._btn_test_apply_fiber_offset.clicked.connect("
-        "self._on_print_test_apply_fiber_offset)",
+        "self._btn_test_send_fiber_offset_nudge.clicked.connect("
+        "self._on_print_test_send_fiber_offset_nudge)",
         "self._btn_test_confirm_fiber_offset.clicked.connect("
         "self._on_print_test_confirm_fiber_offset)",
         "self._btn_test_print_fiber.clicked.connect(self._on_print_test_print_fiber)",
@@ -431,7 +430,7 @@ def test_print_test_resin_print_always_prepares_head_before_job():
     assert "self._start_print_test_resin_matrix()" not in ensure_resin
 
     request_resin = src.split("    def _request_print_test_resin_tool", 1)[1].split(
-        "    def _on_print_test_apply_fiber_offset", 1
+        "    def _on_print_test_nudge_fiber_offset", 1
     )[0]
     assert 'self._print_test_waiting_for_tool = _PRINT_TEST_RESIN_TOOL_ID' in request_resin
     assert 'self._print_test_pending_after_tool_change = "print_resin_matrix"' in request_resin
@@ -536,52 +535,80 @@ def test_print_test_composite_target_uses_resin_surface_height_not_head_offset()
     assert 'calibration_relative_offsets(' not in target_section
     assert "base[2] + resin_surface_height + last_layer_height + safe_lift" in target_section
 
-def test_fiber_offset_apply_only_locks_inputs_for_micro_nudging():
+def test_fiber_offset_inputs_keep_horizontal_layout_with_smaller_inline_nudge_buttons():
     src = _source()
-    apply_section = src.split("    def _on_print_test_apply_fiber_offset", 1)[1].split(
-        "    def _on_print_test_nudge_fiber_offset", 1
+    section = src.split("fiber_offset_grid = QtWidgets.QGridLayout()", 1)[1].split(
+        "        action_columns = QtWidgets.QHBoxLayout()", 1
     )[0]
 
-    assert "self._print_test_fiber_offset_locked = True" in apply_section
-    assert "save_head_calibration" not in apply_section
-    assert "self._run_print_test_job" not in apply_section
+    assert "col = index * 2" in section
+    assert "fiber_offset_grid.addWidget(label, 0, col)" in section
+    assert "fiber_offset_grid.addLayout(input_row, 0, col + 1)" in section
+    assert "btn.setFixedSize(18, 18)" in section
 
 
-def test_fiber_offset_micro_nudges_only_change_inputs_until_confirm():
-    src = _source()
-
-    assert "self._print_test_fiber_offset_locked = False" in src
-    controls = src.split("    def _set_print_test_controls_enabled", 1)[1].split(
-        "    def _on_current_correction", 1
-    )[0]
-    assert "fiber_input_ready = fiber_ready and not self._print_test_fiber_offset_locked" in controls
-    assert "inp.setEnabled(fiber_input_ready)" in controls
-    assert "self._btn_test_apply_fiber_offset.setEnabled(fiber_input_ready)" in controls
-    assert "fiber_nudge_ready = fiber_ready and self._print_test_fiber_offset_locked" in controls
-    assert "btn.setEnabled(fiber_nudge_ready)" in controls
-
-    nudge_section = src.split("    def _on_print_test_nudge_fiber_offset", 1)[1].split(
-        "    def _on_print_test_confirm_fiber_offset", 1
-    )[0]
-    assert "if not self._print_test_fiber_offset_locked:" in nudge_section
-    assert "setText" in nudge_section
-    assert "save_head_calibration" not in nudge_section
-    assert "self._run_print_test_job" not in nudge_section
-
-
-def test_fiber_offset_confirm_saves_and_downlinks_resin_z_adjusted_offset():
+def test_fiber_offset_confirm_saves_and_downlinks_current_absolute_offset():
     src = _source()
     confirm_section = src.split("    def _on_print_test_confirm_fiber_offset", 1)[1].split(
         "    def _on_print_test_print_fiber", 1
     )[0]
 
-    assert "start = self._print_test_current_correction" in confirm_section
-    assert "start[0] + calibration.fiber_x_print_compensation_mm" in confirm_section
-    assert "start[1] + calibration.fiber_y_print_compensation_mm" in confirm_section
-    assert "calibration.resin_z_print_compensation_mm" in confirm_section
-    assert "calibration.fiber_z_print_compensation_mm" in confirm_section
     assert "save_head_calibration(calibration" in confirm_section
+    assert "self._print_test_last_sent_fiber_offset = (" in confirm_section
+    assert "calibration.resin_z_print_compensation_mm" in confirm_section
     assert 'self._run_print_test_job("travel", start, target_pose=target)' in confirm_section
+
+
+def test_fiber_offset_micro_nudges_stage_ui_values_but_do_not_downlink_or_save():
+    src = _source()
+
+    controls = src.split("    def _set_print_test_controls_enabled", 1)[1].split(
+        "    def _on_current_correction", 1
+    )[0]
+    assert "fiber_ready = base_ready and self.current_tool_id() == 1" in controls
+    assert "inp.setEnabled(fiber_ready)" in controls
+    assert "fiber_nudge_ready = fiber_ready" in controls
+    assert "btn.setEnabled(fiber_nudge_ready)" in controls
+    assert "self._btn_test_send_fiber_offset_nudge.setEnabled(fiber_nudge_ready)" in controls
+
+    nudge_section = src.split("    def _on_print_test_nudge_fiber_offset", 1)[1].split(
+        "    def _on_print_test_send_fiber_offset_nudge", 1
+    )[0]
+    assert "setText" in nudge_section
+    assert "save_head_calibration" not in nudge_section
+    assert "self._run_print_test_job" not in nudge_section
+    assert "self._print_test_last_sent_fiber_offset" not in nudge_section
+    assert "self._print_test_fiber_confirmed = False" in nudge_section
+
+
+def test_fiber_offset_send_nudge_downlinks_only_delta_without_saving():
+    src = _source()
+    send_section = src.split(
+        "    def _on_print_test_send_fiber_offset_nudge", 1
+    )[1].split("    def _on_print_test_confirm_fiber_offset", 1)[0]
+
+    assert "self._print_test_last_sent_fiber_offset" in send_section
+    assert "请先确认偏置并下发。" in send_section
+    assert "delta_x" in send_section
+    assert "delta_y" in send_section
+    assert "delta_z" in send_section
+    assert "下发微调" in src
+    assert "0.1" in send_section
+    assert "calibration.resin_z_print_compensation_mm" not in send_section
+    assert "save_head_calibration" not in send_section
+    assert 'self._run_print_test_job("travel", start, target_pose=target)' in send_section
+
+
+def test_fiber_offset_confirm_only_saves_without_downlinking_again():
+    src = _source()
+    confirm_section = src.split("    def _on_print_test_confirm_fiber_offset", 1)[1].split(
+        "    def _on_print_test_print_fiber", 1
+    )[0]
+
+    assert "save_head_calibration(calibration" in confirm_section
+    assert "self._print_test_fiber_confirmed = True" in confirm_section
+    assert 'self._run_print_test_job("travel", start, target_pose=target)' in confirm_section
+    assert "calibration.resin_z_print_compensation_mm" in confirm_section
 
 
 def test_scissor_button_checks_fiber_tool_before_uart_command():

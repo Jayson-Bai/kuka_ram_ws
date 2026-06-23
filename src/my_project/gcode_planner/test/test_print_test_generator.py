@@ -25,6 +25,11 @@ def _moves(lines):
     return [cmd for cmd in parse_gcode_lines(lines) if isinstance(cmd, MoveCommand)]
 
 
+def test_default_resin_extrusion_constant_matches_1p75mm_filament():
+    expected = 1.0 / (math.pi * (1.75 / 2.0) ** 2)
+    assert math.isclose(EXTRUSION_PER_MM3, expected, rel_tol=1e-6)
+
+
 def test_pose_adjust_gcode_moves_xyzabc_without_extrusion():
     lines = generate_pose_adjust_gcode(
         start_pose=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
@@ -78,7 +83,7 @@ def test_test_line_gcode_uses_fixed_resin_line_width_and_finish_lift():
     print_move = next(cmd for cmd in moves if cmd.type == "PRINT")
     assert print_move.start_pos.x == 1.0
     assert print_move.pos.x == 201.0
-    assert math.isclose(print_move.delta_e, 200.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3)
+    assert math.isclose(print_move.delta_e, 200.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3, abs_tol=1e-6)
     lift_move = moves[-1]
     assert lift_move.type == "TRAVEL"
     assert lift_move.pos.z == 10.4
@@ -107,7 +112,7 @@ def test_test_line_gcode_adds_prime_and_retract_as_filament_lengths():
     assert len(waits) == 2
     assert math.isclose(waits[0].delta_e, 5.0)
     assert math.isclose(waits[0].feedrate, 2.0 * 60.0)
-    assert math.isclose(print_move.delta_e, 200.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3)
+    assert math.isclose(print_move.delta_e, 200.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3, abs_tol=1e-6)
     assert math.isclose(waits[1].delta_e, -3.0)
     assert math.isclose(waits[1].feedrate, 8.0 * 60.0)
 
@@ -163,7 +168,7 @@ def test_test_matrix_gcode_generates_full_combinations_with_y_spacing_and_scaled
         300.0 * 2.0 * 0.6 * EXTRUSION_PER_MM3 * 1.0,
     ]
     for move, expected_delta in zip(print_moves, expected_deltas):
-        assert math.isclose(move.delta_e, expected_delta)
+        assert math.isclose(move.delta_e, expected_delta, abs_tol=1e-6)
 
     assert any(
         cmd.start_pos.x == 301.0
@@ -208,6 +213,7 @@ def test_fiber_matrix_uses_fiber_tool_and_serpentine_geometry():
 
     parsed = parse_gcode_lines(lines)
     tools = [cmd for cmd in parsed if isinstance(cmd, ToolChangeCommand)]
+    waits = [cmd for cmd in parsed if isinstance(cmd, ExtrudeWait)]
     print_moves = [cmd for cmd in _moves(lines) if cmd.type == "PRINT"]
 
     assert FIBER_TOOL_ID == 1
@@ -220,6 +226,13 @@ def test_fiber_matrix_uses_fiber_tool_and_serpentine_geometry():
     ]
     assert [cmd.pos.x for cmd in print_moves] == [301.0, 1.0]
     assert [cmd.delta_e for cmd in print_moves] == [240.0, 300.0]
+
+    waits_before_first_print = [cmd for cmd in waits if cmd.line < print_moves[0].line]
+    waits_before_second_print = [
+        cmd for cmd in waits if print_moves[0].line < cmd.line < print_moves[1].line
+    ]
+    assert [cmd.delta_e for cmd in waits_before_first_print] == [-3.0, 5.0]
+    assert [cmd.delta_e for cmd in waits_before_second_print] == [-3.0, 5.0]
 
 
 def test_composite_fiber_segment_extrudes_by_path_length_only():
@@ -701,6 +714,6 @@ def test_test_matrix_gcode_adds_prime_and_retract_as_filament_lengths():
     assert len(waits) == 2
     assert math.isclose(waits[0].delta_e, 5.0)
     assert math.isclose(waits[0].feedrate, 2.0 * 60.0)
-    assert math.isclose(print_move.delta_e, 300.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3)
+    assert math.isclose(print_move.delta_e, 300.0 * 2.0 * 0.5 * EXTRUSION_PER_MM3, abs_tol=1e-6)
     assert math.isclose(waits[1].delta_e, -3.0)
     assert math.isclose(waits[1].feedrate, 8.0 * 60.0)
