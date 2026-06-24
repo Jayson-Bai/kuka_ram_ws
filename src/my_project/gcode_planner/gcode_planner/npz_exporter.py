@@ -186,7 +186,10 @@ def export_npz(
     base_dir = os.path.dirname(base_no_ext)
     base_name = os.path.basename(base_no_ext)
     base_name = re.sub(r"_layer_\\d{4}$", "", base_name)
-    base_root = os.path.join(base_dir, base_name) if base_dir else base_name
+    if base_dir and os.path.basename(os.path.normpath(base_dir)) == base_name:
+        base_root = base_dir
+    else:
+        base_root = os.path.join(base_dir, base_name) if base_dir else base_name
 
     class _Writer:
         def __init__(self, base_path: str):
@@ -280,6 +283,8 @@ def export_npz(
     plotted_layers = set()
     flat_preview_points = {}
     flat_preview_counts = {}
+    flat_preview_last_e = {}
+    flat_preview_needs_break = {}
     flat_preview_stride = max(1, int(plot_stride))
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
@@ -390,13 +395,28 @@ def export_npz(
     def _record_flat_preview_point(layer: int, row: CsvRow):
         if split_by_layer_type or not plot_layer_xy:
             return
-        if row.move_type not in ("PRINT", "PRINT_FIT"):
+
+        last_e = flat_preview_last_e.get(layer, row.e)
+        flat_preview_last_e[layer] = row.e
+        is_print = row.move_type in ("PRINT", "PRINT_FIT")
+        is_deposit = is_print and (row.e - last_e) > 1e-6
+
+        if not is_deposit:
+            xs_ys = flat_preview_points.get(layer)
+            if xs_ys is not None and xs_ys[0]:
+                flat_preview_needs_break[layer] = True
             return
+
         count = flat_preview_counts.get(layer, 0)
         flat_preview_counts[layer] = count + 1
         if count % flat_preview_stride != 0:
             return
+
         xs, ys = flat_preview_points.setdefault(layer, ([], []))
+        if flat_preview_needs_break.pop(layer, False):
+            if xs and not (math.isnan(xs[-1]) and math.isnan(ys[-1])):
+                xs.append(float("nan"))
+                ys.append(float("nan"))
         xs.append(row.x)
         ys.append(row.y)
 

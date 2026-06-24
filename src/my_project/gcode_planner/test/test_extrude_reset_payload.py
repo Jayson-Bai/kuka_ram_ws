@@ -1,5 +1,9 @@
+import json
+
 import numpy as np
 
+import gcode_planner.npz_exporter as npz_exporter
+from gcode_planner.cli import _default_output_path
 from gcode_planner.npz_exporter import export_npz
 from gcode_planner.types import (
     ExtrudeWait,
@@ -517,3 +521,157 @@ def test_flat_export_generates_layer_preview_without_manifest(tmp_path):
         tmp_path / "flat_preview" / "layer_previews" / "layer_0001.png"
     )
     assert preview_path.exists()
+
+
+def test_flat_preview_breaks_lines_across_travel_and_prime(tmp_path, monkeypatch):
+    out = tmp_path / "flat_preview_break.npz"
+    captured = {}
+
+    def capture_plot(layer_points, base_root):
+        captured["layer_points"] = layer_points
+        captured["base_root"] = base_root
+
+    monkeypatch.setattr(npz_exporter, "_plot_flat_layer_previews", capture_plot)
+
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="SKIN",
+            raw="G1 X1 E1",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.5,
+            delta_e=-0.5,
+            feedrate=2400.0,
+            line=2,
+            layer=0,
+            subtype="SKIN",
+            raw="G1 E0.5",
+            is_pure_state_change=True,
+        ),
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(100.0, 100.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.5,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=3,
+            layer=0,
+            subtype="TRAVEL",
+            raw="G0 X100 Y100",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(100.0, 100.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(100.0, 100.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.5,
+            delta_e=1.0,
+            feedrate=900.0,
+            line=4,
+            layer=0,
+            subtype="WALL-INNER",
+            raw="G1 E1.5",
+            is_pure_state_change=True,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(100.0, 100.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(101.0, 100.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=2.5,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=5,
+            layer=0,
+            subtype="WALL-INNER",
+            raw="G1 X101 E2.5",
+            is_pure_state_change=False,
+        ),
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=0.1,
+        default_feed_mm_s=10.0,
+        split_by_layer_type=False,
+        plot_layer_xy=True,
+        plot_stride=1,
+        enable_extrude_wait=False,
+    )
+
+    xs, ys = captured["layer_points"][0]
+    points = list(zip(xs, ys))
+    assert any(np.isnan(x) and np.isnan(y) for x, y in points)
+    assert not any(
+        np.isclose(x1, 1.0)
+        and np.isclose(y1, 0.0)
+        and np.isclose(x2, 100.0)
+        and np.isclose(y2, 100.0)
+        for (x1, y1), (x2, y2) in zip(points, points[1:])
+    )
+
+
+def test_default_output_path_places_npz_inside_named_output_directory(tmp_path):
+    gcode = tmp_path / "100_10_cylinder_624.gcode"
+    output_dir = tmp_path / "output_npz"
+
+    assert _default_output_path(str(gcode), str(output_dir)) == str(
+        output_dir / "100_10_cylinder_624" / "100_10_cylinder_624.npz"
+    )
+
+
+def test_nested_flat_export_uses_parent_directory_for_previews(tmp_path, monkeypatch):
+    out = tmp_path / "output_npz" / "sample" / "sample.npz"
+    captured = {}
+
+    def capture_plot(layer_points, base_root):
+        captured["base_root"] = base_root
+
+    monkeypatch.setattr(npz_exporter, "_plot_flat_layer_previews", capture_plot)
+
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="WALL",
+            raw="G1 X1 E1",
+            is_pure_state_change=False,
+        )
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=0.1,
+        default_feed_mm_s=10.0,
+        plot_layer_xy=True,
+    )
+
+    assert out.exists()
+    assert (out.parent / "sample.offset.json").exists()
+    assert captured["base_root"] == str(out.parent)

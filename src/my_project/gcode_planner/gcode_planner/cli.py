@@ -18,7 +18,7 @@ from .npz_exporter import export_npz
 
 def _default_output_path(gcode_path: str, output_dir: str) -> str:
     base = os.path.splitext(os.path.basename(gcode_path))[0]
-    return os.path.join(output_dir, base + ".npz")
+    return os.path.join(output_dir, base, base + ".npz")
 
 
 def main(argv=None):

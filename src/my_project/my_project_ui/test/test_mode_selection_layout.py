@@ -76,6 +76,26 @@ def test_formal_print_prefers_flat_npz_over_manifest():
     assert "manifest" not in auto_path.lower()
 
 
+def test_formal_print_export_defaults_to_named_npz_directory():
+    src = _source()
+
+    gcode_changed = src.split("    def _on_gcode_path_changed", 1)[1].split(
+        "    def _on_export_npz", 1
+    )[0]
+    assert 'os.path.join(data_root, base, base + ".npz")' in gcode_changed
+
+    layer_dir = src.split("def _npz_layer_dir_from_launch_path", 1)[1].split(
+        "def _resolve_npz_launch_path_from_dir", 1
+    )[0]
+    assert "if p.parent.name == p.stem:" in layer_dir
+    assert "return str(p.parent)" in layer_dir
+
+    export_finished = src.split("    def _on_export_finished", 1)[1].split(
+        "    def _on_view_layers", 1
+    )[0]
+    assert "_npz_layer_dir_from_launch_path(npz_path)" in export_finished
+
+
 def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
     src = _source()
     init_section = src.split("        self._test_temp_input =", 1)[1].split(

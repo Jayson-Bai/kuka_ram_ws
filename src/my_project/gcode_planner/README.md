@@ -157,7 +157,18 @@ ros2 run gcode_planner gcode_planner_npz \
 - move_type_vocab_keys/move_type_vocab_vals
 - event_type_vocab_keys/event_type_vocab_vals
 
-当总行数超过 5000000 时，文件名为 `<base>_part0000.npz` 形式；否则为单文件 `<base>.npz`。
+默认输出结构为：
+
+```
+output_npz/<base_name>/
+  <base_name>.npz
+  <base_name>.offset.json
+  layer_previews/
+    layer_0000.png
+    ...
+```
+
+当总行数超过 5000000 时，NPZ 文件名为 `<base>_part0000.npz` 形式；否则为单文件 `<base>.npz`。
 
 ### 按层+子类型导出
 
@@ -166,6 +177,7 @@ ros2 run gcode_planner gcode_planner_npz \
 ```
 output_npz/<base_name>/
   <base_name>_manifest.json
+  <base_name>.offset.json
   layer_0001/
     <base_name>_layer_0001_type_<TYPE>_occ_0001.npz
     ...
@@ -177,7 +189,7 @@ output_npz/<base_name>/
 - `TYPE` 来自 `;TYPE:` 注释；`UNKNOWN` 会归并为 `TRAVEL`。
 - `occ` 为同层同类型的出现序号，保证顺序可复现。
 - manifest 用于按原 GCode 顺序播放（基于解析顺序）。
-- 启用 `--plot-layer-xy` 后，会在每个 `layer_XXXX/` 下生成 `layer_XXXX.png`（只绘制真实沉积路径）。
+- 启用 `--plot-layer-xy` 后，会在 `layer_previews/` 下生成总览预览图，或在分层分类型导出时生成同级总览图（只绘制真实沉积路径）。
 
 ## 挤出量 E 的生成与发送路径（npz -> UART）
 

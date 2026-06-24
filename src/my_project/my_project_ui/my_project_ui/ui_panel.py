@@ -411,7 +411,10 @@ def _npz_layer_dir_from_launch_path(npz_path):
     launch_path = _normalize_npz_launch_path(npz_path)
     if not launch_path:
         return None
-    return str(Path(launch_path).with_suffix(""))
+    p = Path(launch_path)
+    if p.parent.name == p.stem:
+        return str(p.parent)
+    return str(p.with_suffix(""))
 
 
 def _resolve_npz_launch_path_from_dir(npz_dir):
@@ -4374,7 +4377,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         base = os.path.splitext(os.path.basename(text))[0]
         data_root = _DEFAULT_NPZ_OUTPUT_DIR
-        self._npz_out_input.setText(os.path.join(data_root, base + ".npz"))
+        self._npz_out_input.setText(os.path.join(data_root, base, base + ".npz"))
 
     def _on_export_npz(self):
         gcode_path = self._gcode_path_input.text().strip()
@@ -4440,9 +4443,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 out_dir = os.path.dirname(npz_out)
                 if out_dir:
                     os.makedirs(out_dir, exist_ok=True)
-                    # Also create a subdirectory named after the GCode base name
-                    gcode_base = os.path.splitext(os.path.basename(gcode_path))[0]
-                    os.makedirs(os.path.join(out_dir, gcode_base), exist_ok=True)
 
                 stats = export_npz(
                     parsed,
@@ -4494,7 +4494,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #1b6e3c;")
             npz_path = self._npz_out_input.text().strip()
             if npz_path:
-                self._last_npz_dir = os.path.splitext(npz_path)[0]
+                self._last_npz_dir = _npz_layer_dir_from_launch_path(npz_path) or os.path.splitext(npz_path)[0]
                 self._selected_npz_dir = self._last_npz_dir
                 self._selected_npz_launch_path = (
                     npz_path
