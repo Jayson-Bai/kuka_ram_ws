@@ -84,7 +84,6 @@ def test_print_test_job_generation_supports_resin_fiber_and_composite_modes():
     assert "save_head_calibration" in block
 
 
-
 def test_print_test_fiber_exports_start_from_fiber_tool():
     src = _source()
     worker = src.split(
@@ -95,3 +94,45 @@ def test_print_test_fiber_exports_start_from_fiber_tool():
     assert 'if job_type in ("fiber_matrix", "composite_matrix")' in worker
     assert '_PRINT_TEST_FIBER_TOOL_ID' in worker
     assert '_PRINT_TEST_RESIN_TOOL_ID' in worker
+
+
+def test_print_test_fiber_z_offset_input_requires_positive_value():
+    src = _source()
+    build_section = src.split(
+        "self._test_fiber_z_comp_input = QtWidgets.QLineEdit", 1
+    )[1].split("self._btn_test_prepare", 1)[0]
+
+    fiber_z_validator = build_section.split(
+        "self._test_fiber_z_comp_input.setMaximumWidth(72)", 1
+    )[1].split("self._test_fiber_z_comp_input.setValidator", 1)[0]
+
+    assert "QtGui.QDoubleValidator(" in fiber_z_validator
+    assert "0.001, 1000.0, 3" in fiber_z_validator
+    assert "self._test_fiber_z_comp_input" in fiber_z_validator
+
+
+def test_print_test_npz_load_checks_resin_z_floor_before_emit():
+    src = _source()
+    confirm_resin = src.split(
+        "    def _on_print_test_confirm_resin_height", 1
+    )[1].split("    def _on_print_test_continue_fiber", 1)[0]
+    worker = src.split(
+        '    def _run_print_test_job', 1)[1].split(
+        '    # ---- Offset persistence ----', 1)[0]
+
+    assert (
+        "self._print_test_resin_z_floor = "
+        "float(self._print_test_current_correction[2])"
+    ) in confirm_resin
+    assert "def _validate_print_test_npz_z_floor(self, npz_path):" in src
+    assert "np.load(str(part_path))" in src
+    assert "min_z < floor - 1e-6" in src
+    assert "低于已确认树脂高度警戒线" in src
+    publisher = src.split(
+        "    def _on_print_test_load_npz", 1
+    )[1].split("    def _auto_npz_launch_path", 1)[0]
+
+    assert "if not self._validate_print_test_npz_z_floor(npz_path):" in worker
+    assert "self.print_test_load_npz_submit.emit(npz_path)" in worker
+    assert "if not self._widget._validate_print_test_npz_z_floor(path):" in publisher
+    assert "self._print_test_load_pub.publish(msg)" in publisher

@@ -845,6 +845,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_pending_after_zero = None
         self._print_test_pending_after_tool_change = None
         self._print_test_requested_target_tool = None
+        self._print_test_resin_z_floor = None
         self._uart_log_history = []
         self._diagnostic_log_history = []
         self._selected_npz_dir = None
@@ -2063,12 +2064,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_resin_z_comp_input,
             self._test_fiber_x_comp_input,
             self._test_fiber_y_comp_input,
-            self._test_fiber_z_comp_input,
         ):
             inp.setMaximumWidth(72)
             validator = QtGui.QDoubleValidator(-1000.0, 1000.0, 3, inp)
             validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
             inp.setValidator(validator)
+        self._test_fiber_z_comp_input.setMaximumWidth(72)
+        validator = QtGui.QDoubleValidator(
+            0.001, 1000.0, 3, self._test_fiber_z_comp_input
+        )
+        validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+        self._test_fiber_z_comp_input.setValidator(validator)
 
         def _section_title(text):
             label = QtWidgets.QLabel(text)
@@ -3446,7 +3452,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._test_fiber_y_comp_input, "纤维 Y 偏置"
             ),
             fiber_z_print_compensation_mm=self._float_input(
-                self._test_fiber_z_comp_input, "纤维 Z 偏置"
+                self._test_fiber_z_comp_input, "纤维 Z 偏置", minimum=0.001
             ),
         )
 
@@ -3619,6 +3625,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_pending_after_zero = None
         self._print_test_pending_after_tool_change = None
         self._print_test_requested_target_tool = None
+        self._print_test_resin_z_floor = None
         self._uart_log_history.clear()
         self._diagnostic_log_history.clear()
         self._append_diagnostic("ui", "diagnostic_reset", {"reason": "print_test_prepare"})
@@ -3764,8 +3771,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
             return
         self._print_test_resin_height_confirmed = True
+        self._print_test_resin_z_floor = float(self._print_test_current_correction[2])
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
-        self._set_print_test_status("树脂打印高度已确认。", "#1b6e3c")
+        self._set_print_test_status(
+            f"树脂打印高度已确认，Z 警戒线 {self._print_test_resin_z_floor:.3f} mm。",
+            "#1b6e3c",
+        )
 
     def _on_print_test_continue_fiber(self):
         if self._print_test_params is None:
@@ -4094,6 +4105,47 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.uart_command_submit.emit("EV 0 cut_cf\n")
         self._set_print_test_status("已发送剪切命令。", "#1b6e3c")
 
+    def _print_test_npz_parts(self, npz_path):
+        part_path = Path(npz_path)
+        if part_path.is_file():
+            return [part_path]
+        if part_path.suffix == ".npz":
+            base = part_path.with_suffix("")
+            return sorted(part_path.parent.glob(base.name + "_part*.npz"))
+        return []
+
+    def _validate_print_test_npz_z_floor(self, npz_path):
+        floor = self._print_test_resin_z_floor
+        if floor is None:
+            return True
+        parts = self._print_test_npz_parts(npz_path)
+        if not parts:
+            self.print_test_status.emit(
+                f"测试动作生成失败: 未找到 NPZ 文件 {npz_path}", "#b42318"
+            )
+            return False
+        try:
+            import numpy as np
+
+            min_z = None
+            for part_path in parts:
+                with np.load(str(part_path)) as data:
+                    part_min_z = float(np.min(data["z"]))
+                min_z = part_min_z if min_z is None else min(min_z, part_min_z)
+        except Exception as exc:
+            self.print_test_status.emit(
+                f"测试动作生成失败: NPZ Z 安全检查失败: {exc}", "#b42318"
+            )
+            return False
+        if min_z < floor - 1e-6:
+            self.print_test_status.emit(
+                f"拒绝下发测试 NPZ: 最低 Z={min_z:.3f} mm，"
+                f"低于已确认树脂高度警戒线 {floor:.3f} mm。",
+                "#b42318",
+            )
+            return False
+        return True
+
     def _run_print_test_job(self, job_type, start_pose, target_pose, target_z=None):
         if self._print_test_busy:
             self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
@@ -4248,6 +4300,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         else _PRINT_TEST_RESIN_TOOL_ID
                     ),
                 )
+                if not self._validate_print_test_npz_z_floor(npz_path):
+                    self._print_test_busy = False
+                    self._print_test_target = None
+                    self._print_test_pending_after_zero = None
+                    self.print_test_controls_enabled.emit(True)
+                    return
                 self.print_test_rsi_command_submit.emit("RESET")
                 time.sleep(0.05)
                 self.print_test_load_npz_submit.emit(npz_path)
@@ -4835,6 +4893,8 @@ class MyProjectUiPlugin(Plugin):
         self._print_test_rsi_cmd_pub.publish(msg)
 
     def _on_print_test_load_npz(self, path: str):
+        if not self._widget._validate_print_test_npz_z_floor(path):
+            return
         msg = StringMsg()
         msg.data = path
         self._print_test_load_pub.publish(msg)
