@@ -49,6 +49,7 @@ class CsvRow:
     trigger_seq: Optional[int]
     layer_index: int = 0
     total_layers: int = 0
+    preview_layer_index: int = 0
 
 
 @dataclass
@@ -237,6 +238,10 @@ def export_npz(
             )
             layer_index = np.array([r.layer_index for r in chunk], dtype=np.uint32)
             total_layers_arr = np.array([r.total_layers for r in chunk], dtype=np.uint32)
+            preview_layer_index = np.array(
+                [r.preview_layer_index for r in chunk],
+                dtype=np.int32,
+            )
 
             np.savez_compressed(
                 out_path,
@@ -257,6 +262,7 @@ def export_npz(
                 trigger_seq=trigger_seq,
                 layer_index=layer_index,
                 total_layers=total_layers_arr,
+                preview_layer_index=preview_layer_index,
                 move_type_vocab_keys=move_type_keys,
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
@@ -386,9 +392,11 @@ def export_npz(
 
     def _with_layer_progress(row: CsvRow, layer: int) -> CsvRow:
         try:
-            row.layer_index = max(0, int(layer))
+            preview_layer = int(layer)
         except (TypeError, ValueError):
-            row.layer_index = 0
+            preview_layer = 0
+        row.preview_layer_index = preview_layer
+        row.layer_index = max(0, preview_layer)
         row.total_layers = total_layers
         return row
 
@@ -1452,6 +1460,10 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
         )
         layer_index = np.array([r.layer_index for r in chunk], dtype=np.uint32)
         total_layers_arr = np.array([r.total_layers for r in chunk], dtype=np.uint32)
+        preview_layer_index = np.array(
+            [r.preview_layer_index for r in chunk],
+            dtype=np.int32,
+        )
 
         out_path = (
             f"{part_base}_part{part:04d}.npz"
@@ -1477,6 +1489,7 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
             trigger_seq=trigger_seq,
             layer_index=layer_index,
             total_layers=total_layers_arr,
+            preview_layer_index=preview_layer_index,
             move_type_vocab_keys=move_type_keys,
             move_type_vocab_vals=move_type_vals,
             event_type_vocab_keys=event_type_keys,
