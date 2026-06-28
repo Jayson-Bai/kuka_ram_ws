@@ -1929,6 +1929,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_view_layers.setCursor(QtCore.Qt.PointingHandCursor)
         self._btn_view_layers.setEnabled(False)
         view_row.addWidget(self._btn_view_layers)
+        self._btn_view_vtk_paths = QtWidgets.QPushButton("三维路径预览")
+        self._btn_view_vtk_paths.setObjectName("btnViewVtkPaths")
+        self._btn_view_vtk_paths.setMinimumHeight(36)
+        self._btn_view_vtk_paths.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_view_vtk_paths.setEnabled(False)
+        view_row.addWidget(self._btn_view_vtk_paths)
         export_layout.addLayout(view_row)
 
         npz_dir_subtitle = QtWidgets.QLabel("选择已导出的NPZ文件")
@@ -1972,6 +1978,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self.export_finished.connect(self._on_export_finished)
         self.export_progress.connect(self._on_export_progress)
         self._btn_view_layers.clicked.connect(self._on_view_layers)
+        self._btn_view_vtk_paths.clicked.connect(self._on_view_vtk_paths)
         self._btn_select_npz_dir.clicked.connect(self._on_select_npz_dir)
         self._btn_clear_npz_dir.clicked.connect(self._on_clear_npz_dir)
 
@@ -4503,6 +4510,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 )
                 self._selected_npz_dir_input.setText(self._last_npz_dir)
                 self._btn_view_layers.setEnabled(True)
+                self._btn_view_vtk_paths.setEnabled(True)
         else:
             self._export_status.setText(f"导出失败: {message}")
             self._export_status.setStyleSheet("color: #b42318;")
@@ -4514,6 +4522,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         dlg = _LayerViewerDialog(self._last_npz_dir, self)
         dlg.exec_()
+
+    def _on_view_vtk_paths(self):
+        if not self._last_npz_dir or not os.path.isdir(self._last_npz_dir):
+            self._export_status.setText("未找到 NPZ 导出目录。")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+        try:
+            from my_project_ui.vtk_path_preview import VtkPathPreviewDialog
+
+            dlg = VtkPathPreviewDialog(self._last_npz_dir, self)
+            dlg.exec_()
+        except Exception as exc:
+            self._export_status.setText(f"三维路径预览启动失败: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
 
     def _npz_launch_relation_text(self):
         return (
@@ -4658,6 +4680,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._last_npz_dir = layer_dir
         self._selected_npz_dir_input.setText(npz_file)
         self._btn_view_layers.setEnabled(bool(layer_dir and os.path.isdir(layer_dir)))
+        self._btn_view_vtk_paths.setEnabled(bool(layer_dir and os.path.isdir(layer_dir)))
         self._export_status.setText(f"已选择 NPZ 文件: {npz_file}")
         self._export_status.setStyleSheet("color: #1b6e3c;")
 
@@ -4665,6 +4688,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         self._selected_npz_dir_input.clear()
+        self._btn_view_layers.setEnabled(False)
+        self._btn_view_vtk_paths.setEnabled(False)
         self._export_status.setText("已清除手动选择的 NPZ 文件；启动时将按 GCode 自动匹配。")
         self._export_status.setStyleSheet("color: #1a73e8;")
 

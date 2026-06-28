@@ -1,0 +1,476 @@
+from __future__ import annotations
+
+from pathlib import Path
+import threading
+
+try:
+    from python_qt_binding import QtCore, QtWidgets
+except ImportError:
+    try:
+        from PyQt5 import QtCore, QtWidgets
+    except ImportError:
+        from PySide6 import QtCore, QtWidgets
+
+from gcode_planner.path_preview import (
+    PathType,
+    PreviewPath,
+    extract_layer_preview_paths,
+    list_preview_layers,
+)
+
+
+_MAX_POINTS_PER_PATH = 1000
+
+_PATH_COLORS = {
+    PathType.FIBER_PRINT: (0.0, 0.75, 0.45),
+    PathType.RESIN_PRINT: (0.1, 0.35, 1.0),
+    PathType.TRAVEL: (0.55, 0.55, 0.55),
+    PathType.TOOL_CHANGE_EVENT: (1.0, 0.45, 0.05),
+    PathType.EVENT: (0.8, 0.8, 0.2),
+}
+
+
+_SIGNAL = getattr(QtCore, "pyqtSignal", None) or getattr(QtCore, "Signal")
+
+
+def _load_vtk_modules():
+    from vtkmodules.qt.QVTKRenderWindowInteractor import (
+        QVTKRenderWindowInteractor,
+    )
+    from vtkmodules.vtkCommonCore import vtkPoints
+    from vtkmodules.vtkCommonDataModel import (
+        vtkCellArray,
+        vtkPolyData,
+        vtkPolyLine,
+    )
+    from vtkmodules.vtkInteractionStyle import (
+        vtkInteractorStyleTrackballCamera,
+    )
+    from vtkmodules.vtkFiltersSources import vtkSphereSource
+    from vtkmodules.vtkRenderingCore import (
+        vtkActor,
+        vtkPolyDataMapper,
+        vtkRenderer,
+    )
+    import vtkmodules.vtkInteractionStyle  # noqa: F401
+    import vtkmodules.vtkRenderingOpenGL2  # noqa: F401
+
+    return {
+        "QVTKRenderWindowInteractor": QVTKRenderWindowInteractor,
+        "vtkActor": vtkActor,
+        "vtkCellArray": vtkCellArray,
+        "vtkPoints": vtkPoints,
+        "vtkPolyData": vtkPolyData,
+        "vtkPolyDataMapper": vtkPolyDataMapper,
+        "vtkPolyLine": vtkPolyLine,
+        "vtkSphereSource": vtkSphereSource,
+        "vtkInteractorStyleTrackballCamera": vtkInteractorStyleTrackballCamera,
+        "vtkRenderer": vtkRenderer,
+    }
+
+
+def _sample_points(points):
+    if len(points) <= _MAX_POINTS_PER_PATH:
+        return points
+    step = max(1, len(points) // _MAX_POINTS_PER_PATH)
+    sampled = points[::step]
+    if sampled[-1] != points[-1]:
+        sampled = sampled + (points[-1],)
+    return sampled
+
+
+class VtkPathPreviewDialog(QtWidgets.QDialog):
+    _layers_loaded = _SIGNAL(object, object)
+    _paths_loaded = _SIGNAL(int, object, object)
+
+    def __init__(self, npz_root: str, parent=None):
+        super().__init__(parent)
+        self._npz_root = Path(npz_root).expanduser()
+        self._layers = []
+        self._current_paths: list[PreviewPath] = []
+        self._loading_layer = None
+        self._vtk = None
+        self._renderer = None
+        self._vtk_widget = None
+        self._actors = []
+
+        self.setWindowTitle(f"VTK Path Preview - {self._npz_root.name}")
+        self.resize(1100, 760)
+        self._build_ui()
+        self._try_build_vtk_view()
+        self._layers_loaded.connect(self._on_layers_loaded)
+        self._paths_loaded.connect(self._on_paths_loaded)
+        QtCore.QTimer.singleShot(100, self._load_layers)
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(6)
+
+        top_row = QtWidgets.QHBoxLayout()
+        title = QtWidgets.QLabel(f"复合打印工艺路径 - {self._npz_root.name}")
+        title.setStyleSheet(
+            "font-size: 15px; font-weight: 700; color: #2b2b2b;"
+        )
+        btn_close = QtWidgets.QPushButton("关闭")
+        btn_close.setFixedWidth(56)
+        btn_close.clicked.connect(self.accept)
+        top_row.addWidget(title, 1)
+        top_row.addWidget(btn_close)
+        layout.addLayout(top_row)
+
+        filter_row = QtWidgets.QHBoxLayout()
+        self._show_fiber = QtWidgets.QCheckBox("纤维路径")
+        self._show_resin = QtWidgets.QCheckBox("树脂路径")
+        self._show_travel = QtWidgets.QCheckBox("空走路径")
+        self._show_tool_change = QtWidgets.QCheckBox("工具切换")
+        self._show_endpoints = QtWidgets.QCheckBox("起/终点")
+        default_enabled = {
+            self._show_fiber,
+            self._show_resin,
+        }
+        for checkbox in (
+            self._show_fiber,
+            self._show_resin,
+            self._show_travel,
+            self._show_tool_change,
+        ):
+            checkbox.setChecked(checkbox in default_enabled)
+            checkbox.stateChanged.connect(self._on_filter_changed)
+            filter_row.addWidget(checkbox)
+        self._show_endpoints.setChecked(False)
+        self._show_endpoints.stateChanged.connect(
+            lambda _state: self._update_scene()
+        )
+        filter_row.addWidget(self._show_endpoints)
+        filter_row.addStretch()
+        self._btn_top_view = QtWidgets.QPushButton("顶视")
+        self._btn_iso_view = QtWidgets.QPushButton("斜视")
+        self._btn_top_view.clicked.connect(self._set_top_view)
+        self._btn_iso_view.clicked.connect(self._set_iso_view)
+        filter_row.addWidget(self._btn_top_view)
+        filter_row.addWidget(self._btn_iso_view)
+        layout.addLayout(filter_row)
+
+        self._viewport = QtWidgets.QStackedWidget()
+        self._fallback_label = QtWidgets.QLabel("正在初始化三维视图...")
+        self._fallback_label.setAlignment(QtCore.Qt.AlignCenter)
+        self._fallback_label.setWordWrap(True)
+        self._fallback_label.setStyleSheet(
+            "color: #7a4b00; font-size: 14px;"
+        )
+        self._viewport.addWidget(self._fallback_label)
+        layout.addWidget(self._viewport, 1)
+
+        slider_grid = QtWidgets.QGridLayout()
+        self._layer_label = QtWidgets.QLabel("层: 正在扫描...")
+        self._layer_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._layer_slider.setMinimum(0)
+        self._layer_slider.valueChanged.connect(self._load_current_layer)
+        self._path_label = QtWidgets.QLabel("当前层路径: 等待加载")
+        self._path_slider = QtWidgets.QSlider(QtCore.Qt.Horizontal)
+        self._path_slider.setMinimum(0)
+        self._path_slider.valueChanged.connect(
+            lambda _value: self._update_scene()
+        )
+        slider_grid.addWidget(self._layer_label, 0, 0)
+        slider_grid.addWidget(self._layer_slider, 0, 1)
+        slider_grid.addWidget(self._path_label, 1, 0)
+        slider_grid.addWidget(self._path_slider, 1, 1)
+        layout.addLayout(slider_grid)
+
+        self._layer_slider.setEnabled(False)
+        self._path_slider.setEnabled(False)
+
+    def _try_build_vtk_view(self):
+        try:
+            self._vtk = _load_vtk_modules()
+        except Exception as exc:
+            self._fallback_label.setText(
+                "VTK 未安装或无法加载。\n"
+                "Linux 可安装 python3-vtk9；Windows 发布包需要内置 vtk 运行库。\n"
+                f"错误: {exc}"
+            )
+            self._viewport.setCurrentWidget(self._fallback_label)
+            return
+
+        self._vtk_widget = self._vtk["QVTKRenderWindowInteractor"](self)
+        self._renderer = self._vtk["vtkRenderer"]()
+        self._renderer.SetBackground(0.12, 0.12, 0.12)
+        self._vtk_widget.GetRenderWindow().AddRenderer(self._renderer)
+        interactor = self._vtk_widget.GetRenderWindow().GetInteractor()
+        if interactor is not None:
+            style = self._vtk["vtkInteractorStyleTrackballCamera"]()
+            interactor.SetInteractorStyle(style)
+        self._viewport.addWidget(self._vtk_widget)
+        self._viewport.setCurrentWidget(self._vtk_widget)
+        self._vtk_widget.Initialize()
+        self._vtk_widget.Start()
+
+    def _run_background(self, target):
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+
+    def _load_layers(self):
+        self._layer_label.setText("层: 正在扫描...")
+
+        def worker():
+            try:
+                layers = list_preview_layers(self._npz_root)
+                self._layers_loaded.emit(layers, None)
+            except Exception as exc:
+                self._layers_loaded.emit([], str(exc))
+
+        self._run_background(worker)
+
+    def _on_layers_loaded(self, layers, error):
+        if error:
+            self._layer_label.setText("层: 加载失败")
+            self._path_label.setText(f"当前层路径: {error}")
+            return
+
+        self._layers = list(layers)
+        if self._layers:
+            self._layer_slider.setEnabled(True)
+            self._layer_slider.setMaximum(len(self._layers) - 1)
+            self._path_slider.setEnabled(False)
+        else:
+            self._layer_slider.setEnabled(False)
+            self._path_slider.setEnabled(False)
+        self._load_current_layer()
+
+    def _load_current_layer(self):
+        if not self._layers:
+            self._current_paths = []
+            self._layer_label.setText("层: 0 / 0")
+            self._path_label.setText("当前层路径: 0 / 0")
+            self._update_scene()
+            return
+
+        layer = self._layers[self._layer_slider.value()]
+        self._loading_layer = layer
+        self._current_paths = []
+        self._path_slider.blockSignals(True)
+        self._path_slider.setMaximum(0)
+        self._path_slider.setValue(0)
+        self._path_slider.setEnabled(False)
+        self._path_slider.blockSignals(False)
+        self._layer_label.setText(
+            f"层: {layer} "
+            f"({self._layer_slider.value() + 1} / {len(self._layers)})"
+        )
+        self._path_label.setText("当前层路径: 正在加载...")
+        self._update_scene()
+
+        def worker():
+            try:
+                paths = extract_layer_preview_paths(
+                    self._npz_root,
+                    layer,
+                    max_paths=2000,
+                )
+                self._paths_loaded.emit(layer, paths, None)
+            except Exception as exc:
+                self._paths_loaded.emit(layer, [], str(exc))
+
+        self._run_background(worker)
+
+    def _on_paths_loaded(self, layer, paths, error):
+        if layer != self._loading_layer:
+            return
+        if error:
+            self._path_label.setText(f"当前层路径: {error}")
+            return
+
+        self._current_paths = list(paths)
+        self._path_slider.blockSignals(True)
+        visible_count = self._enabled_path_count()
+        self._path_slider.setMaximum(visible_count)
+        self._path_slider.setValue(visible_count)
+        self._path_slider.setEnabled(bool(visible_count))
+        self._path_slider.blockSignals(False)
+        self._update_scene(reset_camera=True)
+
+    def _enabled_types(self) -> set[PathType]:
+        enabled = set()
+        if self._show_fiber.isChecked():
+            enabled.add(PathType.FIBER_PRINT)
+        if self._show_resin.isChecked():
+            enabled.add(PathType.RESIN_PRINT)
+        if self._show_travel.isChecked():
+            enabled.add(PathType.TRAVEL)
+        if self._show_tool_change.isChecked():
+            enabled.add(PathType.TOOL_CHANGE_EVENT)
+            enabled.add(PathType.EVENT)
+        return enabled
+
+    def _filtered_paths(self) -> list[PreviewPath]:
+        enabled = self._enabled_types()
+        return [
+            path for path in self._current_paths
+            if path.path_type in enabled
+        ]
+
+    def _display_paths(self) -> list[PreviewPath]:
+        enabled_visible = self._filtered_paths()
+        return enabled_visible or list(self._current_paths)
+
+    def _visible_paths(self) -> list[PreviewPath]:
+        return self._display_paths()[: self._path_slider.value()]
+
+    def _enabled_path_count(self):
+        return len(self._display_paths())
+
+    def _filter_status_text(self):
+        if self._current_paths and not self._filtered_paths():
+            return "（当前过滤无路径，已显示全部类型）"
+        return ""
+
+    def _on_filter_changed(self):
+        visible_count = self._enabled_path_count()
+        self._path_slider.blockSignals(True)
+        self._path_slider.setMaximum(visible_count)
+        self._path_slider.setValue(visible_count)
+        self._path_slider.setEnabled(bool(visible_count))
+        self._path_slider.blockSignals(False)
+        self._update_scene()
+
+    def _update_scene(self, reset_camera=False):
+        visible = self._visible_paths()
+        self._path_label.setText(
+            f"当前层路径: {min(self._path_slider.value(), len(visible))} / "
+            f"{self._enabled_path_count()}"
+            f"{self._filter_status_text()}"
+        )
+        if self._renderer is None:
+            return
+
+        for actor in self._actors:
+            self._renderer.RemoveActor(actor)
+        self._actors = []
+
+        for actor in self._actors_for_paths(visible):
+            self._renderer.AddActor(actor)
+            self._actors.append(actor)
+
+        current_path = visible[-1] if visible else None
+        if self._show_endpoints.isChecked() and current_path is not None:
+            for actor in self._endpoint_actors_for_path(current_path, visible):
+                self._renderer.AddActor(actor)
+                self._actors.append(actor)
+
+        if reset_camera:
+            self._renderer.ResetCamera()
+        self._render()
+
+    def _actors_for_paths(self, paths: list[PreviewPath]):
+        grouped = {}
+        for path in paths:
+            grouped.setdefault(path.path_type, []).append(path)
+
+        actors = []
+        for path_type, grouped_paths in grouped.items():
+            actor = self._actor_for_paths(path_type, grouped_paths)
+            if actor is not None:
+                actors.append(actor)
+
+        return actors
+
+    def _actor_for_paths(self, path_type: PathType, paths: list[PreviewPath]):
+        vtk_points = self._vtk["vtkPoints"]()
+        cells = self._vtk["vtkCellArray"]()
+        point_index = 0
+
+        for path in paths:
+            points = _sample_points(path.points)
+            if not points:
+                continue
+            polyline = self._vtk["vtkPolyLine"]()
+            polyline.GetPointIds().SetNumberOfIds(len(points))
+            for local_index, point in enumerate(points):
+                vtk_points.InsertNextPoint(*point)
+                polyline.GetPointIds().SetId(local_index, point_index)
+                point_index += 1
+            cells.InsertNextCell(polyline)
+
+        if point_index == 0:
+            return None
+
+        poly_data = self._vtk["vtkPolyData"]()
+        poly_data.SetPoints(vtk_points)
+        poly_data.SetLines(cells)
+
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputData(poly_data)
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        color = _PATH_COLORS.get(path_type, (1.0, 1.0, 1.0))
+        actor.GetProperty().SetColor(*color)
+        actor.GetProperty().SetLineWidth(2.0)
+        if path_type == PathType.TRAVEL:
+            actor.GetProperty().SetOpacity(0.45)
+        return actor
+
+    def _endpoint_actors_for_path(
+        self,
+        path: PreviewPath,
+        visible_paths: list[PreviewPath],
+    ):
+        bounds_points = [
+            point for item in visible_paths for point in item.points
+        ]
+        radius = self._endpoint_radius(bounds_points)
+        return [
+            self._sphere_actor(path.start, radius, (0.0, 0.9, 0.25)),
+            self._sphere_actor(path.end, radius, (1.0, 0.15, 0.05)),
+        ]
+
+    def _endpoint_radius(self, points):
+        if not points:
+            return 1.0
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        zs = [point[2] for point in points]
+        dx = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        dz = max(zs) - min(zs)
+        diagonal = max((dx * dx + dy * dy + dz * dz) ** 0.5, 1.0)
+        return max(0.6, min(3.0, diagonal * 0.01))
+
+    def _sphere_actor(self, center, radius, color):
+        source = self._vtk["vtkSphereSource"]()
+        source.SetCenter(*center)
+        source.SetRadius(float(radius))
+        source.SetThetaResolution(16)
+        source.SetPhiResolution(16)
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputConnection(source.GetOutputPort())
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(*color)
+        actor.GetProperty().SetOpacity(1.0)
+        return actor
+
+    def _set_top_view(self):
+        if self._renderer is None:
+            return
+        camera = self._renderer.GetActiveCamera()
+        camera.SetPosition(0.0, 0.0, 1.0)
+        camera.SetFocalPoint(0.0, 0.0, 0.0)
+        camera.SetViewUp(0.0, 1.0, 0.0)
+        self._renderer.ResetCamera()
+        self._render()
+
+    def _set_iso_view(self):
+        if self._renderer is None:
+            return
+        camera = self._renderer.GetActiveCamera()
+        camera.SetPosition(1.0, -1.0, 0.7)
+        camera.SetFocalPoint(0.0, 0.0, 0.0)
+        camera.SetViewUp(0.0, 0.0, 1.0)
+        self._renderer.ResetCamera()
+        self._render()
+
+    def _render(self):
+        if self._vtk_widget is not None:
+            self._vtk_widget.GetRenderWindow().Render()
