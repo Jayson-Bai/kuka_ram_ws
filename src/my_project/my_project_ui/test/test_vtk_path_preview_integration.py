@@ -135,3 +135,158 @@ def test_vtk_path_preview_falls_back_when_enabled_filters_hide_layer():
     assert "enabled_visible = self._filtered_paths()" in src
     assert "return enabled_visible or list(self._current_paths)" in src
     assert "当前过滤无路径" in src
+
+
+def test_vtk_path_preview_adds_white_background_dimension_plane_and_axes():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "SetBackground(1.0, 1.0, 1.0)" in src
+    assert "def _base_plane_actors" in src
+    assert "def _dimension_label_actor" in src
+    assert "vtkArrowSource" in src
+    assert (
+        "from vtkmodules.vtkRenderingFreeType import vtkVectorText"
+        in src
+    )
+    filters_sources_import = src.split(
+        "from vtkmodules.vtkFiltersSources import", 1
+    )[1].split(")", 1)[0]
+    assert "vtkVectorText," not in filters_sources_import
+    assert '"X",' in src
+    assert "(0.9, 0.05, 0.05)," in src
+    assert '"Y",' in src
+    assert "(0.05, 0.55, 0.1)," in src
+    assert '"Z",' in src
+    assert "(0.1, 0.25, 0.95)," in src
+
+
+def test_vtk_base_plane_is_fixed_500mm_and_keeps_real_z_height():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    plane_block = src.split("    def _base_plane_actors", 1)[1].split(
+        "    def _path_bounds", 1
+    )[0]
+
+    assert "_FIXED_PLANE_SIZE_MM = 500.0" in src
+    assert "min_x = 0.0" in plane_block
+    assert "max_x = _FIXED_PLANE_SIZE_MM" in plane_block
+    assert "min_y = 0.0" in plane_block
+    assert "max_y = _FIXED_PLANE_SIZE_MM" in plane_block
+    assert "z = 0.0" in plane_block
+    assert "_path_bounds(paths)" not in plane_block
+    assert "min(0.0, min_z)" not in plane_block
+
+
+def test_vtk_preview_uses_material_coordinates_from_offset_sidecar():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "import json" in src
+    assert "def _read_preview_offsets" in src
+    assert "resin_z_print_compensation_mm" in src
+    assert "tool_offset" in src
+    assert "self._tool_offset_xyz" in src
+    assert "self._preview_z_origin" in src
+    assert "def _display_point_for_path" in src
+    assert "if int(path.tool_id) == 1:" in src
+    assert "x -= self._tool_offset_xyz[0]" in src
+    assert "y -= self._tool_offset_xyz[1]" in src
+    assert "z -= self._tool_offset_xyz[2]" in src
+    assert "z -= self._preview_z_origin" in src
+
+
+def test_vtk_preview_renders_paths_events_and_nozzle_with_display_points():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "self._display_point_for_path(path, point)" in src
+    assert "self._display_point_for_path(path, path.end)" in src
+    assert "display_end = self._display_point_for_path(" in src
+    assert "current_path.end, current_path.end_abc" not in src
+
+
+def test_vtk_path_preview_renders_tool_change_markers_and_moving_nozzle():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "def _event_marker_actors" in src
+    assert "PathType.TOOL_CHANGE_EVENT" in src
+    assert "def _nozzle_actor_for_path" in src
+    assert "def _apply_xyzabc_transform" in src
+    assert "current_path.end_abc" in src
+    assert "vtkCylinderSource" in src
+    assert "vtkConeSource" not in src
+
+
+def test_vtk_nozzle_uses_slender_cylinder_and_hemisphere_at_path_tangent():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    nozzle_block = src.split("    def _nozzle_actor_for_path", 1)[1].split(
+        "    def _apply_xyzabc_transform", 1
+    )[0]
+
+    assert "body_radius = radius * 0.45" in nozzle_block
+    assert "body_height = radius * 7.0" in nozzle_block
+    assert "body_transform.PostMultiply()" in nozzle_block
+    assert "vtkSphereSource" in nozzle_block
+    assert "hemisphere.SetStartPhi(90.0)" in nozzle_block
+    assert "hemisphere.SetEndPhi(180.0)" in nozzle_block
+    assert "hemisphere_transform.Translate(0.0, 0.0, radius)" in nozzle_block
+    assert (
+        "body_transform.Translate(0.0, 0.0, radius + body_height / 2.0)"
+        in nozzle_block
+    )
+    assert "self._nozzle_color_for_path(current_path)" in nozzle_block
+
+
+def test_vtk_axes_are_translucent_and_labels_stay_near_axis_tips():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "axis_len * 1.04" in src
+    assert "actor.GetProperty().SetOpacity(0.42)" in src
+    assert "actor.GetProperty().SetOpacity(0.68)" in src
+
+
+def test_vtk_nozzle_color_follows_current_print_tool():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "def _nozzle_color_for_path" in src
+    assert "PathType.FIBER_PRINT" in src
+    assert "PathType.RESIN_PRINT" in src
+    assert "path.tool_id == 1" in src
+    assert "path.tool_id == 2" in src
+    assert "_PATH_COLORS[PathType.FIBER_PRINT]" in src
+    assert "_PATH_COLORS[PathType.RESIN_PRINT]" in src
+
+
+def test_vtk_abc_zero_keeps_nozzle_tip_on_path_with_body_above_it():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    transform_block = src.split("    def _apply_xyzabc_transform", 1)[1].split(
+        "    def _endpoint_actors_for_path", 1
+    )[0]
+
+    assert "# ABC=0 keeps the local tangent point at xyz" in transform_block
+    assert "transform.Translate(*xyz)" in transform_block
+    assert "transform.RotateZ(float(abc[0]))" in transform_block
+    assert "transform.RotateY(float(abc[1]))" in transform_block
+    assert "transform.RotateX(float(abc[2]))" in transform_block
+
+
+def test_vtk_print_paths_use_real_world_bead_width_and_layer_height():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "_BEAD_DIMENSIONS_MM" in src
+    assert "PathType.FIBER_PRINT: (1.0, 0.1)" in src
+    assert "PathType.RESIN_PRINT: (2.0, 0.5)" in src
+    assert "if path_type in _BEAD_DIMENSIONS_MM:" in src
+    assert "return self._bead_actor_for_paths(path_type, paths)" in src
+
+
+def test_vtk_bead_mesh_uses_material_coordinates_and_physical_z_thickness():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    bead_block = src.split("    def _bead_actor_for_paths", 1)[1].split(
+        "    def _line_actor_for_paths", 1
+    )[0]
+
+    assert "width, height = _BEAD_DIMENSIONS_MM[path_type]" in bead_block
+    assert "half_width = width / 2.0" in bead_block
+    assert "path_top_z = max(point[2] for point in points)" in bead_block
+    assert "top_z = path_top_z" in bead_block
+    assert "bottom_z = top_z - height" in bead_block
+    assert "self._display_point_for_path(path, point)" in bead_block
+    assert "poly_data.SetPolys(cells)" in bead_block

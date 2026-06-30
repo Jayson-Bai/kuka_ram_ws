@@ -12,6 +12,18 @@ def _write_npz(path: Path, **arrays):
         x=np.array(arrays["x"], dtype=np.float32),
         y=np.array(arrays["y"], dtype=np.float32),
         z=np.array(arrays["z"], dtype=np.float32),
+        a=np.array(
+            arrays.get("a", [0.0] * len(arrays["x"])),
+            dtype=np.float32,
+        ),
+        b=np.array(
+            arrays.get("b", [0.0] * len(arrays["x"])),
+            dtype=np.float32,
+        ),
+        c=np.array(
+            arrays.get("c", [0.0] * len(arrays["x"])),
+            dtype=np.float32,
+        ),
         e=np.array(arrays["e"], dtype=np.float32),
         tool_id=np.array(arrays["tool_id"], dtype=np.uint8),
         move_type=np.array(arrays["move_type"], dtype=np.uint8),
@@ -124,6 +136,36 @@ def test_extract_preview_paths_uses_split_layer_directory(tmp_path):
     assert paths[0].path_type == PathType.FIBER_PRINT
     assert paths[0].start == pytest.approx((10.0, 0.0, 0.4))
     assert paths[0].end == pytest.approx((11.0, 0.0, 0.4))
+
+
+def test_extract_preview_paths_preserves_xyzabc_pose_for_tool_preview(
+    tmp_path,
+):
+    from gcode_planner.path_preview import extract_layer_preview_paths
+
+    root = tmp_path / "job"
+    _write_npz(
+        root / "job.npz",
+        x=[0, 1, 2],
+        y=[0, 0, 1],
+        z=[0.2, 0.3, 0.4],
+        a=[10.0, 20.0, 30.0],
+        b=[1.0, 2.0, 3.0],
+        c=[-5.0, -6.0, -7.0],
+        e=[0.0, 0.2, 0.4],
+        tool_id=[2, 2, 2],
+        move_type=[1, 1, 1],
+        src_line=["1", "2", "3"],
+        layer_index=[0, 0, 0],
+    )
+
+    paths = extract_layer_preview_paths(root, 0)
+
+    assert paths[0].poses[0] == pytest.approx(
+        (0.0, 0.0, 0.2, 10.0, 1.0, -5.0)
+    )
+    assert paths[0].start_abc == pytest.approx((10.0, 1.0, -5.0))
+    assert paths[0].end_abc == pytest.approx((30.0, 3.0, -7.0))
 
 
 def test_extract_preview_paths_supports_legacy_split_npz_without_layer_index(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
+import math
 import threading
 
 try:
@@ -20,6 +22,12 @@ from gcode_planner.path_preview import (
 
 
 _MAX_POINTS_PER_PATH = 1000
+_FIXED_PLANE_SIZE_MM = 500.0
+_FIXED_PLANE_GRID_STEP_MM = 50.0
+_BEAD_DIMENSIONS_MM = {
+    PathType.FIBER_PRINT: (1.0, 0.1),
+    PathType.RESIN_PRINT: (2.0, 0.5),
+}
 
 _PATH_COLORS = {
     PathType.FIBER_PRINT: (0.0, 0.75, 0.45),
@@ -46,24 +54,40 @@ def _load_vtk_modules():
     from vtkmodules.vtkInteractionStyle import (
         vtkInteractorStyleTrackballCamera,
     )
-    from vtkmodules.vtkFiltersSources import vtkSphereSource
+    from vtkmodules.vtkFiltersCore import vtkAppendPolyData
+    from vtkmodules.vtkFiltersSources import (
+        vtkArrowSource,
+        vtkCylinderSource,
+        vtkSphereSource,
+    )
+    from vtkmodules.vtkRenderingFreeType import vtkVectorText
     from vtkmodules.vtkRenderingCore import (
         vtkActor,
+        vtkFollower,
         vtkPolyDataMapper,
         vtkRenderer,
     )
+    from vtkmodules.vtkCommonTransforms import vtkTransform
+    from vtkmodules.vtkFiltersGeneral import vtkTransformPolyDataFilter
     import vtkmodules.vtkInteractionStyle  # noqa: F401
     import vtkmodules.vtkRenderingOpenGL2  # noqa: F401
 
     return {
         "QVTKRenderWindowInteractor": QVTKRenderWindowInteractor,
         "vtkActor": vtkActor,
+        "vtkAppendPolyData": vtkAppendPolyData,
+        "vtkArrowSource": vtkArrowSource,
         "vtkCellArray": vtkCellArray,
+        "vtkCylinderSource": vtkCylinderSource,
         "vtkPoints": vtkPoints,
         "vtkPolyData": vtkPolyData,
         "vtkPolyDataMapper": vtkPolyDataMapper,
+        "vtkFollower": vtkFollower,
         "vtkPolyLine": vtkPolyLine,
         "vtkSphereSource": vtkSphereSource,
+        "vtkTransform": vtkTransform,
+        "vtkTransformPolyDataFilter": vtkTransformPolyDataFilter,
+        "vtkVectorText": vtkVectorText,
         "vtkInteractorStyleTrackballCamera": vtkInteractorStyleTrackballCamera,
         "vtkRenderer": vtkRenderer,
     }
@@ -86,6 +110,9 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
     def __init__(self, npz_root: str, parent=None):
         super().__init__(parent)
         self._npz_root = Path(npz_root).expanduser()
+        self._tool_offset_xyz, self._preview_z_origin = (
+            self._read_preview_offsets()
+        )
         self._layers = []
         self._current_paths: list[PreviewPath] = []
         self._loading_layer = None
@@ -196,7 +223,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
 
         self._vtk_widget = self._vtk["QVTKRenderWindowInteractor"](self)
         self._renderer = self._vtk["vtkRenderer"]()
-        self._renderer.SetBackground(0.12, 0.12, 0.12)
+        self._renderer.SetBackground(1.0, 1.0, 1.0)
         self._vtk_widget.GetRenderWindow().AddRenderer(self._renderer)
         interactor = self._vtk_widget.GetRenderWindow().GetInteractor()
         if interactor is not None:
@@ -206,6 +233,37 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._viewport.setCurrentWidget(self._vtk_widget)
         self._vtk_widget.Initialize()
         self._vtk_widget.Start()
+
+    def _read_preview_offsets(self):
+        for path in self._offset_sidecar_candidates():
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                offset = data.get("tool_offset", (0.0, 0.0, 0.0))
+                if len(offset) != 3:
+                    offset = (0.0, 0.0, 0.0)
+                preview_z_origin = float(
+                    data.get("resin_z_print_compensation_mm", 0.0)
+                )
+                return tuple(float(v) for v in offset), preview_z_origin
+            except Exception:
+                continue
+        return (0.0, 0.0, 0.0), 0.0
+
+    def _offset_sidecar_candidates(self):
+        root = self._npz_root
+        candidates = []
+        if root.is_file():
+            candidates.append(root.with_suffix(".offset.json"))
+        else:
+            candidates.append(root / f"{root.name}.offset.json")
+            candidates.extend(sorted(root.glob("*.offset.json")))
+        seen = set()
+        for path in candidates:
+            if path in seen:
+                continue
+            seen.add(path)
+            yield path
 
     def _run_background(self, target):
         thread = threading.Thread(target=target, daemon=True)
@@ -349,11 +407,19 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             self._renderer.RemoveActor(actor)
         self._actors = []
 
+        for actor in self._base_plane_actors(self._current_paths or visible):
+            self._renderer.AddActor(actor)
+            self._actors.append(actor)
+
         for actor in self._actors_for_paths(visible):
             self._renderer.AddActor(actor)
             self._actors.append(actor)
 
         current_path = visible[-1] if visible else None
+        if current_path is not None:
+            actor = self._nozzle_actor_for_path(current_path, visible)
+            self._renderer.AddActor(actor)
+            self._actors.append(actor)
         if self._show_endpoints.isChecked() and current_path is not None:
             for actor in self._endpoint_actors_for_path(current_path, visible):
                 self._renderer.AddActor(actor)
@@ -370,6 +436,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
 
         actors = []
         for path_type, grouped_paths in grouped.items():
+            if path_type in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT):
+                actors.extend(
+                    self._event_marker_actors(path_type, grouped_paths)
+                )
+                continue
             actor = self._actor_for_paths(path_type, grouped_paths)
             if actor is not None:
                 actors.append(actor)
@@ -377,6 +448,95 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         return actors
 
     def _actor_for_paths(self, path_type: PathType, paths: list[PreviewPath]):
+        if path_type in _BEAD_DIMENSIONS_MM:
+            return self._bead_actor_for_paths(path_type, paths)
+        return self._line_actor_for_paths(path_type, paths)
+
+    def _bead_actor_for_paths(
+        self,
+        path_type: PathType,
+        paths: list[PreviewPath],
+    ):
+        width, height = _BEAD_DIMENSIONS_MM[path_type]
+        half_width = width / 2.0
+        vtk_points = self._vtk["vtkPoints"]()
+        cells = self._vtk["vtkCellArray"]()
+        point_index = 0
+
+        def add_quad(indices):
+            cells.InsertNextCell(4)
+            for index in indices:
+                cells.InsertCellPoint(index)
+
+        def bead_corners(point, normal, path_top_z):
+            top_z = path_top_z
+            bottom_z = top_z - height
+            nx, ny = normal
+            left_x = point[0] + nx * half_width
+            left_y = point[1] + ny * half_width
+            right_x = point[0] - nx * half_width
+            right_y = point[1] - ny * half_width
+            return (
+                (left_x, left_y, top_z),
+                (right_x, right_y, top_z),
+                (left_x, left_y, bottom_z),
+                (right_x, right_y, bottom_z),
+            )
+
+        for path in paths:
+            points = [
+                self._display_point_for_path(path, point)
+                for point in _sample_points(path.points)
+            ]
+            if len(points) < 2:
+                continue
+            path_top_z = max(point[2] for point in points)
+            for start, end in zip(points, points[1:]):
+                dx = end[0] - start[0]
+                dy = end[1] - start[1]
+                length_xy = math.hypot(dx, dy)
+                if length_xy <= 1e-9:
+                    continue
+                normal = (-dy / length_xy, dx / length_xy)
+                corners = (
+                    bead_corners(start, normal, path_top_z)
+                    + bead_corners(end, normal, path_top_z)
+                )
+                indices = list(
+                    range(point_index, point_index + len(corners))
+                )
+                for corner in corners:
+                    vtk_points.InsertNextPoint(*corner)
+                point_index += len(corners)
+
+                add_quad((indices[0], indices[4], indices[5], indices[1]))
+                add_quad((indices[2], indices[3], indices[7], indices[6]))
+                add_quad((indices[0], indices[2], indices[6], indices[4]))
+                add_quad((indices[1], indices[5], indices[7], indices[3]))
+                add_quad((indices[0], indices[1], indices[3], indices[2]))
+                add_quad((indices[4], indices[6], indices[7], indices[5]))
+
+        if point_index == 0:
+            return None
+
+        poly_data = self._vtk["vtkPolyData"]()
+        poly_data.SetPoints(vtk_points)
+        poly_data.SetPolys(cells)
+
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputData(poly_data)
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        color = _PATH_COLORS.get(path_type, (1.0, 1.0, 1.0))
+        actor.GetProperty().SetColor(*color)
+        actor.GetProperty().SetOpacity(0.82)
+        return actor
+
+    def _line_actor_for_paths(
+        self,
+        path_type: PathType,
+        paths: list[PreviewPath],
+    ):
         vtk_points = self._vtk["vtkPoints"]()
         cells = self._vtk["vtkCellArray"]()
         point_index = 0
@@ -388,7 +548,9 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             polyline = self._vtk["vtkPolyLine"]()
             polyline.GetPointIds().SetNumberOfIds(len(points))
             for local_index, point in enumerate(points):
-                vtk_points.InsertNextPoint(*point)
+                vtk_points.InsertNextPoint(
+                    *self._display_point_for_path(path, point)
+                )
                 polyline.GetPointIds().SetId(local_index, point_index)
                 point_index += 1
             cells.InsertNextCell(polyline)
@@ -411,18 +573,274 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             actor.GetProperty().SetOpacity(0.45)
         return actor
 
+    def _base_plane_actors(self, paths: list[PreviewPath]):
+        del paths
+        min_x = 0.0
+        max_x = _FIXED_PLANE_SIZE_MM
+        min_y = 0.0
+        max_y = _FIXED_PLANE_SIZE_MM
+        z = 0.0
+        step = _FIXED_PLANE_GRID_STEP_MM
+
+        actors = [self._grid_actor(min_x, max_x, min_y, max_y, z, step)]
+        axis_len = _FIXED_PLANE_SIZE_MM * 0.18
+        for axis, color, direction, label_position in (
+            (
+                "X",
+                (0.9, 0.05, 0.05),
+                (axis_len, 0.0, 0.0),
+                (axis_len * 1.04, 0.0, z),
+            ),
+            (
+                "Y",
+                (0.05, 0.55, 0.1),
+                (0.0, axis_len, 0.0),
+                (0.0, axis_len * 1.04, z),
+            ),
+            (
+                "Z",
+                (0.1, 0.25, 0.95),
+                (0.0, 0.0, axis_len),
+                (0.0, 0.0, z + axis_len * 1.04),
+            ),
+        ):
+            actors.append(
+                self._axis_arrow_actor((0.0, 0.0, z), direction, color)
+            )
+            actors.append(
+                self._dimension_label_actor(
+                    axis, label_position, color, step * 0.18
+                )
+            )
+        actors.append(
+            self._dimension_label_actor(
+                f"{_FIXED_PLANE_SIZE_MM:.0f} x {_FIXED_PLANE_SIZE_MM:.0f} mm",
+                (min_x, max_y, z),
+                (0.2, 0.2, 0.2),
+                step * 0.18,
+            )
+        )
+        return actors
+
+    def _path_bounds(self, paths: list[PreviewPath]):
+        points = [point for path in paths for point in path.points]
+        if not points:
+            return -50.0, 50.0, -50.0, 50.0, 0.0, 50.0
+        xs = [point[0] for point in points]
+        ys = [point[1] for point in points]
+        zs = [point[2] for point in points]
+        return min(xs), max(xs), min(ys), max(ys), min(zs), max(zs)
+
+    def _grid_step(self, span):
+        raw = max(float(span) / 8.0, 1.0)
+        magnitude = 10 ** math.floor(math.log10(raw))
+        normalized = raw / magnitude
+        if normalized <= 2.0:
+            return 2.0 * magnitude
+        if normalized <= 5.0:
+            return 5.0 * magnitude
+        return 10.0 * magnitude
+
+    def _grid_actor(self, min_x, max_x, min_y, max_y, z, step):
+        vtk_points = self._vtk["vtkPoints"]()
+        cells = self._vtk["vtkCellArray"]()
+        idx = 0
+
+        def add_line(start, end):
+            nonlocal idx
+            line = self._vtk["vtkPolyLine"]()
+            line.GetPointIds().SetNumberOfIds(2)
+            vtk_points.InsertNextPoint(*start)
+            vtk_points.InsertNextPoint(*end)
+            line.GetPointIds().SetId(0, idx)
+            line.GetPointIds().SetId(1, idx + 1)
+            idx += 2
+            cells.InsertNextCell(line)
+
+        x0 = math.floor(min_x / step) * step
+        while x0 <= max_x + 1e-6:
+            add_line((x0, min_y, z), (x0, max_y, z))
+            x0 += step
+        y0 = math.floor(min_y / step) * step
+        while y0 <= max_y + 1e-6:
+            add_line((min_x, y0, z), (max_x, y0, z))
+            y0 += step
+
+        poly_data = self._vtk["vtkPolyData"]()
+        poly_data.SetPoints(vtk_points)
+        poly_data.SetLines(cells)
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputData(poly_data)
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(0.82, 0.84, 0.86)
+        actor.GetProperty().SetLineWidth(1.0)
+        return actor
+
+    def _axis_arrow_actor(self, origin, direction, color):
+        source = self._vtk["vtkArrowSource"]()
+        source.SetShaftRadius(0.025)
+        source.SetTipRadius(0.08)
+        source.SetTipLength(0.25)
+        length = max(
+            (direction[0] ** 2 + direction[1] ** 2 + direction[2] ** 2) ** 0.5,
+            1.0,
+        )
+        transform = self._vtk["vtkTransform"]()
+        transform.Translate(*origin)
+        if abs(direction[1]) > 1e-9:
+            transform.RotateZ(90.0)
+        elif abs(direction[2]) > 1e-9:
+            transform.RotateY(-90.0)
+        transform.Scale(length, length, length)
+        filt = self._vtk["vtkTransformPolyDataFilter"]()
+        filt.SetInputConnection(source.GetOutputPort())
+        filt.SetTransform(transform)
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputConnection(filt.GetOutputPort())
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(*color)
+        actor.GetProperty().SetOpacity(0.42)
+        return actor
+
+    def _dimension_label_actor(self, text, position, color, scale):
+        source = self._vtk["vtkVectorText"]()
+        source.SetText(str(text))
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputConnection(source.GetOutputPort())
+        actor = self._vtk["vtkFollower"]()
+        actor.SetMapper(mapper)
+        actor.SetScale(scale, scale, scale)
+        actor.SetPosition(*position)
+        actor.GetProperty().SetColor(*color)
+        actor.GetProperty().SetOpacity(0.68)
+        if self._renderer is not None:
+            actor.SetCamera(self._renderer.GetActiveCamera())
+        return actor
+
+    def _event_marker_actors(
+        self,
+        path_type: PathType,
+        paths: list[PreviewPath],
+    ):
+        color = _PATH_COLORS.get(path_type, (1.0, 0.45, 0.05))
+        all_points = [
+            point for path in self._current_paths for point in path.points
+        ]
+        radius = self._endpoint_radius(all_points) * 1.5
+        return [
+            self._sphere_actor(
+                self._display_point_for_path(path, path.end), radius, color
+            )
+            for path in paths
+        ]
+
+    def _nozzle_actor_for_path(
+        self,
+        current_path: PreviewPath,
+        visible_paths: list[PreviewPath],
+    ):
+        all_points = [
+            self._display_point_for_path(path, point)
+            for path in (visible_paths or [current_path])
+            for point in path.points
+        ]
+        radius = self._endpoint_radius(all_points)
+        body_radius = radius * 0.45
+        body_height = radius * 7.0
+        body = self._vtk["vtkCylinderSource"]()
+        body.SetRadius(body_radius)
+        body.SetHeight(body_height)
+        body.SetResolution(24)
+        hemisphere = self._vtk["vtkSphereSource"]()
+        hemisphere.SetRadius(radius)
+        hemisphere.SetThetaResolution(24)
+        hemisphere.SetPhiResolution(12)
+        hemisphere.SetStartPhi(90.0)
+        hemisphere.SetEndPhi(180.0)
+
+        body_transform = self._vtk["vtkTransform"]()
+        body_transform.PostMultiply()
+        body_transform.RotateX(90.0)
+        body_transform.Translate(0.0, 0.0, radius + body_height / 2.0)
+        hemisphere_transform = self._vtk["vtkTransform"]()
+        hemisphere_transform.Translate(0.0, 0.0, radius)
+        append = self._vtk["vtkAppendPolyData"]()
+        for source, transform in (
+            (body, body_transform),
+            (hemisphere, hemisphere_transform),
+        ):
+            filt = self._vtk["vtkTransformPolyDataFilter"]()
+            filt.SetInputConnection(source.GetOutputPort())
+            filt.SetTransform(transform)
+            append.AddInputConnection(filt.GetOutputPort())
+
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputConnection(append.GetOutputPort())
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(
+            *self._nozzle_color_for_path(current_path)
+        )
+        actor.GetProperty().SetOpacity(0.92)
+        display_end = self._display_point_for_path(
+            current_path, current_path.end
+        )
+        self._apply_xyzabc_transform(
+            actor, display_end, current_path.end_abc
+        )
+        return actor
+
+    def _display_point_for_path(self, path: PreviewPath, point):
+        x, y, z = point
+        if int(path.tool_id) == 1:
+            x -= self._tool_offset_xyz[0]
+            y -= self._tool_offset_xyz[1]
+            z -= self._tool_offset_xyz[2]
+        z -= self._preview_z_origin
+        return x, y, z
+
+    def _nozzle_color_for_path(self, path: PreviewPath):
+        if path.path_type == PathType.FIBER_PRINT or path.tool_id == 1:
+            return _PATH_COLORS[PathType.FIBER_PRINT]
+        if path.path_type == PathType.RESIN_PRINT or path.tool_id == 2:
+            return _PATH_COLORS[PathType.RESIN_PRINT]
+        return _PATH_COLORS.get(path.path_type, (0.12, 0.12, 0.12))
+
+    def _apply_xyzabc_transform(self, actor, xyz, abc):
+        # ABC=0 keeps the local tangent point at xyz; the nozzle body extends
+        # upward from that point, so its rounded bottom touches the path.
+        transform = self._vtk["vtkTransform"]()
+        transform.PostMultiply()
+        transform.RotateZ(float(abc[0]))
+        transform.RotateY(float(abc[1]))
+        transform.RotateX(float(abc[2]))
+        transform.Translate(*xyz)
+        actor.SetUserTransform(transform)
+
     def _endpoint_actors_for_path(
         self,
         path: PreviewPath,
         visible_paths: list[PreviewPath],
     ):
         bounds_points = [
-            point for item in visible_paths for point in item.points
+            self._display_point_for_path(item, point)
+            for item in visible_paths
+            for point in item.points
         ]
         radius = self._endpoint_radius(bounds_points)
         return [
-            self._sphere_actor(path.start, radius, (0.0, 0.9, 0.25)),
-            self._sphere_actor(path.end, radius, (1.0, 0.15, 0.05)),
+            self._sphere_actor(
+                self._display_point_for_path(path, path.start),
+                radius,
+                (0.0, 0.9, 0.25),
+            ),
+            self._sphere_actor(
+                self._display_point_for_path(path, path.end),
+                radius,
+                (1.0, 0.15, 0.05),
+            ),
         ]
 
     def _endpoint_radius(self, points):

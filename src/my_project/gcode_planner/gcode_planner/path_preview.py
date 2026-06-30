@@ -18,6 +18,7 @@ class PathType(str, Enum):
 
 
 Point3 = tuple[float, float, float]
+Pose6 = tuple[float, float, float, float, float, float]
 
 
 @dataclass
@@ -27,8 +28,11 @@ class PreviewPath:
     path_type: PathType
     tool_id: int
     points: tuple[Point3, ...]
+    poses: tuple[Pose6, ...]
     start: Point3
     end: Point3
+    start_abc: Point3
+    end_abc: Point3
     src_line_start: str
     src_line_end: str
     event_type: str = ""
@@ -308,6 +312,9 @@ def _rows_from_npz(
             x_arr = data["x"]
             y_arr = data["y"]
             z_arr = data["z"]
+            a_arr = data["a"] if "a" in data.files else np.zeros(count)
+            b_arr = data["b"] if "b" in data.files else np.zeros(count)
+            c_arr = data["c"] if "c" in data.files else np.zeros(count)
             e_arr = data["e"] if "e" in data.files else np.zeros(count)
             tool_id_arr = data["tool_id"]
             move_type_arr = data["move_type"]
@@ -348,6 +355,9 @@ def _rows_from_npz(
             x_arr = np.asarray(x_arr)
             y_arr = np.asarray(y_arr)
             z_arr = np.asarray(z_arr)
+            a_arr = np.asarray(a_arr)
+            b_arr = np.asarray(b_arr)
+            c_arr = np.asarray(c_arr)
             e_arr = np.asarray(e_arr)
             tool_id_arr = np.asarray(tool_id_arr)
             move_type_arr = np.asarray(move_type_arr)
@@ -367,6 +377,9 @@ def _rows_from_npz(
                         "x": float(x_arr[idx]),
                         "y": float(y_arr[idx]),
                         "z": float(z_arr[idx]),
+                        "a": float(a_arr[idx]),
+                        "b": float(b_arr[idx]),
+                        "c": float(c_arr[idx]),
                         "e": float(e_arr[idx]),
                         "tool_id": int(tool_id_arr[idx]),
                         "move_type": move_vocab.get(
@@ -404,6 +417,7 @@ def _extract_paths_from_rows(
             return
         path_type, tool_id, event_type = current_key
         points = tuple((_point(row)) for row in current_rows)
+        poses = tuple((_pose(row)) for row in current_rows)
         if _is_degenerate_print_path(path_type, points):
             current_key = None
             current_rows = []
@@ -419,8 +433,11 @@ def _extract_paths_from_rows(
                 path_type=path_type,
                 tool_id=tool_id,
                 points=points,
+                poses=poses,
                 start=points[0],
                 end=points[-1],
+                start_abc=poses[0][3:6],
+                end_abc=poses[-1][3:6],
                 src_line_start=current_rows[0]["src_line"],
                 src_line_end=current_rows[-1]["src_line"],
                 event_type=event_type,
@@ -499,6 +516,17 @@ def _is_degenerate_print_path(path_type: PathType, points: tuple[Point3, ...]):
 
 def _point(row: dict) -> Point3:
     return (row["x"], row["y"], row["z"])
+
+
+def _pose(row: dict) -> Pose6:
+    return (
+        float(row["x"]),
+        float(row["y"]),
+        float(row["z"]),
+        float(row.get("a", 0.0)),
+        float(row.get("b", 0.0)),
+        float(row.get("c", 0.0)),
+    )
 
 
 def _vocab(data, prefix: str) -> dict[int, str]:
