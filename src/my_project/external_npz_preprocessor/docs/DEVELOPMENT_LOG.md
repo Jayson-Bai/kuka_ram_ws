@@ -1,0 +1,41 @@
+# Development Log
+
+## 2026-06-29 Initial Framework
+
+- Created `external_npz_preprocessor` as a standalone `ament_python` package under `src/my_project`.
+- Added source NPZ loading, process parameters, conversion to `gcode_planner.types`, CLI, Qt UI, and tests.
+- Kept system NPZ writing centralized through `gcode_planner.npz_exporter.export_npz()`.
+
+## 2026-06-29 Parameter Defaults and Persistence
+
+- Added source/output path selectors and default output path handling under `data/output_npz`.
+- Added resin/fiber process parameters, prime/retract defaults from test mode, and JSON persistence under `data/external_npz_preprocessor/print_params.json`.
+- Removed resin pump-volume-to-E ratio and fiber direct `E/mm`; resin uses extrusion scale and fiber feed is path-length matched by default.
+- Fixed resin line width in code at `2.0 mm`; it is not user configurable.
+
+## 2026-06-29 Shared Head Offset Integration
+
+- External NPZ conversion reads the same head-offset data source as test mode and formal print: `data/head_calibration_offsets/head_offsets.json`.
+- Conversion passes `tool_offset=(fiber_x, fiber_y, fiber_z)` and `resin_z_print_compensation_mm` into `npz_exporter.export_npz()`.
+- UI displays the offset source and values used by conversion.
+
+## 2026-06-29 Template and Output Defaults
+
+- Added a generated two-layer external source NPZ template.
+- Added default source template directory under `data/external_npz_preprocessor/source_npz_templates`.
+- Empty output path resolves to `data/output_npz/<source_stem>/<source_stem>.npz`, matching the formal-print named-output convention.
+
+## 2026-06-30 Required Source Z
+
+- Finalized the source NPZ contract as Z-bearing paths only: Nx3 `[x, y, z]` or Nx6 `[x, y, z, a, b, c]`.
+- Removed preprocessor-generated Z and the `忽略纤维高度累计` UI/CLI parameter.
+- Re-scoped resin/fiber layer-height UI values as process/extrusion references, not trajectory-height generators.
+- Updated the generated template to numeric XYZ arrays so it remains readable with `allow_pickle=False`.
+
+Verification:
+
+```bash
+python3 -m pytest src/my_project/external_npz_preprocessor/test -q
+python3 -m py_compile src/my_project/external_npz_preprocessor/external_npz_preprocessor/*.py
+colcon build --packages-select external_npz_preprocessor
+```
