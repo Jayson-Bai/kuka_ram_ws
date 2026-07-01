@@ -79,6 +79,8 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.default_a = self._spin(0.0, minimum=-360.0, maximum=360.0)
         self.default_b = self._spin(0.0, minimum=-360.0, maximum=360.0)
         self.default_c = self._spin(0.0, minimum=-360.0, maximum=360.0)
+        self.start_x = self._spin(0.0, minimum=-100000.0, maximum=100000.0)
+        self.start_y = self._spin(0.0, minimum=-100000.0, maximum=100000.0)
         fixed_resin_width = QtWidgets.QLabel(f"固定树脂线宽: {RESIN_FIXED_BEAD_WIDTH_MM:.1f} mm")
         params_layout.addWidget(fixed_resin_width, 0, 0, 1, 4)
         rows = [
@@ -92,6 +94,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             ("树脂回抽速度 mm/s", self.resin_retract_speed, "纤维回抽速度 mm/s", self.fiber_retract_speed),
             ("树脂风扇", self.resin_fan, "纤维风扇", self.fiber_fan),
             ("空走速度 mm/s", self.travel_feed, "默认 A", self.default_a),
+            ("起点 X mm", self.start_x, "起点 Y mm", self.start_y),
             ("", QtWidgets.QLabel(""), "默认 B", self.default_b),
             ("", QtWidgets.QLabel(""), "默认 C", self.default_c),
         ]
@@ -216,6 +219,8 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.default_a.setValue(params.default_a)
         self.default_b.setValue(params.default_b)
         self.default_c.setValue(params.default_c)
+        self.start_x.setValue(params.start_x_mm)
+        self.start_y.setValue(params.start_y_mm)
 
     def _params(self) -> ProcessParams:
         return ProcessParams(
@@ -245,6 +250,8 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             default_a=self.default_a.value(),
             default_b=self.default_b.value(),
             default_c=self.default_c.value(),
+            start_x_mm=self.start_x.value(),
+            start_y_mm=self.start_y.value(),
         )
 
     def _save_params(self):

@@ -34,7 +34,7 @@ _BEAD_DIMENSIONS_MM = {
 _PATH_COLORS = {
     PathType.FIBER_PRINT: (0.0, 0.75, 0.45),
     PathType.RESIN_PRINT: (0.1, 0.35, 1.0),
-    PathType.TRAVEL: (0.55, 0.55, 0.55),
+    PathType.TRAVEL: (1.0, 0.85, 0.0),
     PathType.TOOL_CHANGE_EVENT: (1.0, 0.45, 0.05),
     PathType.EVENT: (0.8, 0.8, 0.2),
 }
@@ -130,6 +130,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._renderer = None
         self._vtk_widget = None
         self._actors = []
+        self._closing = False
 
         self.setWindowTitle(f"VTK Path Preview - {self._npz_root.name}")
         self.resize(1100, 760)
@@ -138,6 +139,50 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._layers_loaded.connect(self._on_layers_loaded)
         self._paths_loaded.connect(self._on_paths_loaded)
         QtCore.QTimer.singleShot(100, self._load_layers)
+
+    def closeEvent(self, event):
+        self._cleanup_vtk()
+        super().closeEvent(event)
+
+    def done(self, result):
+        self._cleanup_vtk()
+        super().done(result)
+
+    def _cleanup_vtk(self):
+        if self._closing:
+            return
+        self._closing = True
+        for actor in list(self._actors):
+            if self._renderer is not None:
+                try:
+                    self._renderer.RemoveActor(actor)
+                except Exception:
+                    pass
+        self._actors = []
+        if self._renderer is not None:
+            try:
+                self._renderer.RemoveAllViewProps()
+            except Exception:
+                pass
+        if self._vtk_widget is not None:
+            try:
+                render_window = self._vtk_widget.GetRenderWindow()
+                interactor = render_window.GetInteractor()
+                if interactor is not None:
+                    interactor.TerminateApp()
+                render_window.Finalize()
+            except Exception:
+                pass
+            try:
+                self._vtk_widget.Finalize()
+            except Exception:
+                pass
+            try:
+                self._vtk_widget.close()
+            except Exception:
+                pass
+        self._renderer = None
+        self._vtk_widget = None
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
@@ -162,9 +207,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._show_travel = QtWidgets.QCheckBox("空走路径")
         self._show_tool_change = QtWidgets.QCheckBox("工具切换")
         self._show_endpoints = QtWidgets.QCheckBox("起/终点")
+        self._show_origin_axes = QtWidgets.QCheckBox("原点坐标系")
         default_enabled = {
             self._show_fiber,
             self._show_resin,
+            self._show_travel,
         }
         for checkbox in (
             self._show_fiber,
@@ -180,6 +227,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             lambda _state: self._update_scene()
         )
         filter_row.addWidget(self._show_endpoints)
+        self._show_origin_axes.setChecked(False)
+        self._show_origin_axes.stateChanged.connect(
+            lambda _state: self._update_scene()
+        )
+        filter_row.addWidget(self._show_origin_axes)
         filter_row.addStretch()
         self._btn_top_view = QtWidgets.QPushButton("顶视")
         self._btn_iso_view = QtWidgets.QPushButton("斜视")
@@ -280,6 +332,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         thread.start()
 
     def _load_layers(self):
+        if self._closing:
+            return
         self._layer_label.setText("层: 正在扫描...")
 
         def worker():
@@ -292,6 +346,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._run_background(worker)
 
     def _on_layers_loaded(self, layers, error):
+        if self._closing:
+            return
         if error:
             self._layer_label.setText("层: 加载失败")
             self._path_label.setText(f"当前层路径: {error}")
@@ -308,6 +364,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._load_current_layer()
 
     def _load_current_layer(self):
+        if self._closing:
+            return
         if not self._layers:
             self._current_paths = []
             self._layer_label.setText("层: 0 / 0")
@@ -345,6 +403,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._run_background(worker)
 
     def _on_paths_loaded(self, layer, paths, error):
+        if self._closing:
+            return
         if layer != self._loading_layer:
             return
         if error:
@@ -396,6 +456,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         return ""
 
     def _on_filter_changed(self):
+        if self._closing:
+            return
         visible_count = self._enabled_path_count()
         self._path_slider.blockSignals(True)
         self._path_slider.setMaximum(visible_count)
@@ -405,6 +467,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._update_scene()
 
     def _update_scene(self, reset_camera=False):
+        if self._closing:
+            return
         visible = self._visible_paths()
         self._path_label.setText(
             f"当前层路径: {min(self._path_slider.value(), len(visible))} / "
@@ -418,7 +482,10 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             self._renderer.RemoveActor(actor)
         self._actors = []
 
-        for actor in self._base_plane_actors(self._current_paths or visible):
+        for actor in self._base_plane_actors(
+            self._current_paths or visible,
+            show_origin_axes=self._show_origin_axes.isChecked(),
+        ):
             self._renderer.AddActor(actor)
             self._actors.append(actor)
 
@@ -592,7 +659,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             actor.GetProperty().SetOpacity(0.45)
         return actor
 
-    def _base_plane_actors(self, paths: list[PreviewPath]):
+    def _base_plane_actors(
+        self,
+        paths: list[PreviewPath],
+        show_origin_axes: bool = False,
+    ):
         del paths
         min_x = 0.0
         max_x = _FIXED_PLANE_SIZE_MM
@@ -602,35 +673,36 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         step = _FIXED_PLANE_GRID_STEP_MM
 
         actors = [self._grid_actor(min_x, max_x, min_y, max_y, z, step)]
-        axis_len = _FIXED_PLANE_SIZE_MM * 0.18
-        for axis, color, direction, label_position in (
-            (
-                "X",
-                (0.9, 0.05, 0.05),
-                (axis_len, 0.0, 0.0),
-                (axis_len * 1.04, 0.0, z),
-            ),
-            (
-                "Y",
-                (0.05, 0.55, 0.1),
-                (0.0, axis_len, 0.0),
-                (0.0, axis_len * 1.04, z),
-            ),
-            (
-                "Z",
-                (0.1, 0.25, 0.95),
-                (0.0, 0.0, axis_len),
-                (0.0, 0.0, z + axis_len * 1.04),
-            ),
-        ):
-            actors.append(
-                self._axis_arrow_actor((0.0, 0.0, z), direction, color)
-            )
-            actors.append(
-                self._dimension_label_actor(
-                    axis, label_position, color, step * 0.18
+        if show_origin_axes:
+            axis_len = _FIXED_PLANE_SIZE_MM * 0.18
+            for axis, color, direction, label_position in (
+                (
+                    "X",
+                    (0.9, 0.05, 0.05),
+                    (axis_len, 0.0, 0.0),
+                    (axis_len * 1.04, 0.0, z),
+                ),
+                (
+                    "Y",
+                    (0.05, 0.55, 0.1),
+                    (0.0, axis_len, 0.0),
+                    (0.0, axis_len * 1.04, z),
+                ),
+                (
+                    "Z",
+                    (0.1, 0.25, 0.95),
+                    (0.0, 0.0, axis_len),
+                    (0.0, 0.0, z + axis_len * 1.04),
+                ),
+            ):
+                actors.append(
+                    self._axis_arrow_actor((0.0, 0.0, z), direction, color)
                 )
-            )
+                actors.append(
+                    self._dimension_label_actor(
+                        axis, label_position, color, step * 0.18
+                    )
+                )
         actors.append(
             self._dimension_label_actor(
                 f"{_FIXED_PLANE_SIZE_MM:.0f} x {_FIXED_PLANE_SIZE_MM:.0f} mm",
@@ -889,6 +961,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         return actor
 
     def _set_top_view(self):
+        if self._closing:
+            return
         if self._renderer is None:
             return
         camera = self._renderer.GetActiveCamera()
@@ -899,6 +973,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._render()
 
     def _set_iso_view(self):
+        if self._closing:
+            return
         if self._renderer is None:
             return
         camera = self._renderer.GetActiveCamera()
@@ -909,5 +985,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._render()
 
     def _render(self):
+        if self._closing:
+            return
         if self._vtk_widget is not None:
             self._vtk_widget.GetRenderWindow().Render()

@@ -56,6 +56,8 @@ class ProcessParams:
     default_a: float = 0.0
     default_b: float = 0.0
     default_c: float = 0.0
+    start_x_mm: float = 0.0
+    start_y_mm: float = 0.0
     dt: float = 0.004
     corner_angle_deg: float = 10.0
     corner_retreat_ratio: float = 0.2

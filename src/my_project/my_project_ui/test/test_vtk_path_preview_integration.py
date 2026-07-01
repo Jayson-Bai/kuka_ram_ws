@@ -76,6 +76,28 @@ def test_vtk_path_preview_does_not_render_all_paths_on_layer_load():
     assert "setValue(len(self._current_paths))" not in load_block
 
 
+def test_vtk_origin_axes_are_hidden_by_default_and_have_toggle():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert 'self._show_origin_axes = QtWidgets.QCheckBox("原点坐标系")' in src
+    assert 'self._show_origin_axes.setChecked(False)' in src
+    assert 'self._show_origin_axes.stateChanged.connect' in src
+
+    update_block = src.split("    def _update_scene", 1)[1].split(
+        "    def _actors_for_paths", 1
+    )[0]
+    assert "for actor in self._base_plane_actors(" in update_block
+    assert "show_origin_axes=self._show_origin_axes.isChecked()" in update_block
+
+    base_plane_block = src.split("    def _base_plane_actors", 1)[1].split(
+        "    def _grid_actor", 1
+    )[0]
+    assert "show_origin_axes: bool = False" in base_plane_block
+    assert "actors = [self._grid_actor" in base_plane_block
+    assert "if show_origin_axes:" in base_plane_block
+    assert base_plane_block.index("actors = [self._grid_actor") < base_plane_block.index("if show_origin_axes:")
+
+
 def test_vtk_path_preview_loads_npz_data_on_background_threads():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
@@ -313,3 +335,41 @@ def test_vtk_bead_mesh_uses_material_coordinates_and_physical_z_thickness():
     assert "bottom_z = top_z - height" in bead_block
     assert "self._display_point_for_path(path, point)" in bead_block
     assert "poly_data.SetPolys(cells)" in bead_block
+
+
+def test_vtk_travel_paths_are_yellow_and_visible_by_default():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "PathType.TRAVEL: (1.0, 0.85, 0.0)" in src
+    default_block = src.split("        default_enabled = {", 1)[1].split("        }", 1)[0]
+    assert "self._show_travel" in default_block
+
+
+def test_vtk_tool_change_markers_use_event_row_display_position():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    marker_block = src.split("    def _event_marker_actors", 1)[1].split(
+        "    def _nozzle_actor_for_path", 1
+    )[0]
+
+    assert "self._display_point_for_path(path, path.end)" in marker_block
+    assert "path.start" not in marker_block
+    assert "self._tool_offset_xyz" not in marker_block
+
+
+def test_vtk_preview_cleans_up_render_window_on_close_and_ignores_late_callbacks():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "self._closing = False" in src
+    assert "def closeEvent(self, event):" in src
+    assert "def done(self, result):" in src
+    assert "def _cleanup_vtk(self):" in src
+    cleanup_block = src.split("    def _cleanup_vtk", 1)[1].split(
+        "    def _build_ui", 1
+    )[0]
+    assert "self._closing = True" in cleanup_block
+    assert "render_window.Finalize()" in cleanup_block
+    assert "self._vtk_widget.Finalize()" in cleanup_block
+    assert "self._renderer.RemoveAllViewProps()" in cleanup_block
+    assert "self._vtk_widget = None" in cleanup_block
+    assert "self._renderer = None" in cleanup_block
+    assert "if self._closing:" in src

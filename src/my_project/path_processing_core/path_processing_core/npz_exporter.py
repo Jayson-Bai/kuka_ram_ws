@@ -1073,9 +1073,21 @@ def export_npz(
 
     total_cmds = len(parsed_commands)
 
-    # ---- 树脂 Z 打印补偿：在循环开始前就执行，后续所有 GCode 统一偏置 ----
-    _append_resin_z_print_compensation(0, 0)
-    # ---- 补偿结束 ----
+    def _is_external_npz_start_xy_travel(cmd) -> bool:
+        return (
+            isinstance(cmd, MoveCommand)
+            and cmd.type == "TRAVEL"
+            and not cmd.is_pure_state_change
+            and (cmd.raw or "") == "external_npz_start_xy_travel"
+        )
+
+    delay_resin_z_compensation = any(
+        _is_external_npz_start_xy_travel(cmd)
+        for cmd in parsed_commands
+    )
+
+    if not delay_resin_z_compensation:
+        _append_resin_z_print_compensation(0, 0)
 
     for idx, cmd in enumerate(parsed_commands):
         if progress_callback and total_cmds > 0 and idx % 200 == 0:
@@ -1263,6 +1275,13 @@ def export_npz(
                 current_subtype = cmd.subtype
                 current_occ = _ensure_segment(cmd.layer, cmd.subtype)
             buffer.append(cmd)
+            if (
+                delay_resin_z_compensation
+                and not resin_z_compensation_appended
+                and _is_external_npz_start_xy_travel(cmd)
+            ):
+                flush_moves()
+                _append_resin_z_print_compensation(cmd.layer, cmd.line)
             continue
 
         if isinstance(cmd, GlobalCurveCommand):

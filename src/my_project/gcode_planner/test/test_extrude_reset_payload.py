@@ -7,6 +7,7 @@ from gcode_planner.cli import _default_output_path
 from path_processing_core.npz_exporter import export_npz
 from path_processing_core.types import (
     ExtrudeWait,
+    MCommand,
     MoveCommand,
     Position,
     ResetECommand,
@@ -389,8 +390,6 @@ def test_cli_enables_extrude_wait_for_formal_exports():
     )
 
 
-
-
 def test_export_npz_safely_lifts_before_fiber_tool_offset_and_then_changes_tool(tmp_path):
     out = tmp_path / "safe_fiber_offset.npz"
     parsed = [
@@ -523,6 +522,78 @@ def test_export_npz_records_resin_z_compensation_sidecar(tmp_path):
         out.with_suffix(".offset.json").read_text(encoding="utf-8")
     )
     assert sidecar["resin_z_print_compensation_mm"] == -2.0
+
+
+def test_export_npz_applies_external_start_travel_before_resin_z_compensation(tmp_path):
+    out = tmp_path / "external_start_before_z_comp.npz"
+    parsed = [
+        MCommand(
+            type="M_COMMAND",
+            code="M104",
+            params={"S": 180.0},
+            line=1,
+            layer=0,
+            subtype="TRAVEL",
+            raw="M104 S180",
+            tool=1,
+        ),
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(50.0, 50.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=2,
+            layer=0,
+            subtype="TRAVEL",
+            raw="external_npz_start_xy_travel",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(50.0, 50.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(60.0, 50.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=3,
+            layer=0,
+            subtype="RESIN_PRINT",
+            raw="G1 X60 Y50 E1",
+            is_pure_state_change=False,
+        ),
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=0.1,
+        default_feed_mm_s=10.0,
+        resin_z_print_compensation_mm=-2.0,
+    )
+
+    data = np.load(out)
+    start_travel_idx = np.where(
+        (data["event_flag"] == 0)
+        & (data["move_type"] == 0)
+        & np.isclose(data["x"], 50.0, atol=1e-4)
+        & np.isclose(data["y"], 50.0, atol=1e-4)
+        & np.isclose(data["z"], 0.0, atol=1e-4)
+    )[0]
+    resin_comp_idx = np.where(
+        (data["event_flag"] == 0)
+        & (data["move_type"] == 0)
+        & np.isclose(data["x"], 50.0, atol=1e-4)
+        & np.isclose(data["y"], 50.0, atol=1e-4)
+        & np.isclose(data["z"], -2.0, atol=1e-4)
+    )[0]
+
+    assert len(start_travel_idx) > 0
+    assert len(resin_comp_idx) > 0
+    assert int(start_travel_idx[-1]) < int(resin_comp_idx[0])
 
 
 def test_flat_export_generates_layer_preview_without_manifest(tmp_path):

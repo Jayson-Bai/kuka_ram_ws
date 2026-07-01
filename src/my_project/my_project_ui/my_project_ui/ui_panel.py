@@ -1856,15 +1856,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._npz_out_input = QtWidgets.QLineEdit()
         self._npz_out_input.setPlaceholderText("根据源文件名自动生成")
 
-        # Planner settings popup
-        planner_toggle = QtWidgets.QPushButton("规划器设置")
+        # Export settings popup
+        planner_toggle = QtWidgets.QPushButton("导出设置")
         planner_toggle.setObjectName("btnPlannerToggle")
         planner_toggle.setMinimumHeight(28)
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
         export_layout.addWidget(planner_toggle)
 
-        planner_container = _PanelDialog("规划器设置", self, 460)
-        planner_form = QtWidgets.QFormLayout()
+        planner_container = _PanelDialog("导出设置", self, 560)
+        settings_tabs = QtWidgets.QTabWidget()
+
+        planner_tab = QtWidgets.QWidget()
+        planner_form = QtWidgets.QFormLayout(planner_tab)
         planner_form.setLabelAlignment(QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         planner_form.setFieldGrowthPolicy(QtWidgets.QFormLayout.AllNonFixedFieldsGrow)
         planner_form.setHorizontalSpacing(8)
@@ -1899,8 +1902,253 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 inp.setToolTip(desc)
                 planner_form.addRow(lbl, inp)
             self._planner_inputs[param_name] = inp
+        settings_tabs.addTab(planner_tab, "规划器")
 
-        planner_container.body_layout().addLayout(planner_form)
+        external_tab = QtWidgets.QWidget()
+        external_layout = QtWidgets.QVBoxLayout(external_tab)
+        external_layout.setContentsMargins(0, 0, 0, 0)
+        external_layout.setSpacing(8)
+        external_group = QtWidgets.QGroupBox("外部 NPZ 工艺参数")
+        external_grid = QtWidgets.QGridLayout(external_group)
+        external_grid.setHorizontalSpacing(8)
+        external_grid.setVerticalSpacing(4)
+
+        external_defaults = {
+            "resin_layer_height_mm": 0.5,
+            "resin_extrusion_scale": 1.0,
+            "resin_feed_mm_s": 10.0,
+            "resin_temperature_c": 250.0,
+            "resin_prime_length_mm": 18.0,
+            "resin_prime_speed_mm_s": 15.0,
+            "resin_retract_length_mm": 15.0,
+            "resin_retract_speed_mm_s": 30.0,
+            "resin_fan_enabled": True,
+            "fiber_layer_height_mm": 0.1,
+            "fiber_extrusion_scale": 1.0,
+            "fiber_feed_mm_s": 10.0,
+            "fiber_temperature_c": 250.0,
+            "fiber_prime_length_mm": 12.0,
+            "fiber_prime_speed_mm_s": 5.0,
+            "fiber_retract_length_mm": 10.0,
+            "fiber_retract_speed_mm_s": 5.0,
+            "fiber_fan_enabled": True,
+            "travel_feed_mm_s": 10.0,
+            "default_a": 0.0,
+            "default_b": 0.0,
+            "default_c": 0.0,
+            "start_x_mm": 0.0,
+            "start_y_mm": 0.0,
+        }
+        fixed_resin_width = 2.0
+        try:
+            from external_npz_preprocessor.param_config import load_print_params
+            from external_npz_preprocessor.process_params import (
+                RESIN_FIXED_BEAD_WIDTH_MM,
+            )
+
+            saved_params = load_print_params()
+            fixed_resin_width = RESIN_FIXED_BEAD_WIDTH_MM
+            external_defaults.update({
+                "resin_layer_height_mm": saved_params.resin.layer_height_mm,
+                "resin_extrusion_scale": saved_params.resin.extrusion_scale,
+                "resin_feed_mm_s": saved_params.resin.feed_mm_s,
+                "resin_temperature_c": saved_params.resin.temperature_c,
+                "resin_prime_length_mm": saved_params.resin.prime_length_mm,
+                "resin_prime_speed_mm_s": saved_params.resin.prime_speed_mm_s,
+                "resin_retract_length_mm": saved_params.resin.retract_length_mm,
+                "resin_retract_speed_mm_s": saved_params.resin.retract_speed_mm_s,
+                "resin_fan_enabled": saved_params.resin.fan_enabled,
+                "fiber_layer_height_mm": saved_params.fiber.layer_height_mm,
+                "fiber_extrusion_scale": saved_params.fiber.extrusion_scale,
+                "fiber_feed_mm_s": saved_params.fiber.feed_mm_s,
+                "fiber_temperature_c": saved_params.fiber.temperature_c,
+                "fiber_prime_length_mm": saved_params.fiber.prime_length_mm,
+                "fiber_prime_speed_mm_s": saved_params.fiber.prime_speed_mm_s,
+                "fiber_retract_length_mm": saved_params.fiber.retract_length_mm,
+                "fiber_retract_speed_mm_s": saved_params.fiber.retract_speed_mm_s,
+                "fiber_fan_enabled": saved_params.fiber.fan_enabled,
+                "travel_feed_mm_s": saved_params.travel_feed_mm_s,
+                "default_a": saved_params.default_a,
+                "default_b": saved_params.default_b,
+                "default_c": saved_params.default_c,
+                "start_x_mm": saved_params.start_x_mm,
+                "start_y_mm": saved_params.start_y_mm,
+            })
+        except Exception:
+            pass
+
+        fixed_resin_width_label = QtWidgets.QLabel(
+            f"固定树脂线宽: {fixed_resin_width:.1f} mm"
+        )
+        fixed_resin_width_label.setObjectName("fieldLabel")
+        external_grid.addWidget(fixed_resin_width_label, 0, 0, 1, 4)
+
+        def _external_spin(value, minimum=0.0, maximum=100000.0):
+            spin = _NoWheelDoubleSpinBox()
+            spin.setDecimals(4)
+            spin.setRange(minimum, maximum)
+            spin.setValue(float(value))
+            spin.setMinimumHeight(26)
+            return spin
+
+        _EXTERNAL_NPZ_PARAMS = [
+            (
+                "resin_layer_height_mm",
+                "树脂层高 mm",
+                _external_spin(external_defaults["resin_layer_height_mm"]),
+                "fiber_layer_height_mm",
+                "纤维层高 mm",
+                _external_spin(external_defaults["fiber_layer_height_mm"]),
+            ),
+            (
+                "resin_extrusion_scale",
+                "树脂挤出倍率",
+                _external_spin(external_defaults["resin_extrusion_scale"]),
+                "fiber_extrusion_scale",
+                "纤维挤出倍率",
+                _external_spin(external_defaults["fiber_extrusion_scale"]),
+            ),
+            (
+                "resin_feed_mm_s",
+                "树脂速度 mm/s",
+                _external_spin(external_defaults["resin_feed_mm_s"]),
+                "fiber_feed_mm_s",
+                "纤维速度 mm/s",
+                _external_spin(external_defaults["fiber_feed_mm_s"]),
+            ),
+            (
+                "resin_temperature_c",
+                "树脂温度 C",
+                _external_spin(
+                    external_defaults["resin_temperature_c"], maximum=500.0
+                ),
+                "fiber_temperature_c",
+                "纤维温度 C",
+                _external_spin(
+                    external_defaults["fiber_temperature_c"], maximum=500.0
+                ),
+            ),
+            (
+                "resin_prime_length_mm",
+                "树脂预挤出长度 mm",
+                _external_spin(external_defaults["resin_prime_length_mm"]),
+                "fiber_prime_length_mm",
+                "纤维预挤出长度 mm",
+                _external_spin(external_defaults["fiber_prime_length_mm"]),
+            ),
+            (
+                "resin_prime_speed_mm_s",
+                "树脂预挤出速度 mm/s",
+                _external_spin(external_defaults["resin_prime_speed_mm_s"]),
+                "fiber_prime_speed_mm_s",
+                "纤维预挤出速度 mm/s",
+                _external_spin(external_defaults["fiber_prime_speed_mm_s"]),
+            ),
+            (
+                "resin_retract_length_mm",
+                "树脂回抽长度 mm",
+                _external_spin(external_defaults["resin_retract_length_mm"]),
+                "fiber_retract_length_mm",
+                "纤维回抽长度 mm",
+                _external_spin(external_defaults["fiber_retract_length_mm"]),
+            ),
+            (
+                "resin_retract_speed_mm_s",
+                "树脂回抽速度 mm/s",
+                _external_spin(external_defaults["resin_retract_speed_mm_s"]),
+                "fiber_retract_speed_mm_s",
+                "纤维回抽速度 mm/s",
+                _external_spin(external_defaults["fiber_retract_speed_mm_s"]),
+            ),
+            (
+                "travel_feed_mm_s",
+                "空走速度 mm/s",
+                _external_spin(external_defaults["travel_feed_mm_s"]),
+                "default_a",
+                "默认 A",
+                _external_spin(
+                    external_defaults["default_a"], minimum=-360.0, maximum=360.0
+                ),
+            ),
+            (
+                "start_x_mm",
+                "起点 X mm",
+                _external_spin(
+                    external_defaults["start_x_mm"],
+                    minimum=-100000.0,
+                    maximum=100000.0,
+                ),
+                "start_y_mm",
+                "起点 Y mm",
+                _external_spin(
+                    external_defaults["start_y_mm"],
+                    minimum=-100000.0,
+                    maximum=100000.0,
+                ),
+            ),
+            (
+                None,
+                "",
+                QtWidgets.QLabel(""),
+                "default_b",
+                "默认 B",
+                _external_spin(
+                    external_defaults["default_b"], minimum=-360.0, maximum=360.0
+                ),
+            ),
+            (
+                None,
+                "",
+                QtWidgets.QLabel(""),
+                "default_c",
+                "默认 C",
+                _external_spin(
+                    external_defaults["default_c"], minimum=-360.0, maximum=360.0
+                ),
+            ),
+        ]
+        self._external_npz_inputs = {}
+        for row, fields in enumerate(_EXTERNAL_NPZ_PARAMS, start=1):
+            (
+                left_key,
+                left_label,
+                left_widget,
+                right_key,
+                right_label,
+                right_widget,
+            ) = fields
+            if left_key:
+                external_grid.addWidget(QtWidgets.QLabel(left_label), row, 0)
+                external_grid.addWidget(left_widget, row, 1)
+                self._external_npz_inputs[left_key] = left_widget
+            external_grid.addWidget(QtWidgets.QLabel(right_label), row, 2)
+            external_grid.addWidget(right_widget, row, 3)
+            self._external_npz_inputs[right_key] = right_widget
+
+        resin_fan = QtWidgets.QCheckBox()
+        resin_fan.setChecked(bool(external_defaults["resin_fan_enabled"]))
+        fiber_fan = QtWidgets.QCheckBox()
+        fiber_fan.setChecked(bool(external_defaults["fiber_fan_enabled"]))
+        fan_row = len(_EXTERNAL_NPZ_PARAMS) + 1
+        external_grid.addWidget(QtWidgets.QLabel("树脂风扇"), fan_row, 0)
+        external_grid.addWidget(resin_fan, fan_row, 1)
+        external_grid.addWidget(QtWidgets.QLabel("纤维风扇"), fan_row, 2)
+        external_grid.addWidget(fiber_fan, fan_row, 3)
+        self._external_npz_inputs["resin_fan_enabled"] = resin_fan
+        self._external_npz_inputs["fiber_fan_enabled"] = fiber_fan
+
+        external_layout.addWidget(external_group)
+        self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")
+        self._btn_save_external_npz_params.setMinimumHeight(30)
+        self._btn_save_external_npz_params.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_save_external_npz_params.clicked.connect(
+            self._on_save_external_npz_params
+        )
+        external_layout.addWidget(self._btn_save_external_npz_params)
+        external_layout.addStretch(1)
+        settings_tabs.addTab(external_tab, "外部 NPZ")
+
+        planner_container.body_layout().addWidget(settings_tabs)
         self._planner_container = planner_container
 
         def _show_planner_settings():
@@ -4386,6 +4634,69 @@ class _UiStatusWidget(QtWidgets.QWidget):
         data_root = _DEFAULT_NPZ_OUTPUT_DIR
         self._npz_out_input.setText(os.path.join(data_root, base, base + ".npz"))
 
+    def _external_npz_process_params(self, planner_params=None):
+        from dataclasses import replace
+
+        from external_npz_preprocessor.process_params import (
+            FiberProcessParams,
+            ProcessParams,
+            ResinProcessParams,
+        )
+
+        values = self._external_npz_inputs
+        process_params = ProcessParams(
+            resin=ResinProcessParams(
+                layer_height_mm=values["resin_layer_height_mm"].value(),
+                extrusion_scale=values["resin_extrusion_scale"].value(),
+                feed_mm_s=values["resin_feed_mm_s"].value(),
+                temperature_c=values["resin_temperature_c"].value(),
+                fan_enabled=values["resin_fan_enabled"].isChecked(),
+                prime_length_mm=values["resin_prime_length_mm"].value(),
+                prime_speed_mm_s=values["resin_prime_speed_mm_s"].value(),
+                retract_length_mm=values["resin_retract_length_mm"].value(),
+                retract_speed_mm_s=values["resin_retract_speed_mm_s"].value(),
+            ),
+            fiber=FiberProcessParams(
+                layer_height_mm=values["fiber_layer_height_mm"].value(),
+                extrusion_scale=values["fiber_extrusion_scale"].value(),
+                feed_mm_s=values["fiber_feed_mm_s"].value(),
+                temperature_c=values["fiber_temperature_c"].value(),
+                fan_enabled=values["fiber_fan_enabled"].isChecked(),
+                prime_length_mm=values["fiber_prime_length_mm"].value(),
+                prime_speed_mm_s=values["fiber_prime_speed_mm_s"].value(),
+                retract_length_mm=values["fiber_retract_length_mm"].value(),
+                retract_speed_mm_s=values["fiber_retract_speed_mm_s"].value(),
+            ),
+            travel_feed_mm_s=values["travel_feed_mm_s"].value(),
+            default_a=values["default_a"].value(),
+            default_b=values["default_b"].value(),
+            default_c=values["default_c"].value(),
+            start_x_mm=values["start_x_mm"].value(),
+            start_y_mm=values["start_y_mm"].value(),
+        )
+        if planner_params is None:
+            return process_params
+        return replace(
+            process_params,
+            dt=planner_params["dt"],
+            corner_angle_deg=planner_params["corner_angle_deg"],
+            corner_retreat_ratio=planner_params["corner_retreat_ratio"],
+            density=planner_params["density"],
+            degree=planner_params["degree"],
+            max_fit_points_per_segment=planner_params["max_fit_points_per_segment"],
+        )
+
+    def _on_save_external_npz_params(self):
+        try:
+            from external_npz_preprocessor.param_config import save_print_params
+
+            path = save_print_params(self._external_npz_process_params())
+            self._export_status.setText(f"已保存外部 NPZ 参数: {path}")
+            self._export_status.setStyleSheet("color: #1b6e3c;")
+        except Exception as exc:
+            self._export_status.setText(f"保存外部 NPZ 参数失败: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
+
     def _on_export_npz(self):
         source_path = self._gcode_path_input.text().strip()
         if not source_path or not os.path.isfile(source_path):
@@ -4399,7 +4710,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
-        # Gather planner params
+        source_ext = os.path.splitext(source_path)[1].lower()
+
+        # Gather export params
         try:
             params = {
                 "dt": float(self._planner_inputs["dt"].text()),
@@ -4417,9 +4730,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "plot_layer_xy": self._planner_inputs["plot_layer_xy"].isChecked(),
                 "plot_stride": int(self._planner_inputs["plot_stride"].text()),
             }
-            self._last_export_split_by_layer_type = params["split_by_layer_type"]
-        except (ValueError, KeyError) as exc:
-            self._export_status.setText(f"无效的规划器参数: {exc}")
+            external_process_params = (
+                self._external_npz_process_params(params)
+                if source_ext == ".npz"
+                else None
+            )
+            self._last_export_split_by_layer_type = (
+                params["split_by_layer_type"]
+                and source_ext in (".gcode", ".gc", ".g")
+            )
+        except (ValueError, KeyError, ImportError) as exc:
+            self._export_status.setText(f"无效的导出参数: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
@@ -4435,8 +4756,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         def _worker():
             try:
-                source_ext = os.path.splitext(source_path)[1].lower()
-
                 def progress_cb(ratio):
                     self.export_progress_val.emit(int(ratio * 100))
 
@@ -4446,21 +4765,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
                 if source_ext == ".npz":
                     self.export_progress.emit("读取约定格式 NPZ...")
-                    from dataclasses import replace
-
                     from external_npz_preprocessor.export_runner import convert_external_npz
-                    from external_npz_preprocessor.param_config import load_print_params
 
-                    process_params = replace(
-                        load_print_params(),
-                        dt=params["dt"],
-                        travel_feed_mm_s=params["default_feed_mm_s"],
-                        corner_angle_deg=params["corner_angle_deg"],
-                        corner_retreat_ratio=params["corner_retreat_ratio"],
-                        density=params["density"],
-                        degree=params["degree"],
-                        max_fit_points_per_segment=params["max_fit_points_per_segment"],
-                    )
+                    process_params = external_process_params
                     self.export_progress.emit("转换约定格式 NPZ 并导出系统 NPZ...")
                     stats = convert_external_npz(
                         source_path,

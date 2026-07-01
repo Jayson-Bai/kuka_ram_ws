@@ -20,7 +20,7 @@
       "feed_mm_s": 10.0,
       "temperature_c": 250.0,
       "fan_enabled": true,
-      "prime_length_mm": 12.0,
+      "prime_length_mm": 8.0,
       "prime_speed_mm_s": 5.0,
       "retract_length_mm": 10.0,
       "retract_speed_mm_s": 5.0
@@ -29,6 +29,8 @@
     "default_a": 0.0,
     "default_b": 0.0,
     "default_c": 0.0,
+    "start_x_mm": 100.0,
+    "start_y_mm": 100.0,
     "dt": 0.004,
     "corner_angle_deg": 10.0,
     "corner_retreat_ratio": 0.2,

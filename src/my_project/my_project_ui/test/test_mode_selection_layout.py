@@ -119,10 +119,53 @@ def test_formal_print_export_dispatches_gcode_and_external_npz_sources():
     assert "source_ext = os.path.splitext(source_path)[1].lower()" in src
     assert 'if source_ext == ".npz":' in worker
     assert "from external_npz_preprocessor.export_runner import convert_external_npz" in worker
-    assert "from external_npz_preprocessor.param_config import load_print_params" in worker
+    assert "process_params = external_process_params" in worker
     assert 'elif source_ext in (".gcode", ".gc", ".g"):' in worker
     assert "load_gcode_lines(source_path)" in worker
     assert "parse_gcode_lines(lines)" in worker
+
+
+def test_formal_print_export_settings_include_external_npz_process_params():
+    src = _source()
+
+    export_section = src.split("# ======== GCode Export 区域 ========", 1)[1].split(
+        "# ======== Print Test 区域 ========", 1
+    )[0]
+    assert 'QtWidgets.QPushButton("导出设置")' in export_section
+    assert '_PanelDialog("导出设置", self, 560)' in export_section
+    assert 'QtWidgets.QGroupBox("外部 NPZ 工艺参数")' in export_section
+    assert "self._external_npz_inputs = {}" in export_section
+    assert '"resin_layer_height_mm"' in export_section
+    assert '"树脂层高 mm"' in export_section
+    assert '"fiber_prime_length_mm"' in export_section
+    assert '"纤维预挤出长度 mm"' in export_section
+    assert '"default_c"' in export_section
+    assert '"默认 C"' in export_section
+    assert '"start_x_mm"' in export_section
+    assert '"起点 X mm"' in export_section
+    assert '"start_y_mm"' in export_section
+    assert '"起点 Y mm"' in export_section
+    assert (
+        'self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")'
+        in export_section
+    )
+    assert "def _external_npz_process_params(self, planner_params=None):" in src
+    assert "def _on_save_external_npz_params(self):" in src
+
+    export_method = src.split("    def _on_export_npz", 1)[1].split(
+        "    def _on_export_progress", 1
+    )[0]
+    npz_branch = export_method.split('if source_ext == ".npz":', 1)[1].split(
+        'elif source_ext in (".gcode", ".gc", ".g"):',
+        1,
+    )[0]
+    assert "external_process_params =" in export_method
+    assert "self._external_npz_process_params(params)" in export_method
+    assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
+    assert "load_print_params" not in npz_branch
+    assert "process_params = external_process_params" in npz_branch
+    assert "convert_external_npz(" in npz_branch
+    assert "process_params," in npz_branch
 
 
 def test_print_test_mode_uses_requested_resin_and_fiber_defaults():

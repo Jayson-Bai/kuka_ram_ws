@@ -34,6 +34,8 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
 
     line = _append_startup_head_events(commands, params, line)
 
+    initial_travel_added = False
+
     for layer in job.layers:
         ordered_paths: list[MaterialPath] = []
         ordered_paths.extend(layer.resin_paths)
@@ -41,7 +43,15 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
         for material_path in ordered_paths:
             tool = _tool_for_material(material_path.material)
             subtype = _subtype_for_material(material_path.material)
-            first_pose = _position_from_row(material_path.points[0])
+            first_pose = _offset_source_position(
+                _position_from_row(material_path.points[0]), params
+            )
+            if not initial_travel_added:
+                line = _append_initial_start_xy_travel(
+                    commands, params, first_pose, line, layer.index
+                )
+                initial_travel_added = True
+                current_pose = first_pose
             if current_tool != tool:
                 commands.append(
                     ToolChangeCommand(
@@ -97,7 +107,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 line += 1
 
             for row in material_path.points[1:]:
-                next_pose = _position_from_row(row)
+                next_pose = _offset_source_position(_position_from_row(row), params)
                 segment_length = _distance(previous_pose, next_pose)
                 delta_e = segment_length * e_per_mm
                 current_e += delta_e
@@ -192,6 +202,54 @@ def _make_extrude_wait(
         subtype=subtype,
         raw=raw,
     )
+
+
+def _offset_source_position(position: Position, params: ProcessParams) -> Position:
+    return Position(
+        x=position.x + float(params.start_x_mm),
+        y=position.y + float(params.start_y_mm),
+        z=position.z,
+        a=position.a,
+        b=position.b,
+        c=position.c,
+    )
+
+
+def _append_initial_start_xy_travel(
+    commands: ParsedCommandList,
+    params: ProcessParams,
+    first_pose: Position,
+    line: int,
+    layer: int,
+) -> int:
+    if abs(float(params.start_x_mm)) <= _EPS and abs(float(params.start_y_mm)) <= _EPS:
+        return line
+    start_pose = Position(
+        x=0.0,
+        y=0.0,
+        z=first_pose.z,
+        a=float(params.default_a),
+        b=float(params.default_b),
+        c=float(params.default_c),
+    )
+    if _distance(start_pose, first_pose) <= _EPS:
+        return line
+    commands.append(
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=start_pose,
+            pos=first_pose,
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=float(params.travel_feed_mm_s) * 60.0,
+            line=line,
+            layer=layer,
+            subtype="TRAVEL",
+            raw="external_npz_start_xy_travel",
+        )
+    )
+    return line + 1
 
 
 def _position_from_row(row: np.ndarray) -> Position:

@@ -220,3 +220,63 @@ def test_process_layer_heights_are_extrusion_references_only_not_z_generation():
         ("RESIN_PRINT", pytest.approx(8.0), pytest.approx(8.2)),
         ("FIBER_PRINT", pytest.approx(9.0), pytest.approx(9.4)),
     ]
+
+
+def test_start_xy_offsets_source_paths_and_inserts_initial_travel_without_z_override():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [
+                                [0.0, 0.0, 2.5, 1.0, 2.0, 3.0],
+                                [10.0, 0.0, 2.6, 1.0, 2.0, 3.0],
+                            ],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[],
+            )
+        ],
+    )
+    params = ProcessParams(
+        travel_feed_mm_s=20.0,
+        default_a=4.0,
+        default_b=5.0,
+        default_c=6.0,
+        start_x_mm=50.0,
+        start_y_mm=60.0,
+    )
+
+    moves = [
+        cmd for cmd in source_job_to_parsed_commands(job, params)
+        if isinstance(cmd, MoveCommand)
+    ]
+    travel_moves = [cmd for cmd in moves if cmd.type == "TRAVEL"]
+    print_moves = [cmd for cmd in moves if cmd.type == "PRINT"]
+
+    assert len(travel_moves) == 1
+    assert travel_moves[0].raw == "external_npz_start_xy_travel"
+    assert travel_moves[0].start_pos.x == pytest.approx(0.0)
+    assert travel_moves[0].start_pos.y == pytest.approx(0.0)
+    assert travel_moves[0].start_pos.z == pytest.approx(2.5)
+    assert travel_moves[0].pos.x == pytest.approx(50.0)
+    assert travel_moves[0].pos.y == pytest.approx(60.0)
+    assert travel_moves[0].pos.z == pytest.approx(2.5)
+    assert (
+        travel_moves[0].start_pos.a,
+        travel_moves[0].start_pos.b,
+        travel_moves[0].start_pos.c,
+    ) == (4.0, 5.0, 6.0)
+    assert print_moves[0].start_pos.x == pytest.approx(50.0)
+    assert print_moves[0].start_pos.y == pytest.approx(60.0)
+    assert print_moves[0].start_pos.z == pytest.approx(2.5)
+    assert print_moves[0].pos.x == pytest.approx(60.0)
+    assert print_moves[0].pos.y == pytest.approx(60.0)
+    assert print_moves[0].pos.z == pytest.approx(2.6)

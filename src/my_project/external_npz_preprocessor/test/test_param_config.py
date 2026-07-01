@@ -39,6 +39,8 @@ def test_save_and_load_print_params_round_trip(tmp_path):
         default_a=1.0,
         default_b=2.0,
         default_c=3.0,
+        start_x_mm=50.0,
+        start_y_mm=60.0,
     )
 
     save_print_params(params, path)
