@@ -60,7 +60,7 @@ event_type_vocab_keys, event_type_vocab_vals
 - 挤出重置：`extrude_reset`
 - 原地预挤出/回抽：通过 `ExtrudeWait` 转成可采样的挤出等待段
 
-喷头偏置也集中在 exporter 路径中应用。preprocessor 和 UI 只负责读取或传入共享偏置参数，不重复实现切换工具时的补偿数学。
+喷头偏置也集中在 exporter 路径中应用。默认初始工具写死为系统树脂工具 `2`。发生工具切换且存在纤维头偏置时，exporter 保持旧顺序：先安全抬升 `20 mm`，再执行喷头 XYZ 偏置补偿 travel，最后写入 `tool_change_cf/tool_change_resin` 事件。preprocessor 和 UI 只负责读取或传入共享偏置参数，不重复实现切换工具时的补偿数学。
 
 ## 维护原则
 

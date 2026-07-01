@@ -76,7 +76,7 @@ tool_change_cf
 tool_change_resin
 ```
 
-实际工具偏置补偿不在 preprocessor 中重复实现，而是通过 `export_npz()` 的 `tool_offset` 参数交给 exporter 处理。
+实际工具偏置补偿不在 preprocessor 中重复实现，而是通过 `export_npz()` 的 `tool_offset` 参数交给 exporter 处理。exporter 默认初始工具为系统树脂工具 `2`；当发生工具切换且存在偏置时，顺序固定为先安全抬升 `20 mm`，再执行喷头 XYZ 偏置补偿 travel，最后写入 `tool_change_cf/tool_change_resin` 事件。
 
 ## 5. 加热和风扇事件
 
@@ -243,7 +243,7 @@ export_npz(
 )
 ```
 
-因此，工具切换补偿、树脂 Z 补偿、事件编码、采样和系统 NPZ 字段写入，都由 `path_processing_core.npz_exporter` 统一完成。
+因此，工具切换补偿、树脂 Z 补偿、事件编码、采样和系统 NPZ 字段写入，都由 `path_processing_core.npz_exporter` 统一完成。工具切换补偿保持旧 exporter 顺序：安全抬升 `20 mm` -> 偏置补偿 travel -> 工具切换事件。
 
 ## 11. 默认路径
 

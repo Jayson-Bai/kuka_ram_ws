@@ -93,4 +93,4 @@ tool_offset = (fiber_x_print_compensation_mm,
 resin_z_print_compensation_mm = resin.z_print_compensation_mm
 ```
 
-These values are passed directly to `path_processing_core.npz_exporter.export_npz()`, so tool switching and resin-Z compensation stay centralized in the shared exporter logic.
+These values are passed directly to `path_processing_core.npz_exporter.export_npz()`, so tool switching and resin-Z compensation stay centralized in the shared exporter logic. The exporter starts from resin tool `2`; before a tool-change event with non-zero head offset, it first lifts `20 mm`, then performs the XYZ offset travel, and only then emits the tool-change event.

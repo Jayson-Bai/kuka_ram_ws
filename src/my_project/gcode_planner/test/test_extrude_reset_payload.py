@@ -391,8 +391,8 @@ def test_cli_enables_extrude_wait_for_formal_exports():
 
 
 
-def test_export_npz_applies_fiber_tool_offset_directly_after_resin_z(tmp_path):
-    out = tmp_path / "direct_fiber_offset.npz"
+def test_export_npz_safely_lifts_before_fiber_tool_offset_and_then_changes_tool(tmp_path):
+    out = tmp_path / "safe_fiber_offset.npz"
     parsed = [
         ToolChangeCommand(
             type="TOOL_CHANGE",
@@ -413,12 +413,52 @@ def test_export_npz_applies_fiber_tool_offset_directly_after_resin_z(tmp_path):
     )
 
     data = np.load(out)
+    event_vocab = _decoded_event_type_vocab(data)
+    event_types = [event_vocab[int(value)] for value in data["event_type"]]
+    tool_change_idx = event_types.index("tool_change_cf")
+
     assert np.any(np.isclose(data["z"], -20.0, atol=1e-4))
-    assert np.any(
-        np.isclose(data["x"], 5.0, atol=1e-4)
+    non_event = data["event_flag"] == 0
+    safe_lift_idx = np.where(
+        non_event
+        & np.isclose(data["x"], 0.0, atol=1e-4)
+        & np.isclose(data["y"], 0.0, atol=1e-4)
+        & np.isclose(data["z"], 0.0, atol=1e-4)
+    )[0]
+    offset_idx = np.where(
+        non_event
+        & np.isclose(data["x"], 5.0, atol=1e-4)
         & np.isclose(data["y"], 4.0, atol=1e-4)
-        & np.isclose(data["z"], -45.0, atol=1e-4)
-    )
+        & np.isclose(data["z"], -25.0, atol=1e-4)
+    )[0]
+
+    assert len(safe_lift_idx) > 0
+    assert len(offset_idx) > 0
+    assert safe_lift_idx[-1] < offset_idx[-1] < tool_change_idx
+
+
+def test_export_npz_defaults_to_resin_tool_without_initial_tool_change(tmp_path):
+    out = tmp_path / "default_resin_tool.npz"
+    parsed = [
+        ResetECommand(
+            type="RESET_E",
+            val=0.0,
+            line=1,
+            layer=0,
+            subtype="RESIN_PRINT",
+            raw="G92 E0",
+        )
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    event_vocab = _decoded_event_type_vocab(data)
+    event_types = [event_vocab[int(value)] for value in data["event_type"]]
+    non_empty_events = [event for event in event_types if event]
+
+    assert non_empty_events == ["extrude_reset"]
+    assert int(data["tool_id"][0]) == 2
 
 def test_export_npz_records_resin_z_compensation_sidecar(tmp_path):
     import json

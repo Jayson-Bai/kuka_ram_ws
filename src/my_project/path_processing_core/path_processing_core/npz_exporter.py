@@ -82,6 +82,7 @@ def export_npz(
     enable_travel_extrude_overlap: bool = True,
     resin_z_print_compensation_mm: float = 0.0,
     initial_tool_id: int = 2,
+    tool_change_safe_lift_mm: float = 20.0,
 ) -> dict:
     """
     导出 npz（分片）.
@@ -1132,27 +1133,47 @@ def export_npz(
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
 
                 if mapped_tool != current_tool:
-                    # ---- 偏置补偿：在 tool_change 事件前注入 TRAVEL 段 ----
+                    # ---- 偏置补偿：在 tool_change 事件前注入安全抬升和 TRAVEL 段 ----
                     ox, oy, oz = tool_offset
                     has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
                     if has_offset:
                         last_row = last_pose
                         if last_row is not None:
                             from .types import Position as _Pos
+                            start_p = _Pos(last_row.x, last_row.y, last_row.z,
+                                           last_row.a, last_row.b, last_row.c)
+                            safe_lift = max(0.0, float(tool_change_safe_lift_mm))
+                            offset_start_p = start_p
+                            if safe_lift > 1e-9:
+                                lifted_p = _Pos(last_row.x, last_row.y, last_row.z + safe_lift,
+                                                last_row.a, last_row.b, last_row.c)
+                                lift_gc = GlobalCurveCommand(
+                                    type="TRAVEL",
+                                    cmd="SPLINE",
+                                    start_pos=start_p,
+                                    control_points=[lifted_p, lifted_p, lifted_p],
+                                    e_val=last_row.e,
+                                    delta_e=0.0,
+                                    feedrate=default_feed_mm_s * 60.0,
+                                    line=cmd.line,
+                                    raw="tool_change_safe_lift",
+                                    constraints=[],
+                                    original_moves=[],
+                                )
+                                _append_sample(lift_gc, cmd.layer, cmd.subtype, occ)
+                                offset_start_p = lifted_p
                             if mapped_tool == 1:
-                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                               last_row.a, last_row.b, last_row.c)
-                                end_p = _Pos(last_row.x + ox, last_row.y + oy, last_row.z + oz,
-                                             last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(offset_start_p.x + ox, offset_start_p.y + oy,
+                                             offset_start_p.z + oz,
+                                             offset_start_p.a, offset_start_p.b, offset_start_p.c)
                             else:
-                                start_p = _Pos(last_row.x, last_row.y, last_row.z,
-                                               last_row.a, last_row.b, last_row.c)
-                                end_p = _Pos(last_row.x - ox, last_row.y - oy, last_row.z - oz,
-                                             last_row.a, last_row.b, last_row.c)
+                                end_p = _Pos(offset_start_p.x - ox, offset_start_p.y - oy,
+                                             offset_start_p.z - oz,
+                                             offset_start_p.a, offset_start_p.b, offset_start_p.c)
                             offset_gc = GlobalCurveCommand(
                                 type="TRAVEL",
                                 cmd="SPLINE",
-                                start_pos=start_p,
+                                start_pos=offset_start_p,
                                 control_points=[end_p, end_p, end_p],
                                 e_val=last_row.e,
                                 delta_e=0.0,
