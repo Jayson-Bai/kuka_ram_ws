@@ -346,7 +346,7 @@ def test_legacy_split_paths_are_split_by_physical_z_layers(tmp_path):
     assert layer1_z == {1.0}
 
 
-def test_list_preview_layers_prefers_npz_layer_indices_over_stale_preview_images(tmp_path):
+def test_list_preview_layers_prefers_preview_layer_indices_for_display_layers(tmp_path):
     from gcode_planner.path_preview import (
         extract_layer_preview_paths,
         list_preview_layers,
@@ -370,10 +370,10 @@ def test_list_preview_layers_prefers_npz_layer_indices_over_stale_preview_images
     for name in ("layer_-004.png", "layer_-003.png", "layer_0000.png"):
         (preview_dir / name).write_bytes(b"stale")
 
-    assert list_preview_layers(root) == [0, 1]
-    layer0_paths = extract_layer_preview_paths(root, 0)
-    assert layer0_paths
-    assert {round(point[2], 6) for path in layer0_paths for point in path.points} == {0.2}
+    assert list_preview_layers(root) == [-4, -3]
+    valve_paths = extract_layer_preview_paths(root, -4)
+    assert valve_paths
+    assert {round(point[2], 6) for path in valve_paths for point in path.points} == {0.2}
 
 
 def test_extract_preview_paths_can_limit_returned_paths(tmp_path):

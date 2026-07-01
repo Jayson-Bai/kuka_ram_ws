@@ -49,17 +49,17 @@ def list_preview_layers(npz_root: str | Path) -> list[int]:
             layers.add(inferred_layer)
         try:
             with np.load(str(path)) as data:
-                if "layer_index" in data:
-                    saw_modern_layer_field = True
-                    layers.update(
-                        int(v)
-                        for v in np.unique(data["layer_index"])
-                    )
-                elif "preview_layer_index" in data:
+                if "preview_layer_index" in data:
                     saw_modern_layer_field = True
                     layers.update(
                         int(v)
                         for v in np.unique(data["preview_layer_index"])
+                    )
+                elif "layer_index" in data:
+                    saw_modern_layer_field = True
+                    layers.update(
+                        int(v)
+                        for v in np.unique(data["layer_index"])
                     )
         except Exception:
             continue
@@ -332,15 +332,15 @@ def _rows_from_npz(
             tool_id_arr = data["tool_id"]
             move_type_arr = data["move_type"]
 
-            if "layer_index" in data:
+            if "preview_layer_index" in data:
+                preview_layer = data["preview_layer_index"]
+                mask = np.asarray(preview_layer, dtype=np.int64) == int(layer)
+            elif "layer_index" in data:
                 layer_index = data["layer_index"]
                 mask = (
                     np.asarray(layer_index, dtype=np.int64)
                     == int(layer)
                 )
-            elif "preview_layer_index" in data:
-                preview_layer = data["preview_layer_index"]
-                mask = np.asarray(preview_layer, dtype=np.int64) == int(layer)
             elif layer_z_map:
                 mask = _legacy_row_mask_for_physical_layer(
                     z_arr,
