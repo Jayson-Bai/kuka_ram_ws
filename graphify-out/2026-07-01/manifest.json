@@ -80,74 +80,74 @@
     "semantic_hash": "d41d8cd98f00b204e9800998ecf8427e"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/BaseFunction.py": {
-    "mtime": 1782890372.1518266,
-    "ast_hash": "6ff7f2f5ac0453af0ce091e73a438551",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "fba3d909779b00914cfbb2899256e34d",
+    "semantic_hash": "fba3d909779b00914cfbb2899256e34d"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/__init__.py": {
-    "mtime": 1782890340.321723,
-    "ast_hash": "b1cd90bc596e4dfe56fe443d009fd699",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "e26e5f95b28fd386359a4d08be590ff0",
+    "semantic_hash": "e26e5f95b28fd386359a4d08be590ff0"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/bspline_curve.py": {
-    "mtime": 1782890372.1558273,
-    "ast_hash": "b8024da12ec411bcc9c109c8267919ad",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "5c95992a179858e1f2828d912ffdc346",
+    "semantic_hash": "5c95992a179858e1f2828d912ffdc346"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/bspline_surface.py": {
-    "mtime": 1782890372.1558273,
-    "ast_hash": "4fe0a1b9f53e7c611a44f64ee4fe2042",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "7314d461517e18a29f49500afd80dc0b",
+    "semantic_hash": "7314d461517e18a29f49500afd80dc0b"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/parameter_selection.py": {
-    "mtime": 1782890372.1558273,
-    "ast_hash": "4c5e48a4c816d0459b2f0af7fe974a1c",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "a2e51e925afef01443269305e921de80",
+    "semantic_hash": "a2e51e925afef01443269305e921de80"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline_approximation.py": {
-    "mtime": 1782872013.308558,
-    "ast_hash": "94f0d4e40c2d08fbc7df84e351cd2ed6",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "0ea2c650acf6d6ed852c106b80f53c71",
+    "semantic_hash": "0ea2c650acf6d6ed852c106b80f53c71"
   },
   "src/my_project/gcode_planner/gcode_planner/cli.py": {
-    "mtime": 1782888642.9189758,
-    "ast_hash": "0ddca7ca0f972f17e97bd02279a817f8",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "1d47bf61a285c3f54c1e1af66adaaf39",
+    "semantic_hash": "1d47bf61a285c3f54c1e1af66adaaf39"
   },
   "src/my_project/gcode_planner/gcode_planner/gcode_parser.py": {
-    "mtime": 1782888642.9189758,
-    "ast_hash": "c64b04810ca5b1993a4c4c0ba8055209",
+    "mtime": 1782131546.8524387,
+    "ast_hash": "e4f273724978a8ec8cc66d8cbc907d34",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/npz_exporter.py": {
-    "mtime": 1782872013.308558,
-    "ast_hash": "719e4078cf0a1fcf9a3310169c9e655b",
+    "mtime": 1782132302.6104274,
+    "ast_hash": "15768914a1312f841a576c710c17a72f",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/polynomial_interpolator.py": {
-    "mtime": 1782872013.308558,
-    "ast_hash": "e345835a51ffc49ea81331f25fbae683",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "5df3713279d13b9975dda70d64f8b645",
+    "semantic_hash": "5df3713279d13b9975dda70d64f8b645"
   },
   "src/my_project/gcode_planner/gcode_planner/print_test_generator.py": {
-    "mtime": 1782888642.9189758,
-    "ast_hash": "eb2ae69d8a01b4b2777294d78623a017",
+    "mtime": 1782135503.7780223,
+    "ast_hash": "bb1114be00aa2397998b36c50a1841e3",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/gcode_planner/types.py": {
-    "mtime": 1782872013.308558,
-    "ast_hash": "55573c0411a6cbf361dd4730f5f95792",
+    "mtime": 1782131546.8524387,
+    "ast_hash": "747a0c4d00907e2127b640f9f8f86642",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/setup.py": {
-    "mtime": 1782799532.3670669,
-    "ast_hash": "eb12358c125d6bf9b6ad9c8f7317cb10",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "f4d8afcba414d31878a013c8ce2a6026",
+    "semantic_hash": "f4d8afcba414d31878a013c8ce2a6026"
   },
   "src/my_project/gcode_planner/test/conftest.py": {
-    "mtime": 1782799650.1040294,
-    "ast_hash": "476fbaaf2b62fd34d4040726d944e45d",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "fd9403d6488ed11e48c93bafb8c01122",
+    "semantic_hash": "fd9403d6488ed11e48c93bafb8c01122"
   },
   "src/my_project/gcode_planner/test/test_copyright.py": {
     "mtime": 1765199933.3300657,
@@ -155,8 +155,8 @@
     "semantic_hash": "4996344e5b6b7ac0c99a267f121398f4"
   },
   "src/my_project/gcode_planner/test/test_extrude_reset_payload.py": {
-    "mtime": 1782894256.611136,
-    "ast_hash": "0575df03c560685cc19634e367bb8783",
+    "mtime": 1782114248.2084513,
+    "ast_hash": "70d6c68da5f2ecbf195c9e4290c118de",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_flake8.py": {
@@ -165,9 +165,9 @@
     "semantic_hash": "aa129cddddd383a922ed54000fb385e5"
   },
   "src/my_project/gcode_planner/test/test_g92_pose_initialization.py": {
-    "mtime": 1782888725.1300893,
-    "ast_hash": "21b51a3703ac8e1dca945b7d0a947b2c",
-    "semantic_hash": ""
+    "mtime": 1781752692.567543,
+    "ast_hash": "a13e78324b75450c1b94822ff90a8e16",
+    "semantic_hash": "a13e78324b75450c1b94822ff90a8e16"
   },
   "src/my_project/gcode_planner/test/test_pep257.py": {
     "mtime": 1765199933.3343332,
@@ -175,8 +175,8 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/gcode_planner/test/test_print_test_generator.py": {
-    "mtime": 1782888725.1300893,
-    "ast_hash": "74bf74f502af76dfecd13a78801fd928",
+    "mtime": 1782135469.1098232,
+    "ast_hash": "f9e8acbb759a50f42e7b28b68e21540c",
     "semantic_hash": ""
   },
   "src/my_project/my_project_startup/launch/startup.launch.py": {
@@ -215,8 +215,8 @@
     "semantic_hash": "aaf04bbf6860ac2c66ea46e2d51312e0"
   },
   "src/my_project/my_project_ui/my_project_ui/ui_panel.py": {
-    "mtime": 1782888642.9233115,
-    "ast_hash": "e0595ceca8a08a6b8ba043934019ee26",
+    "mtime": 1782135746.624902,
+    "ast_hash": "af4828cd6cd55ec9c97624d9869b583a",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/setup.py": {
@@ -240,8 +240,8 @@
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_mode_selection_layout.py": {
-    "mtime": 1782872700.2936041,
-    "ast_hash": "edd3872f7ca59015a80486c89d0e1f7a",
+    "mtime": 1782135746.624902,
+    "ast_hash": "ddaa3f273d118ac951867504ec1acc80",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_pep257.py": {
@@ -250,8 +250,8 @@
     "semantic_hash": "1a5086842153d5f68611ba9f8cb7e443"
   },
   "src/my_project/my_project_ui/test/test_print_test_matrix_export.py": {
-    "mtime": 1782268325.4171865,
-    "ast_hash": "6741a90cefd337aa52f7f0d84155e19e",
+    "mtime": 1782132338.0022113,
+    "ast_hash": "a6a8173c558207658d0ca53d9d8b2384",
     "semantic_hash": ""
   },
   "src/my_project/my_project_ui/test/test_print_test_temperature_threshold.py": {
@@ -275,13 +275,13 @@
     "semantic_hash": "871975d020db654bcf405db9b13ba24f"
   },
   "src/my_project/uart_bridge/src/uart_node.cpp": {
-    "mtime": 1782205149.3507519,
-    "ast_hash": "1acb6b6b81830b121bb3bc20303bc65c",
+    "mtime": 1782128280.6861098,
+    "ast_hash": "f23cac4f37429502bb86149e33eef0ea",
     "semantic_hash": ""
   },
   "src/my_project/uart_bridge/test/test_extrude_reset_handshake.py": {
-    "mtime": 1782205237.7949886,
-    "ast_hash": "73a02972593ee4e1bc42657b13f4bdbf",
+    "mtime": 1782128391.714785,
+    "ast_hash": "957836b6196a8a72c33ec2027bc09c89",
     "semantic_hash": ""
   },
   "src/my_project/uart_bridge/test/test_temperature_ready_threshold.py": {
@@ -1530,14 +1530,14 @@
     "semantic_hash": "830c22eb12fe53f0d5353957a3363623"
   },
   "src/my_project/gcode_planner/README.md": {
-    "mtime": 1782894326.9321792,
-    "ast_hash": "a3cd0a8a7a1e97a359970a82b2acfc79",
-    "semantic_hash": ""
+    "mtime": 1781752692.5635428,
+    "ast_hash": "2378f897878defcbc6397ec1c3073be9",
+    "semantic_hash": "2378f897878defcbc6397ec1c3073be9"
   },
   "src/my_project/gcode_planner/gcode_planner/bspline/README.md": {
-    "mtime": 1782890460.442445,
-    "ast_hash": "2bc0cd99595627a203dfffc11b295b25",
-    "semantic_hash": ""
+    "mtime": 1773889923.6569567,
+    "ast_hash": "fb355c034d2115564ed792b03faa3418",
+    "semantic_hash": "fb355c034d2115564ed792b03faa3418"
   },
   "src/my_project/my_project_interfaces/CMakeLists.txt": {
     "mtime": 1780378020.3542078,
@@ -1545,13 +1545,13 @@
     "semantic_hash": "29f0d392e7473a02e44cc0549d111aff"
   },
   "src/my_project/my_project_startup/README.md": {
-    "mtime": 1782892540.8559031,
-    "ast_hash": "e39218759c165dff748d6728742e4a58",
-    "semantic_hash": ""
+    "mtime": 1782032606.4447076,
+    "ast_hash": "089e3e2710ba494a66dd4c6220614363",
+    "semantic_hash": "089e3e2710ba494a66dd4c6220614363"
   },
   "src/my_project/my_project_ui/UI_ARCHITECTURE.md": {
-    "mtime": 1782892485.0296311,
-    "ast_hash": "aaafd199d74b650b14095f0c07dbd41f",
+    "mtime": 1782118764.9226353,
+    "ast_hash": "172ae4853fdfc515b1d6b3b317603477",
     "semantic_hash": ""
   },
   "src/my_project/rsi_server/CMakeLists.txt": {
@@ -2505,13 +2505,13 @@
     "semantic_hash": "ffe28050c4b2ee0a83cf19fabe546d5a"
   },
   "src/my_project/gcode_planner/gcode_planner/head_calibration.py": {
-    "mtime": 1782872013.308558,
-    "ast_hash": "885615d07aec9c18135451c19abce393",
+    "mtime": 1782125701.9079795,
+    "ast_hash": "9e068fc995fc099f73a420f71f68c669",
     "semantic_hash": ""
   },
   "src/my_project/gcode_planner/test/test_head_calibration.py": {
-    "mtime": 1782888725.1300893,
-    "ast_hash": "4c81038851d1670ef61f0ca67134b51d",
+    "mtime": 1782125669.0061588,
+    "ast_hash": "35ffb3e93c58afc2f790b350eff2a0d5",
     "semantic_hash": ""
   },
   "docs/superpowers/plans/2026-06-21-test-mode-fiber-printing.md": {
@@ -2532,236 +2532,6 @@
   "src/my_project/control_center/test/test_print_test_reset_queue.py": {
     "mtime": 1782127566.353529,
     "ast_hash": "8f71fca8e2f49ea9a384cd2a3cbc81e5",
-    "semantic_hash": ""
-  },
-  "data/external_npz_preprocessor/print_params.json": {
-    "mtime": 1782788716.0572515,
-    "ast_hash": "9c05d2cffb418a5c4931bdba6a6b68c0",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/__init__.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "4b5719056232a2c7b985101d783aa029",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/app.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "e1bb1420e29cc4560453a7eef551f6bc",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/cli.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "be10f21456c8e85c02ce7435700dc230",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/converter.py": {
-    "mtime": 1782893610.3365672,
-    "ast_hash": "8212b7bf61e300c4bf13f0d8efbe65bd",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/export_runner.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "432b449db7ea54b55493b1138ad81034",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/param_config.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "87a7a1191ac555e770fa732725f85442",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/process_params.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "2b0d9e7cafb8a9bc501c3ba0c1120846",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/source_npz.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "12dcf233be210ee62d4ce5b9efe7f6ed",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/source_template.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "1fab4feb3ce6c778b4c499689999cd97",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/external_npz_preprocessor/ui.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "73d98d8ec957593937c246dc3dd84874",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/setup.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "37a1b98ef18a555e989cfc4fad7b32a4",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/conftest.py": {
-    "mtime": 1782799592.71928,
-    "ast_hash": "eea0c52902fb187491923a4182838318",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_cli.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "b33548d18229f18a6cb069db3fc88bad",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_converter.py": {
-    "mtime": 1782893345.9607174,
-    "ast_hash": "613ba1991e5d8302a4388ac349a27c40",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_export_runner.py": {
-    "mtime": 1782893610.3365672,
-    "ast_hash": "de31894f296a3e46a49b4e8e6b729896",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_param_config.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "3ab24c909507f9931a18f87bfcd663d4",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_process_params.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "094716e447b1e2f3619809da0f5ea615",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/test/test_source_npz.py": {
-    "mtime": 1782799532.3714,
-    "ast_hash": "f40a34011d1dc257c94de15175ce9bf7",
-    "semantic_hash": ""
-  },
-  "src/my_project/gcode_planner/gcode_planner/path_preview.py": {
-    "mtime": 1782874265.325066,
-    "ast_hash": "6796c5d4fc621d0e2ec10c796acc1549",
-    "semantic_hash": ""
-  },
-  "src/my_project/gcode_planner/test/test_core_import_cleanup.py": {
-    "mtime": 1782888608.1123235,
-    "ast_hash": "4aba2ecb1a6686500f8ba18fb6086013",
-    "semantic_hash": ""
-  },
-  "src/my_project/gcode_planner/test/test_path_preview.py": {
-    "mtime": 1782874265.3290663,
-    "ast_hash": "d1d52efb3bd547f7d3f70b7461322329",
-    "semantic_hash": ""
-  },
-  "src/my_project/my_project_ui/my_project_ui/vtk_path_preview.py": {
-    "mtime": 1782873826.783251,
-    "ast_hash": "de71601236489f310c2d40311d0fd6aa",
-    "semantic_hash": ""
-  },
-  "src/my_project/my_project_ui/test/test_vtk_path_preview_integration.py": {
-    "mtime": 1782873727.9174707,
-    "ast_hash": "5f9d4d27054be6df0bf4223c58045e5b",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/__init__.py": {
-    "mtime": 1782799532.3670669,
-    "ast_hash": "e5d4cffc4ecef7cdaf7e99908ce29289",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/BaseFunction.py": {
-    "mtime": 1782799487.3225508,
-    "ast_hash": "fba3d909779b00914cfbb2899256e34d",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/__init__.py": {
-    "mtime": 1782799487.3225508,
-    "ast_hash": "e26e5f95b28fd386359a4d08be590ff0",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/bspline_curve.py": {
-    "mtime": 1782799487.3225508,
-    "ast_hash": "5c95992a179858e1f2828d912ffdc346",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/bspline_surface.py": {
-    "mtime": 1782799487.3225508,
-    "ast_hash": "7314d461517e18a29f49500afd80dc0b",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/parameter_selection.py": {
-    "mtime": 1782799487.3225508,
-    "ast_hash": "a2e51e925afef01443269305e921de80",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline_approximation.py": {
-    "mtime": 1782799487.3182173,
-    "ast_hash": "0ea2c650acf6d6ed852c106b80f53c71",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/head_calibration.py": {
-    "mtime": 1782799487.3182173,
-    "ast_hash": "9e068fc995fc099f73a420f71f68c669",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/npz_exporter.py": {
-    "mtime": 1782894217.7411344,
-    "ast_hash": "58dbfd3603096defbcb93f4e1ba983c1",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/polynomial_interpolator.py": {
-    "mtime": 1782799487.3182173,
-    "ast_hash": "5df3713279d13b9975dda70d64f8b645",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/types.py": {
-    "mtime": 1782799487.313884,
-    "ast_hash": "747a0c4d00907e2127b640f9f8f86642",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/setup.py": {
-    "mtime": 1782799532.3670669,
-    "ast_hash": "1adb533d3b5178c7d6b816644d35bde2",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/test/conftest.py": {
-    "mtime": 1782799592.71928,
-    "ast_hash": "e3a8b2bfb495be8b800c5d06ee7c84b7",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/test/test_core_compat.py": {
-    "mtime": 1782888777.0284977,
-    "ast_hash": "c33289706694f1be548465d9454edc38",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/README.md": {
-    "mtime": 1782893567.654855,
-    "ast_hash": "ae21b4ac0e389e32558100061db76d8f",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/docs/DESIGN.md": {
-    "mtime": 1782892485.025631,
-    "ast_hash": "3573382f119debc1997c896afe22cfe8",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/docs/DEVELOPMENT_LOG.md": {
-    "mtime": 1782893567.654855,
-    "ast_hash": "7949e3eefdfa64bfccff01e22b998588",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md": {
-    "mtime": 1782894326.9321792,
-    "ast_hash": "8cd4e816c7e5b10e5e4b68b03e5977cf",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/docs/PROCESS_FLOW.md": {
-    "mtime": 1782894326.9321792,
-    "ast_hash": "a51724bcd96d00a5e7a4d8993cfe2984",
-    "semantic_hash": ""
-  },
-  "src/my_project/external_npz_preprocessor/docs/SOURCE_NPZ_FORMAT.md": {
-    "mtime": 1782892485.0296311,
-    "ast_hash": "831254d838a6a6b64a2eb48c9de8cb26",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/README.md": {
-    "mtime": 1782894326.9321792,
-    "ast_hash": "1484c748bdb883c5cbe7a1c6f3c442cd",
-    "semantic_hash": ""
-  },
-  "src/my_project/path_processing_core/path_processing_core/bspline/README.md": {
-    "mtime": 1782892485.025631,
-    "ast_hash": "6e6f1d983c6b1898aad69faa18742627",
     "semantic_hash": ""
   }
 }
