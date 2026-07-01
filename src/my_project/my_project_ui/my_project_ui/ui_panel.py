@@ -1828,20 +1828,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
         separator.setFrameShadow(QtWidgets.QFrame.Sunken)
         export_layout.addWidget(separator)
 
-        # Subtitle: GCode File
-        gcode_subtitle = QtWidgets.QLabel("GCode 文件")
+        # Subtitle: Source File
+        gcode_subtitle = QtWidgets.QLabel("源文件")
         gcode_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
         export_layout.addWidget(gcode_subtitle)
 
-        # GCode file selector
+        # Source file selector
         gcode_row = QtWidgets.QHBoxLayout()
         gcode_row.setSpacing(4)
-        gcode_lbl = QtWidgets.QLabel("GCode")
+        gcode_lbl = QtWidgets.QLabel("源文件")
         gcode_lbl.setObjectName("fieldLabel")
         gcode_lbl.setMinimumWidth(50)
         self._gcode_path_input = QtWidgets.QLineEdit()
-        self._gcode_path_input.setPlaceholderText("可选择 GCode 文件用于导出或自动匹配 NPZ")
+        self._gcode_path_input.setPlaceholderText("可选择 GCode 或约定格式 NPZ，用于导出系统 NPZ")
         self._btn_browse_gcode = QtWidgets.QPushButton("…")
         self._btn_browse_gcode.setFixedWidth(32)
         self._btn_browse_gcode.setFixedHeight(28)
@@ -1854,7 +1854,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         # NPZ output path (internal, hidden from UI)
         self._npz_out_input = QtWidgets.QLineEdit()
-        self._npz_out_input.setPlaceholderText("根据 GCode 文件名自动生成")
+        self._npz_out_input.setPlaceholderText("根据源文件名自动生成")
 
         # Planner settings popup
         planner_toggle = QtWidgets.QPushButton("规划器设置")
@@ -4372,9 +4372,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _on_browse_gcode(self):
         path, _ = QtWidgets.QFileDialog.getOpenFileName(
             self,
-            "选择 GCode 文件",
-            _dialog_start_dir(self._gcode_path_input.text(), _DEFAULT_GCODE_INPUT_DIR),
-            "GCode Files (*.gcode *.gc *.g);;All Files (*)",
+            "选择源文件",
+            _dialog_start_dir(self._gcode_path_input.text(), str(_DEFAULT_DATA_ROOT)),
+            "GCode / NPZ Files (*.gcode *.gc *.g *.npz);;GCode Files (*.gcode *.gc *.g);;NPZ Files (*.npz);;All Files (*)",
         )
         if path:
             self._gcode_path_input.setText(path)
@@ -4387,9 +4387,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._npz_out_input.setText(os.path.join(data_root, base, base + ".npz"))
 
     def _on_export_npz(self):
-        gcode_path = self._gcode_path_input.text().strip()
-        if not gcode_path or not os.path.isfile(gcode_path):
-            self._export_status.setText("请选择有效的 GCode 文件。")
+        source_path = self._gcode_path_input.text().strip()
+        if not source_path or not os.path.isfile(source_path):
+            self._export_status.setText("请选择有效的 GCode 或约定格式 NPZ 文件。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
@@ -4435,43 +4435,71 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         def _worker():
             try:
-                self.export_progress.emit("读取 GCode...")
-                from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
-                from gcode_planner.npz_exporter import export_npz
+                source_ext = os.path.splitext(source_path)[1].lower()
 
                 def progress_cb(ratio):
                     self.export_progress_val.emit(int(ratio * 100))
-
-                lines = load_gcode_lines(gcode_path)
-                self.export_progress.emit("解析 GCode...")
-                parsed = parse_gcode_lines(lines)
-                self.export_progress.emit(f"导出 NPZ（{len(parsed)} 条指令）...")
 
                 out_dir = os.path.dirname(npz_out)
                 if out_dir:
                     os.makedirs(out_dir, exist_ok=True)
 
-                stats = export_npz(
-                    parsed,
-                    npz_out,
-                    dt=params["dt"],
-                    chunk_size=5000000,
-                    default_feed_mm_s=params["default_feed_mm_s"],
-                    corner_angle_deg=params["corner_angle_deg"],
-                    corner_retreat_ratio=params["corner_retreat_ratio"],
-                    density=params["density"],
-                    degree=params["degree"],
-                    max_fit_points_per_segment=params["max_fit_points_per_segment"],
-                    export_sleep_ms=params["export_sleep_ms"],
-                    export_yield_every=params["export_yield_every"],
-                    tool_offset=offset,
-                    progress_callback=progress_cb,
-                    split_by_layer_type=params["split_by_layer_type"],
-                    plot_layer_xy=params["plot_layer_xy"],
-                    plot_stride=params["plot_stride"],
-                    enable_extrude_wait=True,
-                    resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
-                )
+                if source_ext == ".npz":
+                    self.export_progress.emit("读取约定格式 NPZ...")
+                    from dataclasses import replace
+
+                    from external_npz_preprocessor.export_runner import convert_external_npz
+                    from external_npz_preprocessor.param_config import load_print_params
+
+                    process_params = replace(
+                        load_print_params(),
+                        dt=params["dt"],
+                        travel_feed_mm_s=params["default_feed_mm_s"],
+                        corner_angle_deg=params["corner_angle_deg"],
+                        corner_retreat_ratio=params["corner_retreat_ratio"],
+                        density=params["density"],
+                        degree=params["degree"],
+                        max_fit_points_per_segment=params["max_fit_points_per_segment"],
+                    )
+                    self.export_progress.emit("转换约定格式 NPZ 并导出系统 NPZ...")
+                    stats = convert_external_npz(
+                        source_path,
+                        npz_out,
+                        process_params,
+                        progress_callback=progress_cb,
+                    )
+                elif source_ext in (".gcode", ".gc", ".g"):
+                    self.export_progress.emit("读取 GCode...")
+                    from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
+                    from gcode_planner.npz_exporter import export_npz
+
+                    lines = load_gcode_lines(source_path)
+                    self.export_progress.emit("解析 GCode...")
+                    parsed = parse_gcode_lines(lines)
+                    self.export_progress.emit(f"导出 NPZ（{len(parsed)} 条指令）...")
+                    stats = export_npz(
+                        parsed,
+                        npz_out,
+                        dt=params["dt"],
+                        chunk_size=5000000,
+                        default_feed_mm_s=params["default_feed_mm_s"],
+                        corner_angle_deg=params["corner_angle_deg"],
+                        corner_retreat_ratio=params["corner_retreat_ratio"],
+                        density=params["density"],
+                        degree=params["degree"],
+                        max_fit_points_per_segment=params["max_fit_points_per_segment"],
+                        export_sleep_ms=params["export_sleep_ms"],
+                        export_yield_every=params["export_yield_every"],
+                        tool_offset=offset,
+                        progress_callback=progress_cb,
+                        split_by_layer_type=params["split_by_layer_type"],
+                        plot_layer_xy=params["plot_layer_xy"],
+                        plot_stride=params["plot_stride"],
+                        enable_extrude_wait=True,
+                        resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
+                    )
+                else:
+                    raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")
                 rows = stats.get("rows", 0)
                 parts = stats.get("parts", 0)
                 total_s = stats.get("total_s", 0.0)

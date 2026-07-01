@@ -11,7 +11,7 @@ QUEUE_MANAGER = PROJECT_SRC / "control_center" / "src" / "queue_manager.cpp"
 NPZ_LOADER_HPP = PROJECT_SRC / "control_center" / "include" / "control_center" / "npz_loader.hpp"
 NPZ_LOADER_CPP = PROJECT_SRC / "control_center" / "src" / "npz_loader.cpp"
 TRAJECTORY_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
-NPZ_EXPORTER = PROJECT_SRC / "gcode_planner" / "gcode_planner" / "npz_exporter.py"
+NPZ_EXPORTER = PROJECT_SRC / "path_processing_core" / "path_processing_core" / "npz_exporter.py"
 
 
 def _source():
@@ -96,6 +96,35 @@ def test_formal_print_export_defaults_to_named_npz_directory():
     assert "_npz_layer_dir_from_launch_path(npz_path)" in export_finished
 
 
+def test_formal_print_source_selector_accepts_gcode_and_external_npz():
+    src = _source()
+
+    assert 'QtWidgets.QLabel("源文件")' in src
+    assert "可选择 GCode 或约定格式 NPZ" in src
+
+    browse_source = src.split("    def _on_browse_gcode", 1)[1].split(
+        "    def _on_gcode_path_changed", 1
+    )[0]
+    assert '"选择源文件"' in browse_source
+    assert "GCode / NPZ Files (*.gcode *.gc *.g *.npz)" in browse_source
+    assert "_DEFAULT_DATA_ROOT" in browse_source
+
+
+def test_formal_print_export_dispatches_gcode_and_external_npz_sources():
+    src = _source()
+
+    worker = src.split("        def _worker():", 1)[1].split(
+        "        t = threading.Thread", 1
+    )[0]
+    assert "source_ext = os.path.splitext(source_path)[1].lower()" in src
+    assert 'if source_ext == ".npz":' in worker
+    assert "from external_npz_preprocessor.export_runner import convert_external_npz" in worker
+    assert "from external_npz_preprocessor.param_config import load_print_params" in worker
+    assert 'elif source_ext in (".gcode", ".gc", ".g"):' in worker
+    assert "load_gcode_lines(source_path)" in worker
+    assert "parse_gcode_lines(lines)" in worker
+
+
 def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
     src = _source()
     init_section = src.split("        self._test_temp_input =", 1)[1].split(
@@ -144,7 +173,7 @@ def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     browse_gcode = src.split("    def _on_browse_gcode", 1)[1].split(
         "    def _on_gcode_path_changed", 1
     )[0]
-    assert "_DEFAULT_GCODE_INPUT_DIR" in browse_gcode
+    assert "_DEFAULT_DATA_ROOT" in browse_gcode
     assert "QtWidgets.QFileDialog.getOpenFileName" in browse_gcode
 
     select_npz = src.split("    def _on_select_npz", 1)[1].split(
