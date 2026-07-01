@@ -41,6 +41,31 @@ class PreviewPath:
 
 def list_preview_layers(npz_root: str | Path) -> list[int]:
     root = Path(npz_root).expanduser()
+    layers = set()
+    saw_modern_layer_field = False
+    for path in _candidate_npz_files(root, layer=None):
+        inferred_layer = _infer_layer_from_path(path)
+        if inferred_layer is not None:
+            layers.add(inferred_layer)
+        try:
+            with np.load(str(path)) as data:
+                if "layer_index" in data:
+                    saw_modern_layer_field = True
+                    layers.update(
+                        int(v)
+                        for v in np.unique(data["layer_index"])
+                    )
+                elif "preview_layer_index" in data:
+                    saw_modern_layer_field = True
+                    layers.update(
+                        int(v)
+                        for v in np.unique(data["preview_layer_index"])
+                    )
+        except Exception:
+            continue
+    if saw_modern_layer_field:
+        return sorted(layers)
+
     preview_layers = _flat_preview_layers(root)
     if preview_layers:
         return preview_layers
@@ -49,20 +74,6 @@ def list_preview_layers(npz_root: str | Path) -> list[int]:
     if physical_layers:
         return sorted(physical_layers)
 
-    layers = set()
-    for path in _candidate_npz_files(root, layer=None):
-        inferred_layer = _infer_layer_from_path(path)
-        if inferred_layer is not None:
-            layers.add(inferred_layer)
-        try:
-            with np.load(str(path)) as data:
-                if "layer_index" in data:
-                    layers.update(
-                        int(v)
-                        for v in np.unique(data["layer_index"])
-                    )
-        except Exception:
-            continue
     return sorted(layers)
 
 
@@ -70,6 +81,7 @@ def extract_layer_preview_paths(
     npz_root: str | Path,
     layer: int,
     max_paths: int | None = None,
+    max_rows: int | None = None,
 ) -> list[PreviewPath]:
     root = Path(npz_root).expanduser()
     layer_z_map = _legacy_physical_layer_z_map(root)
@@ -81,7 +93,7 @@ def extract_layer_preview_paths(
     if max_paths is not None or layer_z_map:
         paths: list[PreviewPath] = []
         for path in files:
-            rows = _rows_from_npz(path, layer, root, layer_z_map)
+            rows = _rows_from_npz(path, layer, root, layer_z_map, max_rows=max_rows)
             rows.sort(key=lambda row: row["seq"])
             remaining = None if max_paths is None else max_paths - len(paths)
             paths.extend(
@@ -99,7 +111,7 @@ def extract_layer_preview_paths(
 
     rows = []
     for path in files:
-        rows.extend(_rows_from_npz(path, layer, root, layer_z_map))
+        rows.extend(_rows_from_npz(path, layer, root, layer_z_map, max_rows=max_rows))
     rows.sort(key=lambda row: row["seq"])
     return _extract_paths_from_rows(rows, int(layer), max_paths=max_paths)
 
@@ -298,6 +310,7 @@ def _rows_from_npz(
     layer: int,
     root: Path | None = None,
     layer_z_map: dict[int, float] | None = None,
+    max_rows: int | None = None,
 ) -> list[dict]:
     try:
         with np.load(str(path)) as data:
@@ -319,27 +332,15 @@ def _rows_from_npz(
             tool_id_arr = data["tool_id"]
             move_type_arr = data["move_type"]
 
-            if "preview_layer_index" in data:
+            if "layer_index" in data:
+                layer_index = data["layer_index"]
+                mask = (
+                    np.asarray(layer_index, dtype=np.int64)
+                    == int(layer)
+                )
+            elif "preview_layer_index" in data:
                 preview_layer = data["preview_layer_index"]
                 mask = np.asarray(preview_layer, dtype=np.int64) == int(layer)
-            elif "layer_index" in data:
-                preview_layers = _flat_preview_layers(root or path)
-                layer0_z_map = _legacy_flat_layer0_z_map(
-                    data,
-                    preview_layers,
-                )
-                if layer0_z_map and int(layer) <= 0:
-                    mask = _legacy_row_mask_for_physical_layer(
-                        z_arr,
-                        int(layer),
-                        layer0_z_map,
-                    )
-                else:
-                    layer_index = data["layer_index"]
-                    mask = (
-                        np.asarray(layer_index, dtype=np.int64)
-                        == int(layer)
-                    )
             elif layer_z_map:
                 mask = _legacy_row_mask_for_physical_layer(
                     z_arr,
@@ -367,8 +368,18 @@ def _rows_from_npz(
             payload = _optional_array(data, "payload", count, "")
             seq = _optional_array(data, "seq", count, 0)
 
+            row_indices = np.nonzero(mask)[0]
+            if max_rows is not None and len(row_indices) > int(max_rows):
+                sample_positions = np.linspace(
+                    0,
+                    len(row_indices) - 1,
+                    max(2, int(max_rows)),
+                    dtype=np.int64,
+                )
+                row_indices = row_indices[np.unique(sample_positions)]
+
             rows = []
-            for idx in np.nonzero(mask)[0]:
+            for idx in row_indices:
                 move_type_value = int(move_type_arr[idx])
                 event_type_value = int(event_type[idx])
                 rows.append(

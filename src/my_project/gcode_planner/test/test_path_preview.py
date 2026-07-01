@@ -41,6 +41,10 @@ def _write_npz(path: Path, **arrays):
             dtype="S32",
         ),
         layer_index=np.array(arrays["layer_index"], dtype=np.uint32),
+        preview_layer_index=np.array(
+            arrays.get("preview_layer_index", arrays["layer_index"]),
+            dtype=np.int32,
+        ),
         total_layers=np.array([2] * len(arrays["x"]), dtype=np.uint32),
         move_type_vocab_keys=np.array(
             [b"TRAVEL", b"PRINT", b"TRAVEL_FIT", b"PRINT_FIT", b"EVENT"],
@@ -256,7 +260,8 @@ def test_legacy_custom_paths_are_routed_by_layer_height(tmp_path):
     for npz_path in root.glob("layer_*/*.npz"):
         with np.load(str(npz_path)) as data:
             arrays = {name: data[name] for name in data.files}
-        arrays.pop("layer_index")
+        arrays.pop("layer_index", None)
+        arrays.pop("preview_layer_index", None)
         np.savez_compressed(str(npz_path), **arrays)
 
     layer0_paths = extract_layer_preview_paths(root, 0)
@@ -318,7 +323,8 @@ def test_legacy_split_paths_are_split_by_physical_z_layers(tmp_path):
     for npz_path in root.glob("layer_*/*.npz"):
         with np.load(str(npz_path)) as data:
             arrays = {name: data[name] for name in data.files}
-        arrays.pop("layer_index")
+        arrays.pop("layer_index", None)
+        arrays.pop("preview_layer_index", None)
         np.savez_compressed(str(npz_path), **arrays)
 
     assert list_preview_layers(root) == [0, 1]
@@ -340,6 +346,36 @@ def test_legacy_split_paths_are_split_by_physical_z_layers(tmp_path):
     assert layer1_z == {1.0}
 
 
+def test_list_preview_layers_prefers_npz_layer_indices_over_stale_preview_images(tmp_path):
+    from gcode_planner.path_preview import (
+        extract_layer_preview_paths,
+        list_preview_layers,
+    )
+
+    root = tmp_path / "modern_job"
+    _write_npz(
+        root / "modern_job.npz",
+        x=[0, 1, 2, 3],
+        y=[0, 0, 0, 0],
+        z=[0.2, 0.2, 0.4, 0.4],
+        e=[0.0, 0.2, 0.4, 0.6],
+        tool_id=[2, 2, 2, 2],
+        move_type=[1, 1, 1, 1],
+        src_line=["1", "2", "3", "4"],
+        layer_index=[0, 0, 1, 1],
+        preview_layer_index=[-4, -4, -3, -3],
+    )
+    preview_dir = root / "layer_previews"
+    preview_dir.mkdir(parents=True)
+    for name in ("layer_-004.png", "layer_-003.png", "layer_0000.png"):
+        (preview_dir / name).write_bytes(b"stale")
+
+    assert list_preview_layers(root) == [0, 1]
+    layer0_paths = extract_layer_preview_paths(root, 0)
+    assert layer0_paths
+    assert {round(point[2], 6) for path in layer0_paths for point in path.points} == {0.2}
+
+
 def test_extract_preview_paths_can_limit_returned_paths(tmp_path):
     from gcode_planner.path_preview import extract_layer_preview_paths
 
@@ -359,6 +395,31 @@ def test_extract_preview_paths_can_limit_returned_paths(tmp_path):
     paths = extract_layer_preview_paths(root, 0, max_paths=2)
 
     assert len(paths) == 2
+
+
+def test_extract_preview_paths_can_downsample_large_layers_before_building_rows(tmp_path):
+    from gcode_planner.path_preview import extract_layer_preview_paths
+
+    root = tmp_path / "large_layer"
+    count = 101
+    _write_npz(
+        root / "large_layer.npz",
+        x=list(range(count)),
+        y=[0.0] * count,
+        z=[0.2] * count,
+        e=[float(i) * 0.1 for i in range(count)],
+        tool_id=[2] * count,
+        move_type=[1] * count,
+        src_line=[str(i) for i in range(count)],
+        layer_index=[0] * count,
+    )
+
+    paths = extract_layer_preview_paths(root, 0, max_rows=11)
+
+    assert len(paths) == 1
+    assert len(paths[0].points) <= 11
+    assert paths[0].start == pytest.approx((0.0, 0.0, 0.2))
+    assert paths[0].end == pytest.approx((100.0, 0.0, 0.2))
 
 
 def test_zero_length_print_paths_are_omitted(tmp_path):

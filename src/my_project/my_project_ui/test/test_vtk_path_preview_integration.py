@@ -88,6 +88,7 @@ def test_vtk_path_preview_loads_npz_data_on_background_threads():
     assert (
         "extract_layer_preview_paths(" in src
         and "max_paths=2000" in src
+        and "max_rows=120000" in src
     )
 
 
@@ -99,6 +100,28 @@ def test_vtk_path_preview_groups_paths_into_few_vtk_actors():
     assert "def _actor_for_paths" in src
     assert "_MAX_POINTS_PER_PATH" in src
     assert "def _sample_points" in src
+
+
+def test_vtk_path_preview_caps_render_geometry_for_large_npz_layers():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "_MAX_RENDER_POINTS_PER_ACTOR" in src
+    assert "_MAX_BEAD_SEGMENTS_PER_ACTOR" in src
+    assert "def _sample_limit_for_paths" in src
+    assert "def _sample_points(points, max_points=_MAX_POINTS_PER_PATH)" in src
+
+    bead_block = src.split("    def _bead_actor_for_paths", 1)[1].split(
+        "    def _line_actor_for_paths", 1
+    )[0]
+    line_block = src.split("    def _line_actor_for_paths", 1)[1].split(
+        "    def _base_plane_actors", 1
+    )[0]
+    assert "sample_limit = _sample_limit_for_paths(" in bead_block
+    assert "_MAX_BEAD_SEGMENTS_PER_ACTOR" in bead_block
+    assert "_sample_points(path.points, max_points=sample_limit)" in bead_block
+    assert "sample_limit = _sample_limit_for_paths(" in line_block
+    assert "_MAX_RENDER_POINTS_PER_ACTOR" in line_block
+    assert "_sample_points(path.points, max_points=sample_limit)" in line_block
 
 
 def test_vtk_path_preview_defaults_to_complete_print_paths_and_trackball():

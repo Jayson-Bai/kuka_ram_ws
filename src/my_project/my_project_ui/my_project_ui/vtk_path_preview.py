@@ -22,6 +22,8 @@ from gcode_planner.path_preview import (
 
 
 _MAX_POINTS_PER_PATH = 1000
+_MAX_RENDER_POINTS_PER_ACTOR = 50000
+_MAX_BEAD_SEGMENTS_PER_ACTOR = 25000
 _FIXED_PLANE_SIZE_MM = 500.0
 _FIXED_PLANE_GRID_STEP_MM = 50.0
 _BEAD_DIMENSIONS_MM = {
@@ -93,14 +95,22 @@ def _load_vtk_modules():
     }
 
 
-def _sample_points(points):
-    if len(points) <= _MAX_POINTS_PER_PATH:
+def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
+    max_points = max(2, int(max_points))
+    if len(points) <= max_points:
         return points
-    step = max(1, len(points) // _MAX_POINTS_PER_PATH)
+    step = max(1, math.ceil(len(points) / max_points))
     sampled = points[::step]
     if sampled[-1] != points[-1]:
         sampled = sampled + (points[-1],)
     return sampled
+
+
+def _sample_limit_for_paths(paths, total_points):
+    if not paths:
+        return _MAX_POINTS_PER_PATH
+    per_path_budget = int(total_points) // max(1, len(paths))
+    return max(2, min(_MAX_POINTS_PER_PATH, per_path_budget))
 
 
 class VtkPathPreviewDialog(QtWidgets.QDialog):
@@ -326,6 +336,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                     self._npz_root,
                     layer,
                     max_paths=2000,
+                    max_rows=120000,
                 )
                 self._paths_loaded.emit(layer, paths, None)
             except Exception as exc:
@@ -459,6 +470,10 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
     ):
         width, height = _BEAD_DIMENSIONS_MM[path_type]
         half_width = width / 2.0
+        sample_limit = _sample_limit_for_paths(
+            paths,
+            _MAX_BEAD_SEGMENTS_PER_ACTOR,
+        )
         vtk_points = self._vtk["vtkPoints"]()
         cells = self._vtk["vtkCellArray"]()
         point_index = 0
@@ -486,7 +501,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         for path in paths:
             points = [
                 self._display_point_for_path(path, point)
-                for point in _sample_points(path.points)
+                for point in _sample_points(path.points, max_points=sample_limit)
             ]
             if len(points) < 2:
                 continue
@@ -537,12 +552,16 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         path_type: PathType,
         paths: list[PreviewPath],
     ):
+        sample_limit = _sample_limit_for_paths(
+            paths,
+            _MAX_RENDER_POINTS_PER_ACTOR,
+        )
         vtk_points = self._vtk["vtkPoints"]()
         cells = self._vtk["vtkCellArray"]()
         point_index = 0
 
         for path in paths:
-            points = _sample_points(path.points)
+            points = _sample_points(path.points, max_points=sample_limit)
             if not points:
                 continue
             polyline = self._vtk["vtkPolyLine"]()
