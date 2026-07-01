@@ -8,7 +8,7 @@ from external_npz_preprocessor.process_params import (
     ResinProcessParams,
 )
 from external_npz_preprocessor.source_npz import LayerPaths, MaterialPath, SourceJob
-from path_processing_core.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
+from path_processing_core.types import ExtrudeWait, MCommand, MoveCommand, ResetECommand, ToolChangeCommand
 
 
 def _params():
@@ -79,7 +79,7 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert print_moves[1].layer == 0
 
 
-def test_adds_test_mode_prime_and_retract_waits_for_material_paths():
+def test_adds_retract_then_prime_before_and_after_every_material_path():
     job = SourceJob(
         meta={},
         layers=[
@@ -114,12 +114,88 @@ def test_adds_test_mode_prime_and_retract_waits_for_material_paths():
     waits = [cmd for cmd in source_job_to_parsed_commands(job, ProcessParams()) if isinstance(cmd, ExtrudeWait)]
 
     assert [(cmd.delta_e, cmd.feedrate, cmd.subtype) for cmd in waits] == [
+        (-15.0, 1800.0, "RESIN_PRINT"),
         (18.0, 900.0, "RESIN_PRINT"),
         (-15.0, 1800.0, "RESIN_PRINT"),
+        (18.0, 900.0, "RESIN_PRINT"),
+        (-10.0, 300.0, "FIBER_PRINT"),
+        (12.0, 300.0, "FIBER_PRINT"),
         (-10.0, 300.0, "FIBER_PRINT"),
         (12.0, 300.0, "FIBER_PRINT"),
     ]
-    assert [round(cmd.wait_sec, 6) for cmd in waits] == [1.2, 0.5, 2.0, 2.4]
+    assert [round(cmd.wait_sec, 6) for cmd in waits] == [
+        0.5,
+        1.2,
+        0.5,
+        1.2,
+        2.0,
+        2.4,
+        2.0,
+        2.4,
+    ]
+
+
+def test_initializes_both_heads_before_first_path_and_resets_after_tool_change():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [[0.0, 0.0, 0.5, 0.0, 0.0, 0.0],
+                             [10.0, 0.0, 0.5, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[
+                    MaterialPath(
+                        material="F",
+                        order=0,
+                        points=np.array(
+                            [[10.0, 0.0, 0.6, 0.0, 0.0, 0.0],
+                             [20.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+            )
+        ],
+    )
+
+    commands = source_job_to_parsed_commands(job, ProcessParams())
+
+    startup_events = [cmd for cmd in commands[:4] if isinstance(cmd, MCommand)]
+    assert [(cmd.code, cmd.tool, cmd.params) for cmd in startup_events] == [
+        ("M106", 1, {"T": 1.0}),
+        ("M106", 0, {"T": 0.0}),
+        ("M104", 1, {"S": 250.0, "T": 1.0}),
+        ("M104", 0, {"S": 250.0, "T": 0.0}),
+    ]
+
+    command_kinds = [
+        type(cmd).__name__
+        for cmd in commands
+        if isinstance(cmd, (MCommand, ToolChangeCommand, ResetECommand))
+    ]
+    assert command_kinds[:6] == [
+        "MCommand",
+        "MCommand",
+        "MCommand",
+        "MCommand",
+        "ToolChangeCommand",
+        "ResetECommand",
+    ]
+
+    fiber_tool_idx = next(
+        idx for idx, cmd in enumerate(commands)
+        if isinstance(cmd, ToolChangeCommand) and cmd.tool == 0
+    )
+    assert isinstance(commands[fiber_tool_idx + 1], ResetECommand)
 
 
 def test_process_layer_heights_are_extrusion_references_only_not_z_generation():

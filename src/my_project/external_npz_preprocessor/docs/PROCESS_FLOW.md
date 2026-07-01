@@ -80,40 +80,41 @@ tool_change_resin
 
 ## 5. 加热和风扇事件
 
-每次工具切换后，preprocessor 会插入当前材料的工艺事件：
+preprocessor 会在命令序列开头插入两个喷头的启动工艺事件，使系统开始执行 NPZ 后先让树脂/纤维风扇进入目标状态，并把两个喷头加热到配置温度：
 
 ```text
-M104 T<tool> S<temperature>
-M106 T<tool> 或 M107 T<tool>
+M106 T1 或 M107 T1
+M106 T0 或 M107 T0
+M104 T1 S<resin_temperature>
+M104 T0 S<fiber_temperature>
 ```
 
 具体规则：
 
+- 风扇事件总是在路径前插入；树脂/纤维风扇默认开启。
 - 温度 `temperature_c > 0` 时插入 `M104`。
-- 风扇开启时插入 `M106`，关闭时插入 `M107`。
 - 树脂默认温度 `250 C`，纤维默认温度 `250 C`。
-- 树脂/纤维风扇默认开启。
 
 `npz_exporter` 会把这些 `MCommand` 转成系统 NPZ 事件：
 
 ```text
-heat_resin
-heat_cf
 fan_resin
 fan_cf
+heat_resin
+heat_cf
 ```
 
 事件 payload 中保存温度或风扇开关状态。
 
 ## 6. 挤出量重置
 
-每条独立路径打印前，preprocessor 都会插入：
+preprocessor 参照既有 GCode 工具切换位置，在每次 `ToolChangeCommand` 后立即插入：
 
 ```text
 ResetECommand(type="RESET_E", val=0.0, raw="G92 E0")
 ```
 
-这会让每条路径从局部 `E=0` 开始累计。`npz_exporter` 会把它写成系统 NPZ 事件：
+这会让每个工具切换后的挤出从 `E=0` 开始累计；同一工具连续打印多条路径时，E 会沿该工具继续累计，不在路径之间无事件回零。`npz_exporter` 会把它写成系统 NPZ 事件：
 
 ```text
 extrude_reset
@@ -127,44 +128,26 @@ extrude_reset
 enable_extrude_wait=True
 ```
 
-### 树脂路径
+### 路径前后统一规则
 
-树脂路径打印前插入预挤出：
-
-```text
-ExtrudeWait(delta_e=+resin.prime_length_mm, feedrate=resin.prime_speed_mm_s * 60)
-```
-
-树脂路径打印后插入回抽：
+每条树脂/纤维打印路径的前后都会插入一组原地等待段，顺序固定为先回抽、再预挤出。第一条路径也执行同样规则：
 
 ```text
-ExtrudeWait(delta_e=-resin.retract_length_mm, feedrate=resin.retract_speed_mm_s * 60)
+ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
+ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
+PRINT path
+ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
+ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
 ```
 
 当前默认值：
 
 ```text
-树脂预挤出: 18 mm @ 15 mm/s
 树脂回抽:   15 mm @ 30 mm/s
-```
-
-### 纤维路径
-
-纤维路径打印前先插入预回抽，再插入预挤出：
-
-```text
-ExtrudeWait(delta_e=-fiber.retract_length_mm, feedrate=fiber.retract_speed_mm_s * 60)
-ExtrudeWait(delta_e=+fiber.prime_length_mm,   feedrate=fiber.prime_speed_mm_s * 60)
-```
-
-当前默认值：
-
-```text
-纤维预回抽: 10 mm @ 5 mm/s
+树脂预挤出: 18 mm @ 15 mm/s
+纤维回抽:   10 mm @ 5 mm/s
 纤维预挤出: 12 mm @ 5 mm/s
 ```
-
-纤维路径打印后目前不额外插入后置回抽。
 
 ## 8. 打印路径和挤出量计算
 
@@ -175,7 +158,7 @@ start_pos = 上一点
 pos       = 下一点
 feedrate  = 材料打印速度 * 60
 delta_e   = 三维路径长度 * e_per_mm
-e_val     = 当前路径内累计 E
+e_val     = 当前工具内累计 E
 ```
 
 路径长度使用三维距离：

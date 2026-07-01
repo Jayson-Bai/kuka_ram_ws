@@ -40,6 +40,13 @@
 - Kept `external_npz_preprocessor` as the agreed source NPZ adapter; it converts source NPZ paths into `path_processing_core.types` commands and exports through `path_processing_core.npz_exporter`.
 - Formal-print compatible input now supports `.gcode/.gc/.g` through `gcode_planner` and agreed `.npz` through `external_npz_preprocessor`; both paths converge in `path_processing_core`.
 
+## 2026-07-01 Event Ordering Update
+
+- Source NPZ conversion now starts with both-head fan and heat events.
+- ResetE is inserted immediately after tool changes, matching the established GCode placement.
+- Every resin/fiber print path now receives `retract -> prime` before and after the path, including the first path.
+- Shared head-offset behavior was left unchanged.
+
 Verification:
 
 ```bash

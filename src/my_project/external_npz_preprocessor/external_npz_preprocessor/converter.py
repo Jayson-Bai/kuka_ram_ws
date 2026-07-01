@@ -29,7 +29,10 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     commands: ParsedCommandList = []
     current_pose: Position | None = None
     current_tool: int | None = None
+    current_e = 0.0
     line = 0
+
+    line = _append_startup_head_events(commands, params, line)
 
     for layer in job.layers:
         ordered_paths: list[MaterialPath] = []
@@ -38,6 +41,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
         for material_path in ordered_paths:
             tool = _tool_for_material(material_path.material)
             subtype = _subtype_for_material(material_path.material)
+            first_pose = _position_from_row(material_path.points[0])
             if current_tool != tool:
                 commands.append(
                     ToolChangeCommand(
@@ -50,11 +54,21 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                     )
                 )
                 line += 1
-                _append_material_events(commands, material_path.material, params, line, layer.index, subtype)
-                line += 2
+                commands.append(
+                    ResetECommand(
+                        type="RESET_E",
+                        val=0.0,
+                        line=line,
+                        layer=layer.index,
+                        subtype=subtype,
+                        raw="G92 E0",
+                        pose=first_pose,
+                    )
+                )
+                line += 1
                 current_tool = tool
+                current_e = 0.0
 
-            first_pose = _position_from_row(material_path.points[0])
             if current_pose is not None and _distance(current_pose, first_pose) > _EPS:
                 commands.append(
                     MoveCommand(
@@ -62,7 +76,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                         cmd="G0",
                         start_pos=current_pose,
                         pos=first_pose,
-                        e_val=0.0,
+                        e_val=current_e,
                         delta_e=0.0,
                         feedrate=float(params.travel_feed_mm_s) * 60.0,
                         line=line,
@@ -73,24 +87,11 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 )
                 line += 1
 
-            commands.append(
-                ResetECommand(
-                    type="RESET_E",
-                    val=0.0,
-                    line=line,
-                    layer=layer.index,
-                    subtype=subtype,
-                    raw="G92 E0",
-                    pose=first_pose,
-                )
-            )
-            line += 1
-            current_e = 0.0
             e_per_mm = _e_per_mm_for_material(material_path.material, params)
             feedrate = _feed_mm_s_for_material(material_path.material, params) * 60.0
             previous_pose = first_pose
 
-            for wait in _pre_path_extrude_waits(material_path.material, params, line, layer.index, subtype):
+            for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
                 commands.append(wait)
                 current_e += wait.delta_e
                 line += 1
@@ -118,7 +119,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 line += 1
                 previous_pose = next_pose
 
-            for wait in _post_path_extrude_waits(material_path.material, params, line, layer.index, subtype):
+            for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
                 commands.append(wait)
                 current_e += wait.delta_e
                 line += 1
@@ -128,32 +129,33 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     return commands
 
 
-def _pre_path_extrude_waits(
+def _path_retract_prime_waits(
     material: str,
     params: ProcessParams,
     line: int,
     layer: int,
     subtype: str,
 ) -> list[ExtrudeWait]:
-    waits: list[ExtrudeWait] = []
-    if material == "F":
-        retract = _make_extrude_wait(
-            delta_e=-float(params.fiber.retract_length_mm),
-            speed_mm_s=float(params.fiber.retract_speed_mm_s),
-            line=line,
-            layer=layer,
-            subtype=subtype,
-            raw="external_npz_fiber_pre_retract",
-        )
-        if retract is not None:
-            waits.append(retract)
-            line += 1
     if material == "R":
         process = params.resin
     elif material == "F":
         process = params.fiber
     else:
         raise ValueError(f"unknown material: {material}")
+
+    waits: list[ExtrudeWait] = []
+    retract = _make_extrude_wait(
+        delta_e=-float(process.retract_length_mm),
+        speed_mm_s=float(process.retract_speed_mm_s),
+        line=line,
+        layer=layer,
+        subtype=subtype,
+        raw="external_npz_retract",
+    )
+    if retract is not None:
+        waits.append(retract)
+        line += 1
+
     prime = _make_extrude_wait(
         delta_e=float(process.prime_length_mm),
         speed_mm_s=float(process.prime_speed_mm_s),
@@ -165,26 +167,6 @@ def _pre_path_extrude_waits(
     if prime is not None:
         waits.append(prime)
     return waits
-
-
-def _post_path_extrude_waits(
-    material: str,
-    params: ProcessParams,
-    line: int,
-    layer: int,
-    subtype: str,
-) -> list[ExtrudeWait]:
-    if material != "R":
-        return []
-    wait = _make_extrude_wait(
-        delta_e=-float(params.resin.retract_length_mm),
-        speed_mm_s=float(params.resin.retract_speed_mm_s),
-        line=line,
-        layer=layer,
-        subtype=subtype,
-        raw="external_npz_resin_retract",
-    )
-    return [] if wait is None else [wait]
 
 
 def _make_extrude_wait(
@@ -259,43 +241,38 @@ def _feed_mm_s_for_material(material: str, params: ProcessParams) -> float:
     raise ValueError(f"unknown material: {material}")
 
 
-def _append_material_events(
-    commands: ParsedCommandList,
-    material: str,
-    params: ProcessParams,
-    line: int,
-    layer: int,
-    subtype: str,
-) -> None:
-    if material == "R":
-        process = params.resin
-        gcode_tool = _RESIN_GCODE_TOOL
-    else:
-        process = params.fiber
-        gcode_tool = _FIBER_GCODE_TOOL
-    if process.temperature_c > 0:
-        commands.append(
-            MCommand(
-                type="M_COMMAND",
-                code="M104",
-                params={"S": float(process.temperature_c), "T": float(gcode_tool)},
-                line=line,
-                layer=layer,
-                subtype=subtype,
-                raw=f"M104 T{gcode_tool} S{process.temperature_c}",
-                tool=gcode_tool,
+def _append_startup_head_events(commands: ParsedCommandList, params: ProcessParams, line: int) -> int:
+    for material, code in (("R", "M106"), ("F", "M106"), ("R", "M104"), ("F", "M104")):
+        process = params.resin if material == "R" else params.fiber
+        gcode_tool = _tool_for_material(material)
+        subtype = _subtype_for_material(material)
+        if code == "M104":
+            if process.temperature_c <= 0:
+                continue
+            commands.append(
+                MCommand(
+                    type="M_COMMAND",
+                    code="M104",
+                    params={"S": float(process.temperature_c), "T": float(gcode_tool)},
+                    line=line,
+                    layer=0,
+                    subtype=subtype,
+                    raw=f"M104 T{gcode_tool} S{process.temperature_c}",
+                    tool=gcode_tool,
+                )
             )
-        )
-    commands.append(
-        MCommand(
-            type="M_COMMAND",
-            code="M106" if process.fan_enabled else "M107",
-            params={"T": float(gcode_tool)},
-            line=line + 1,
-            layer=layer,
-            subtype=subtype,
-            raw=("M106" if process.fan_enabled else "M107") + f" T{gcode_tool}",
-            tool=gcode_tool,
-        )
-    )
-
+        else:
+            commands.append(
+                MCommand(
+                    type="M_COMMAND",
+                    code="M106" if process.fan_enabled else "M107",
+                    params={"T": float(gcode_tool)},
+                    line=line,
+                    layer=0,
+                    subtype=subtype,
+                    raw=("M106" if process.fan_enabled else "M107") + f" T{gcode_tool}",
+                    tool=gcode_tool,
+                )
+            )
+        line += 1
+    return line
