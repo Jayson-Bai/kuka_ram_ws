@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from gcode_planner.head_calibration import (
+from path_processing_core.head_calibration import (
     DEFAULT_DATA_ROOT,
     DEFAULT_HEAD_CALIBRATION_PATH,
     load_head_calibration,
 )
-from gcode_planner.npz_exporter import export_npz
+from path_processing_core.npz_exporter import export_npz
 
 from .converter import source_job_to_parsed_commands
 from .process_params import ProcessParams

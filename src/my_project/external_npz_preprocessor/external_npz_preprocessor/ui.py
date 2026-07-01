@@ -15,7 +15,7 @@ from .export_runner import (
     load_shared_export_offsets,
     resolve_output_path,
 )
-from gcode_planner.head_calibration import DEFAULT_HEAD_CALIBRATION_PATH
+from path_processing_core.head_calibration import DEFAULT_HEAD_CALIBRATION_PATH
 
 from .param_config import default_print_params_path, load_print_params, save_print_params
 from .process_params import (

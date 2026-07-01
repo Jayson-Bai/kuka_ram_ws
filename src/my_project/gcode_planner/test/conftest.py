@@ -1,5 +1,13 @@
 import sys
+from pathlib import Path
 import types
+
+
+ROOT = Path(__file__).resolve().parents[2]
+for package in ("gcode_planner", "path_processing_core"):
+    path = ROOT / package
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 
 if "rclpy" not in sys.modules:

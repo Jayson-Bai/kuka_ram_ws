@@ -15,6 +15,7 @@ setup(
         'setuptools',
         'numpy',
         'rclpy',
+        'path_processing_core',
     ],
     zip_safe=True,
     maintainer='jayson',

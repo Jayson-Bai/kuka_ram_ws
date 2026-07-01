@@ -9,8 +9,8 @@
 -> load_source_npz()
 -> SourceJob / LayerPaths / MaterialPath
 -> source_job_to_parsed_commands()
--> gcode_planner.types 命令序列
--> gcode_planner.npz_exporter.export_npz()
+-> path_processing_core.types 命令序列
+-> path_processing_core.npz_exporter.export_npz()
 -> 系统可用 NPZ
 ```
 

@@ -8,7 +8,7 @@ from external_npz_preprocessor.process_params import (
     ResinProcessParams,
 )
 from external_npz_preprocessor.source_npz import LayerPaths, MaterialPath, SourceJob
-from gcode_planner.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
+from path_processing_core.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
 
 
 def _params():

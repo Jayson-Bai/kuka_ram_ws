@@ -6,7 +6,7 @@ import math
 
 import numpy as np
 
-from gcode_planner.types import (
+from path_processing_core.types import (
     ExtrudeWait,
     MCommand,
     MoveCommand,

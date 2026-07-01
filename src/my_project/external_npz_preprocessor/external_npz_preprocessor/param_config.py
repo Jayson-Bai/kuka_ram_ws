@@ -7,7 +7,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from gcode_planner.head_calibration import DEFAULT_DATA_ROOT
+from path_processing_core.head_calibration import DEFAULT_DATA_ROOT
 
 from .process_params import FiberProcessParams, ProcessParams, ResinProcessParams
 

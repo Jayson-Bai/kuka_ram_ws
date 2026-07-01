@@ -3,8 +3,8 @@
 ## 2026-06-29 Initial Framework
 
 - Created `external_npz_preprocessor` as a standalone `ament_python` package under `src/my_project`.
-- Added source NPZ loading, process parameters, conversion to `gcode_planner.types`, CLI, Qt UI, and tests.
-- Kept system NPZ writing centralized through `gcode_planner.npz_exporter.export_npz()`.
+- Added source NPZ loading, process parameters, conversion to `path_processing_core.types`, CLI, Qt UI, and tests.
+- Kept system NPZ writing centralized through `path_processing_core.npz_exporter.export_npz()`.
 
 ## 2026-06-29 Parameter Defaults and Persistence
 

@@ -2,18 +2,18 @@
 
 ## Goal
 
-This package converts an external geometry-only NPZ into the system NPZ format consumed by `control_center`, while always going through `gcode_planner.npz_exporter.export_npz()`.
+This package converts an external geometry-only NPZ into the system NPZ format consumed by `control_center`, while always going through `path_processing_core.npz_exporter.export_npz()`.
 
 ## Package Boundary
 
 - `source_npz.py`: reads and validates the external source NPZ contract.
 - `process_params.py`: defines material process parameters and derives extrusion.
-- `converter.py`: converts layer/material paths into `gcode_planner.types` parsed commands.
+- `converter.py`: converts layer/material paths into `path_processing_core.types` parsed commands.
 - `export_runner.py`: connects reader, converter, and `npz_exporter`.
 - `cli.py`: batch conversion entry point.
 - `ui.py` / `app.py`: simple desktop UI for selecting paths and parameters.
 
-The package is intentionally separate from `gcode_planner` and `my_project_ui`. It depends on `gcode_planner`, but does not change the system NPZ exporter.
+The package is intentionally separate from `gcode_planner` and `my_project_ui`. It depends on `path_processing_core`, while `gcode_planner` keeps the GCode-specific input path and legacy import wrappers.
 
 ## Data Flow
 
@@ -23,7 +23,7 @@ external source NPZ
 -> SourceJob / LayerPaths / MaterialPath
 -> source_job_to_parsed_commands()
 -> MoveCommand / ToolChangeCommand / ResetECommand / MCommand
--> gcode_planner.npz_exporter.export_npz()
+-> path_processing_core.npz_exporter.export_npz()
 -> system-compatible NPZ
 ```
 

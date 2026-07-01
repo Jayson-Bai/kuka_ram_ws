@@ -87,7 +87,7 @@ External NPZ conversion uses the same head-offset data source as test mode and f
 data/head_calibration_offsets/head_offsets.json
 ```
 
-The converter reads this through `gcode_planner.head_calibration.load_head_calibration()`. During export it mirrors the formal-print path:
+The converter reads this through `path_processing_core.head_calibration.load_head_calibration()`. During export it mirrors the formal-print path:
 
 ```text
 tool_offset = (fiber_x_print_compensation_mm,
@@ -96,4 +96,4 @@ tool_offset = (fiber_x_print_compensation_mm,
 resin_z_print_compensation_mm = resin.z_print_compensation_mm
 ```
 
-These values are passed directly to `npz_exporter.export_npz()`, so tool switching and resin-Z compensation stay centralized in the existing exporter logic.
+These values are passed directly to `path_processing_core.npz_exporter.export_npz()`, so tool switching and resin-Z compensation stay centralized in the shared exporter logic.
