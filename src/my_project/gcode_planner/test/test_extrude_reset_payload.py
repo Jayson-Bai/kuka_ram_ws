@@ -2,10 +2,10 @@ import json
 
 import numpy as np
 
-import gcode_planner.npz_exporter as npz_exporter
+import path_processing_core.npz_exporter as npz_exporter
 from gcode_planner.cli import _default_output_path
-from gcode_planner.npz_exporter import export_npz
-from gcode_planner.types import (
+from path_processing_core.npz_exporter import export_npz
+from path_processing_core.types import (
     ExtrudeWait,
     MoveCommand,
     Position,

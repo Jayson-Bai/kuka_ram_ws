@@ -1,5 +1,5 @@
 from gcode_planner.gcode_parser import parse_gcode_lines
-from gcode_planner.types import MoveCommand
+from path_processing_core.types import MoveCommand
 
 
 def test_g92_xyzabc_initializes_pose_without_motion():

@@ -17,7 +17,7 @@ from std_msgs.msg import String as StringMsg
 import re
 from pathlib import Path
 
-from gcode_planner.head_calibration import (
+from path_processing_core.head_calibration import (
     DEFAULT_DATA_ROOT,
     DEFAULT_HEAD_CALIBRATION_PATH,
     HeadCalibration,
@@ -4183,7 +4183,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         def _worker():
             try:
                 from gcode_planner.gcode_parser import parse_gcode_lines
-                from gcode_planner.npz_exporter import export_npz
+                from path_processing_core.npz_exporter import export_npz
                 from gcode_planner.print_test_generator import (
                     format_gcode,
                     generate_composite_test_matrix_gcode,
@@ -4471,7 +4471,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 elif source_ext in (".gcode", ".gc", ".g"):
                     self.export_progress.emit("读取 GCode...")
                     from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
-                    from gcode_planner.npz_exporter import export_npz
+                    from path_processing_core.npz_exporter import export_npz
 
                     lines = load_gcode_lines(source_path)
                     self.export_progress.emit("解析 GCode...")

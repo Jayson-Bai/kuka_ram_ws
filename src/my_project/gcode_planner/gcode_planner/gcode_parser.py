@@ -8,7 +8,7 @@ from typing import List
 import rclpy
 from rclpy.node import Node
 
-from .types import (
+from path_processing_core.types import (
     Position,
     MoveCommand,
     ExtrudeWait,

@@ -2,7 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from gcode_planner.head_calibration import (
+from path_processing_core.head_calibration import (
     DEFAULT_HEAD_CALIBRATION,
     DEFAULT_DATA_ROOT,
     DEFAULT_HEAD_CALIBRATION_PATH,

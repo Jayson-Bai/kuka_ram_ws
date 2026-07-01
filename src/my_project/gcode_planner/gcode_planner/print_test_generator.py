@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 from typing import Iterable, Sequence
 
-from gcode_planner.head_calibration import HeadCalibration
+from path_processing_core.head_calibration import HeadCalibration
 
 
 FIBER_TOOL_ID = 1

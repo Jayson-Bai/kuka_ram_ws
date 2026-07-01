@@ -13,7 +13,7 @@ from .gcode_parser import (
     _select_default_gcode_file,
     default_data_root,
 )
-from .npz_exporter import export_npz
+from path_processing_core.npz_exporter import export_npz
 
 
 def _default_output_path(gcode_path: str, output_dir: str) -> str:

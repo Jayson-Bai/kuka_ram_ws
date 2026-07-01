@@ -2,8 +2,8 @@ import math
 import numpy as np
 
 from gcode_planner.gcode_parser import parse_gcode_lines
-from gcode_planner.head_calibration import HeadCalibration
-from gcode_planner.npz_exporter import export_npz
+from path_processing_core.head_calibration import HeadCalibration
+from path_processing_core.npz_exporter import export_npz
 from gcode_planner.print_test_generator import (
     EXTRUSION_PER_MM3,
     FIBER_GCODE_TOOL,
@@ -18,7 +18,7 @@ from gcode_planner.print_test_generator import (
     generate_test_line_gcode,
     generate_z_adjust_gcode,
 )
-from gcode_planner.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
+from path_processing_core.types import ExtrudeWait, MoveCommand, ResetECommand, ToolChangeCommand
 
 
 def _moves(lines):
