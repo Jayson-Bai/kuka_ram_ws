@@ -42,7 +42,7 @@ Nx3 input is normalized to Nx6 by appending the configured default `a/b/c`. Nx2/
 
 Source Z is the geometry truth. This is required for curved-surface slicing where Z can vary within one layer path. UI layer-height values are process references only: resin layer height participates in resin extrusion calculation, and fiber layer height is retained as a fiber process parameter. Neither value changes the imported trajectory Z.
 
-Shared head offsets and tool-change compensation are still applied by the existing `npz_exporter` during system NPZ export.
+Shared head offsets and tool-change compensation are applied by `path_processing_core.npz_exporter` during system NPZ export.
 
 ## Meta
 

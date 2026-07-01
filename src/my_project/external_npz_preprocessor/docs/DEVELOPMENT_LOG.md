@@ -32,6 +32,14 @@
 - Re-scoped resin/fiber layer-height UI values as process/extrusion references, not trajectory-height generators.
 - Updated the generated template to numeric XYZ arrays so it remains readable with `allow_pickle=False`.
 
+
+## 2026-07-01 Core Extraction and Dual Input
+
+- Moved shared exporter, command types, head calibration, B-spline fitting, polynomial interpolation, and B-spline base modules into `path_processing_core`.
+- Kept `gcode_planner` as the GCode input adapter, preview helper owner, and legacy import compatibility package.
+- Kept `external_npz_preprocessor` as the agreed source NPZ adapter; it converts source NPZ paths into `path_processing_core.types` commands and exports through `path_processing_core.npz_exporter`.
+- Formal-print compatible input now supports `.gcode/.gc/.g` through `gcode_planner` and agreed `.npz` through `external_npz_preprocessor`; both paths converge in `path_processing_core`.
+
 Verification:
 
 ```bash

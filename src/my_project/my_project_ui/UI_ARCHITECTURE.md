@@ -15,7 +15,7 @@
 - **实时状态监控**: 订阅 `/ui/status` 话题，展示系统运行状态的完整快照
 - **参数在线调节**: 通过 ROS 2 Parameter Service 远程修改 `uart_node` 的 `extrude_scale` 参数
 - **状态可视化**: 对各子系统的健康状态进行颜色编码，便于操作员快速判断
-- **测试与正式打印入口**: 支持测试模式的喷头标定/矩阵打印，以及正式打印的 GCode 到 NPZ 导出与启动前偏移校验
+- **测试与正式打印入口**: 支持测试模式的喷头标定/矩阵打印，以及正式打印的 GCode/约定源 NPZ 到系统 NPZ 导出与启动前偏移校验
 
 ### 技术栈
 
@@ -300,6 +300,13 @@ sequenceDiagram
 - 人工进入纤维标定前，必须先规划回 RSI 全 0 correction，确认到位后再发送 `tool_change_cf` 切换纤维头
 - 纤维偏置应用、纤维矩阵、复合矩阵和剪切动作都要求当前工具为 CF/纤维头
 - 剪切按钮仅在当前工具为 CF/纤维头时发送预留 UART 命令 `EV 0 cut_cf`；否则只在 UI 显示拒绝状态，不下发 UART 命令
+
+**正式打印输入适配**:
+
+- 正式打印源文件选择支持 `.gcode/.gc/.g` 和约定格式 `.npz` 两类输入
+- GCode 输入走 `gcode_planner.gcode_parser`，约定源 NPZ 输入走 `external_npz_preprocessor`
+- 两条链路最终都调用 `path_processing_core.npz_exporter.export_npz()` 写出系统 NPZ，UI 只负责路由、参数收集和偏置一致性校验
+- 三维预览仍使用 `gcode_planner.path_preview` 提取系统 NPZ 中的预览路径，并优先按 `preview_layer_index` 分层
 
 **正式打印导出约束**:
 

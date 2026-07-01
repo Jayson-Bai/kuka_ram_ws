@@ -14,7 +14,7 @@
 -> 系统可用 NPZ
 ```
 
-核心原则：最终系统 NPZ 必须通过 `npz_exporter.export_npz()` 写出，preprocessor 只负责把外部路径转换成 exporter 已支持的命令序列。
+核心原则：最终系统 NPZ 必须通过 `path_processing_core.npz_exporter.export_npz()` 写出，preprocessor 只负责把外部路径转换成 exporter 已支持的命令序列。
 
 ## 2. 源 NPZ 读取
 
@@ -260,7 +260,7 @@ export_npz(
 )
 ```
 
-因此，工具切换补偿、树脂 Z 补偿、事件编码、采样和系统 NPZ 字段写入，都由现有 `npz_exporter` 统一完成。
+因此，工具切换补偿、树脂 Z 补偿、事件编码、采样和系统 NPZ 字段写入，都由 `path_processing_core.npz_exporter` 统一完成。
 
 ## 11. 默认路径
 
@@ -283,3 +283,15 @@ data/external_npz_preprocessor/print_params.json
 ```
 
 这些路径都基于项目共享的 `DEFAULT_DATA_ROOT` 推导，不在代码中写死工作区绝对路径。
+
+
+## 12. 与 GCode 输入的关系
+
+正式打印 UI 的源文件选择支持两条输入分支：
+
+```text
+.gcode / .gc / .g -> gcode_planner.gcode_parser -> path_processing_core.npz_exporter
+.npz              -> external_npz_preprocessor   -> path_processing_core.npz_exporter
+```
+
+因此，`gcode_planner` 现在是 GCode 适配和预览兼容包，`external_npz_preprocessor` 是约定源 NPZ 适配包，二者不互相依赖。共享数据结构、B 样条拟合、采样、事件编码、偏置应用和系统 NPZ 写出都归属于 `path_processing_core`。

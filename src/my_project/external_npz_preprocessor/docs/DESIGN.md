@@ -2,7 +2,7 @@
 
 ## Goal
 
-This package converts an external geometry-only NPZ into the system NPZ format consumed by `control_center`, while always going through `path_processing_core.npz_exporter.export_npz()`.
+This package converts an agreed external source NPZ into the system NPZ format consumed by `control_center`, while always going through `path_processing_core.npz_exporter.export_npz()`. The source NPZ carries trajectory geometry, including explicit Z; UI layer-height values are process references only.
 
 ## Package Boundary
 
@@ -13,7 +13,7 @@ This package converts an external geometry-only NPZ into the system NPZ format c
 - `cli.py`: batch conversion entry point.
 - `ui.py` / `app.py`: simple desktop UI for selecting paths and parameters.
 
-The package is intentionally separate from `gcode_planner` and `my_project_ui`. It depends on `path_processing_core`, while `gcode_planner` keeps the GCode-specific input path and legacy import wrappers.
+The package is intentionally separate from `gcode_planner`. It depends on `path_processing_core`, while `gcode_planner` keeps the GCode-specific input path, preview helpers, and legacy import wrappers. The formal-print UI can route either `.npz` source files to this package or `.gcode/.gc/.g` files to the GCode adapter; both converge in `path_processing_core`.
 
 ## Data Flow
 
@@ -36,6 +36,7 @@ The package supports:
 - Nx3 `[x, y, z]` source paths as the required base format.
 - Nx6 `[x, y, z, a, b, c]` source paths when the source needs explicit pose values.
 - Source-side Z is trajectory geometry and is never overwritten by UI layer-height values.
+- Formal-print compatible input supports both agreed source `.npz` and legacy `.gcode/.gc/.g` files; this package owns only the `.npz` branch.
 - Resin extrusion derived from fixed `2.0 mm` resin line width, resin layer height, and resin extrusion scale.
 - Fiber extrusion matched to path length by default through fiber extrusion scale.
 - A basic Qt UI and CLI.

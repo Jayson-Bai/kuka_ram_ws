@@ -18,9 +18,11 @@
 ros2 launch my_project_startup startup.launch.py
 ```
 
-## NPZ 离线导出（GCode -> NPZ）
+## NPZ 离线导出和输入适配
 
-使用 gcode_planner 的 CLI 生成 NPZ 文件（供 `npz_path` 使用）：
+`startup.launch.py` 只消费系统 NPZ 或 manifest，入口参数仍是 `npz_path`。源文件转换需要在启动前完成：GCode 通过 `gcode_planner` 适配，约定格式源 NPZ 通过 `external_npz_preprocessor` 适配，两者最终都调用 `path_processing_core.npz_exporter` 生成系统 NPZ。
+
+使用 gcode_planner 的 CLI 从 GCode 生成 NPZ 文件（供 `npz_path` 使用）：
 
 ```bash
 python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz
@@ -30,6 +32,12 @@ python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz
 
 ```bash
 python3 -m gcode_planner.cli --gcode /path/to.gcode --out /path/to/output.npz --default-feed-mm-s 8.0
+```
+
+约定格式源 NPZ 可通过 external_npz_preprocessor 转换：
+
+```bash
+python3 -m external_npz_preprocessor.cli --source /path/to/source.npz --out /path/to/output.npz
 ```
 
 ## 启动参数

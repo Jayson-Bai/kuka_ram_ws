@@ -1,6 +1,6 @@
 # bspline 模块说明
 
-本目录提供 `gcode_planner` 当前使用的 B 样条基础算法实现。
+本目录提供 `path_processing_core` 当前使用的 B 样条基础算法实现。`gcode_planner.bspline.*` 仅保留旧 import 路径兼容入口。
 
 ## 当前版本
 
@@ -16,7 +16,7 @@
 
 ## 当前完整拟合逻辑
 
-`gcode_planner` 上层在 [bspline_approximation.py](/home/jayson/kuka_ram_ws/src/my_project/gcode_planner/gcode_planner/bspline_approximation.py) 中完成拟合前处理，本目录负责底层曲线逼近。
+`path_processing_core` 上层在 [bspline_approximation.py](/home/jayson/kuka_ram_ws/src/my_project/path_processing_core/path_processing_core/bspline_approximation.py) 中完成拟合前处理，本目录负责底层曲线逼近。
 
 ### 上层输入准备
 
