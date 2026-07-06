@@ -1,7 +1,7 @@
 {
-  "updated_at": "2026-06-24T05:14:27.003147+00:00",
+  "updated_at": "2026-06-28T07:56:53.645672+00:00",
   "resin": {
-    "z_print_compensation_mm": -30.4
+    "z_print_compensation_mm": -30.5
   },
   "fiber": {
     "x_print_compensation_mm": -0.34,
