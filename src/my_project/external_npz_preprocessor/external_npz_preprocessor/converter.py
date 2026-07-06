@@ -129,6 +129,21 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 line += 1
                 previous_pose = next_pose
 
+            if material_path.material == "F":
+                commands.append(
+                    MCommand(
+                        type="M_COMMAND",
+                        code="CUT",
+                        params={"P": 1.0},
+                        line=line,
+                        layer=layer.index,
+                        subtype=subtype,
+                        raw="external_npz_cut",
+                        tool=tool,
+                    )
+                )
+                line += 1
+
             for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
                 commands.append(wait)
                 current_e += wait.delta_e

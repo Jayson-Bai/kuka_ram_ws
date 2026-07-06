@@ -264,7 +264,11 @@ private:
     // current_event_ 已经设置，心跳线程会暂停 E 转发，避免 reset 未完成时刷 old_seq。
     std::string arg = ev.payload.empty() ? "0" : ev.payload;
     std::ostringstream oss;
-    oss << "EV 0 " << ev.event_type << " " << arg << "\n";
+    if (ev.event_type == "cut") {
+      oss << "EV " << ev.trigger_seq << " cut " << arg << "\n";
+    } else {
+      oss << "EV 0 " << ev.event_type << " " << arg << "\n";
+    }
     write_line(oss.str());
 
     // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
@@ -495,6 +499,8 @@ private:
         std::abs(snapshot.last_e_abs) < 1e-9 &&
         snapshot.last_e_us == 0;
       done = stat_cleared;
+    } else if (ev.event_type == "cut") {
+      done = current_event_ack_received_ && current_event_done_received_;
     }
 
     if (done) {

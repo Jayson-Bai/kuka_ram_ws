@@ -163,6 +163,7 @@ def export_npz(
         "extrude_reset": 5,
         "tool_change_cf": 6,
         "tool_change_resin": 7,
+        "cut": 8,
     }
     move_type_keys = np.array(list(move_type_map.keys()), dtype="S32")
     move_type_vals = np.array(list(move_type_map.values()), dtype=np.uint8)
@@ -1466,6 +1467,7 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
         "extrude_reset": 5,
         "tool_change_cf": 6,
         "tool_change_resin": 7,
+        "cut": 8,
     }
     # 使用定长字节串，便于 C++ 侧 cnpy 读取
     move_type_keys = np.array(list(move_type_map.keys()), dtype="S32")
@@ -1578,6 +1580,10 @@ def _mcommand_to_event(cmd: MCommand, current_tool: int) -> Optional[_PendingEve
     if code == "M107":  # 关风扇
         ev_type = "fan_cf" if tool_id == 1 else "fan_resin"
         return _PendingEvent(ev_type, "0", src_line, tool_id)
+
+    if code == "CUT":
+        payload = str(int(params.get("P", 1)))
+        return _PendingEvent("cut", payload, src_line, tool_id)
 
     # 其他 M 指令：忽略（热床等）
     return None

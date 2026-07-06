@@ -53,6 +53,23 @@ def test_triggered_event_sends_firmware_compatible_ev_zero_before_marking_not_re
     )
 
 
+def test_cut_event_uses_trigger_seq_and_waits_for_ack_done():
+    src = _source()
+
+    handler = src.split("void on_triggered_event(const PlannedEvent & ev)", 1)[1].split(
+        "void on_heartbeat", 1
+    )[0]
+    assert 'if (ev.event_type == "cut")' in handler
+    assert 'oss << "EV " << ev.trigger_seq << " cut " << arg << "\\n";' in handler
+
+    completion = src.split("void check_event_completion()", 1)[1].split(
+        "void send_extrude_command", 1
+    )[0]
+    assert 'else if (ev.event_type == "cut")' in completion
+    cut_block = completion.split('else if (ev.event_type == "cut")', 1)[1].split("}", 1)[0]
+    assert "current_event_ack_received_ && current_event_done_received_" in cut_block
+
+
 def test_heartbeat_does_not_forward_e_while_event_is_pending():
     src = _source()
 

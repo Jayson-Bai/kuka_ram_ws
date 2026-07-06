@@ -118,3 +118,7 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
     ]
     fiber_switch_idx = non_empty_events.index("tool_change_cf")
     assert non_empty_events[fiber_switch_idx + 1] == "extrude_reset"
+    assert "cut" in non_empty_events
+
+    cut_row_idx = events.index("cut")
+    assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1"

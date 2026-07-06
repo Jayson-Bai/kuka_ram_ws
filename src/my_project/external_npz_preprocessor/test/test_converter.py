@@ -135,6 +135,66 @@ def test_adds_retract_then_prime_before_and_after_every_material_path():
     ]
 
 
+def test_inserts_cut_after_each_fiber_path_before_trailing_retract_prime():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[],
+                fiber_paths=[
+                    MaterialPath(
+                        material="F",
+                        order=0,
+                        points=np.array(
+                            [[0.0, 0.0, 0.6, 0.0, 0.0, 0.0],
+                             [10.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    ),
+                    MaterialPath(
+                        material="F",
+                        order=1,
+                        points=np.array(
+                            [[20.0, 0.0, 0.6, 0.0, 0.0, 0.0],
+                             [30.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    ),
+                ],
+            )
+        ],
+    )
+
+    commands = source_job_to_parsed_commands(job, ProcessParams())
+    compact = [
+        ("print", None)
+        if isinstance(cmd, MoveCommand) and cmd.type == "PRINT"
+        else ("wait", cmd.delta_e)
+        if isinstance(cmd, ExtrudeWait)
+        else ("cut", cmd.params)
+        if isinstance(cmd, MCommand) and cmd.code == "CUT"
+        else None
+        for cmd in commands
+    ]
+    compact = [item for item in compact if item is not None]
+
+    assert compact == [
+        ("wait", -10.0),
+        ("wait", 12.0),
+        ("print", None),
+        ("cut", {"P": 1.0}),
+        ("wait", -10.0),
+        ("wait", 12.0),
+        ("wait", -10.0),
+        ("wait", 12.0),
+        ("print", None),
+        ("cut", {"P": 1.0}),
+        ("wait", -10.0),
+        ("wait", 12.0),
+    ]
+
+
 def test_initializes_both_heads_before_first_path_and_resets_after_tool_change():
     job = SourceJob(
         meta={},
