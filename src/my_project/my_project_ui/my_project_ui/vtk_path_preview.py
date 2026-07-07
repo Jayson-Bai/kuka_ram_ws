@@ -198,6 +198,7 @@ def _filter_origin_bridge_artifacts(paths):
         path.order_index = index
     return filtered
 
+
 def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
     max_points = max(2, int(max_points))
     if len(points) <= max_points:

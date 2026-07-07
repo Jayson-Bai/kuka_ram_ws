@@ -313,6 +313,7 @@ def test_resin_matrix_shifts_y_between_lines_and_lifts_only_after_matrix():
     assert final_lift.start_pos.x == final_y_shift.pos.x
     assert final_lift.start_pos.y == final_y_shift.pos.y
 
+
 def test_composite_matrix_inserts_safe_lift_compensation_and_tool_change():
     lines = generate_composite_test_matrix_gcode(
         start_pose=(5.0, 4.0, -45.0, 0.0, 0.0, 0.0),
@@ -488,7 +489,6 @@ def test_composite_resin_lines_shift_y_without_intermediate_z_lift():
     assert final_lift.start_pos.y == final_y_shift.pos.y
 
 
-
 def test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height():
     lines = generate_composite_test_matrix_gcode(
         start_pose=(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
@@ -540,6 +540,7 @@ def test_composite_tool_change_to_fiber_stays_safe_and_uses_fiber_layer_height()
     )
     assert descent_to_print_z.pos.x == first_fiber_print.start_pos.x
     assert descent_to_print_z.pos.y == first_fiber_print.start_pos.y
+
 
 def test_composite_fiber_starts_at_first_resin_line_with_resin_height_added():
     lines = generate_composite_test_matrix_gcode(

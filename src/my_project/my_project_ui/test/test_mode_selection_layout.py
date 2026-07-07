@@ -206,7 +206,10 @@ def test_formal_print_file_dialogs_start_in_data_dirs_and_npz_selects_file():
     assert '_DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")' in src
     assert 'base_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp")' in src
     assert 'out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")' in src
-    assert 'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")' not in src
+    assert (
+        'out_dir = str(_DEFAULT_DATA_ROOT / "print_test" / "tmp" / "diagnostic_logs")'
+        not in src
+    )
     assert 'def _ensure_default_data_dirs():' in src
     assert '_ensure_default_data_dirs()' in src.split('self._build_ui()', 1)[0]
     assert '_DEFAULT_DATA_ROOT / "input_gcode"' in src
@@ -469,6 +472,7 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
     ):
         assert attr in test_section
 
+    compact_test_section = "".join(test_section.split())
     for connection in (
         "self._btn_test_confirm_resin_height.clicked.connect("
         "self._on_print_test_confirm_resin_height)",
@@ -484,8 +488,7 @@ def test_test_mode_exposes_fiber_calibration_and_print_actions():
         "self._on_print_test_print_composite)",
         "self._btn_test_cut.clicked.connect(self._on_print_test_cut)",
     ):
-        assert connection in test_section
-
+        assert "".join(connection.split()) in compact_test_section
 
 
 def test_print_test_prepare_switches_to_resin_and_starts_both_heat_fans():
@@ -497,8 +500,16 @@ def test_print_test_prepare_switches_to_resin_and_starts_both_heat_fans():
     assert 'self.uart_command_submit.emit("EV 0 tool_change_resin 2' in prepare
     assert 'self.uart_command_submit.emit("EV 0 fan_resin 1' in prepare
     assert 'self.uart_command_submit.emit("EV 0 fan_cf 1' in prepare
-    assert "self.uart_command_submit.emit(f\"EV 0 heat_resin {params['resin']['temp']}\\n\")" in prepare
-    assert "self.uart_command_submit.emit(f\"EV 0 heat_cf {params['fiber']['temp']}\\n\")" in prepare
+    assert (
+        "self.uart_command_submit.emit(f\"EV 0 heat_resin "
+        "{params['resin']['temp']}\\n\")"
+        in prepare
+    )
+    assert (
+        "self.uart_command_submit.emit(f\"EV 0 heat_cf "
+        "{params['fiber']['temp']}\\n\")"
+        in prepare
+    )
 
 
 def test_print_test_resin_print_always_prepares_head_before_job():
@@ -559,7 +570,10 @@ def test_print_test_fiber_actions_switch_to_fiber_tool_from_safe_position_before
     assert 'self._print_test_pending_after_zero == "tool_change_cf"' in current_correction
     assert 'self._send_print_test_head_prepare("fiber")' in current_correction
     assert "if self._print_test_pending_after_tool_change is None:" in current_correction
-    assert 'self._print_test_pending_after_tool_change = "adjust_fiber_offset"' in current_correction
+    assert (
+        'self._print_test_pending_after_tool_change = "adjust_fiber_offset"'
+        in current_correction
+    )
 
     print_fiber = src.split("    def _on_print_test_print_fiber", 1)[1].split(
         "    def _start_print_test_fiber_matrix", 1
@@ -613,7 +627,10 @@ def test_print_test_resin_target_accounts_for_final_same_height_y_shift():
         "    def _on_print_test_cut", 1
     )[0]
 
-    assert 'final_y_steps = line_count if head_key == "resin" else max(0, line_count - 1)' in target_section
+    assert (
+        'final_y_steps = line_count if head_key == "resin" else max(0, line_count - 1)'
+        in target_section
+    )
     assert "base[1] + final_y_steps * y_spacing" in target_section
 
 
@@ -623,9 +640,16 @@ def test_print_test_composite_target_uses_resin_surface_height_not_head_offset()
         "    def _on_print_test_cut", 1
     )[0]
 
-    assert 'resin_surface_height = float(resin_layers[0]) if resin_layers else 0.0' in target_section
+    assert (
+        'resin_surface_height = float(resin_layers[0]) if resin_layers else 0.0'
+        in target_section
+    )
     assert 'calibration_relative_offsets(' not in target_section
-    assert "base[2] + resin_surface_height + last_layer_height + safe_lift" in target_section
+    assert (
+        "base[2] + resin_surface_height + last_layer_height + safe_lift"
+        in target_section
+    )
+
 
 def test_fiber_offset_inputs_keep_horizontal_layout_with_smaller_inline_nudge_buttons():
     src = _source()

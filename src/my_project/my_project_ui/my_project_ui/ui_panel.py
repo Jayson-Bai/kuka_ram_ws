@@ -21,7 +21,6 @@ from path_processing_core.head_calibration import (
     DEFAULT_DATA_ROOT,
     DEFAULT_HEAD_CALIBRATION_PATH,
     HeadCalibration,
-    calibration_relative_offsets,
     load_head_calibration,
     save_head_calibration,
 )
@@ -1699,10 +1698,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         # Resin Z print compensation and fiber head Z offset
         resin_z_subtitle = QtWidgets.QLabel("树脂 Z 打印补偿 / 纤维 Z 偏置")
         resin_z_subtitle.setStyleSheet(
-            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+            "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;"
+        )
         export_layout.addWidget(resin_z_subtitle)
 
-        resin_z_desc = QtWidgets.QLabel("树脂 Z 是打印平面起点全局补偿；纤维 XYZ 是喷头切换直接偏置。切到纤维头时，Z 向实际补偿=树脂Z+纤维Z偏置。")
+        resin_z_desc = QtWidgets.QLabel(
+            "树脂 Z 是打印平面起点全局补偿；纤维 XYZ 是喷头切换直接偏置。"
+            "切到纤维头时，Z 向实际补偿=树脂Z+纤维Z偏置。"
+        )
         resin_z_desc.setObjectName("fieldLabel")
         resin_z_desc.setWordWrap(True)
         export_layout.addWidget(resin_z_desc)
@@ -2548,7 +2551,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 btn.setEnabled(False)
                 btn.setToolTip(f"{axis} 偏置 {delta:+.1f} mm")
                 btn.clicked.connect(
-                    lambda _checked=False, a=axis, d=delta: self._on_print_test_nudge_fiber_offset(a, d)
+                    lambda _checked=False, a=axis, d=delta:
+                    self._on_print_test_nudge_fiber_offset(a, d)
                 )
                 input_row.addWidget(btn)
                 self._fiber_offset_nudge_buttons.append(btn)
@@ -2612,11 +2616,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         self._btn_test_prepare.clicked.connect(self._on_print_test_prepare)
         self._btn_test_confirm_height.clicked.connect(self._on_print_test_confirm_height)
-        self._btn_test_confirm_resin_height.clicked.connect(self._on_print_test_confirm_resin_height)
+        self._btn_test_confirm_resin_height.clicked.connect(
+            self._on_print_test_confirm_resin_height
+        )
         self._btn_test_continue_fiber.clicked.connect(self._on_print_test_continue_fiber)
         self._btn_test_print_resin.clicked.connect(self._on_print_test_print_resin)
-        self._btn_test_send_fiber_offset_nudge.clicked.connect(self._on_print_test_send_fiber_offset_nudge)
-        self._btn_test_confirm_fiber_offset.clicked.connect(self._on_print_test_confirm_fiber_offset)
+        self._btn_test_send_fiber_offset_nudge.clicked.connect(
+            self._on_print_test_send_fiber_offset_nudge
+        )
+        self._btn_test_confirm_fiber_offset.clicked.connect(
+            self._on_print_test_confirm_fiber_offset
+        )
         self._btn_test_print_fiber.clicked.connect(self._on_print_test_print_fiber)
         self._btn_test_print_composite.clicked.connect(self._on_print_test_print_composite)
         self._btn_test_cut.clicked.connect(self._on_print_test_cut)
@@ -4622,7 +4632,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self,
             "选择源文件",
             _dialog_start_dir(self._gcode_path_input.text(), str(_DEFAULT_DATA_ROOT)),
-            "GCode / NPZ Files (*.gcode *.gc *.g *.npz);;GCode Files (*.gcode *.gc *.g);;NPZ Files (*.npz);;All Files (*)",
+            "GCode / NPZ Files (*.gcode *.gc *.g *.npz);;"
+            "GCode Files (*.gcode *.gc *.g);;NPZ Files (*.npz);;All Files (*)",
         )
         if path:
             self._gcode_path_input.setText(path)
@@ -4836,7 +4847,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #1b6e3c;")
             npz_path = self._npz_out_input.text().strip()
             if npz_path:
-                self._last_npz_dir = _npz_layer_dir_from_launch_path(npz_path) or os.path.splitext(npz_path)[0]
+                self._last_npz_dir = (
+                    _npz_layer_dir_from_launch_path(npz_path)
+                    or os.path.splitext(npz_path)[0]
+                )
                 self._selected_npz_dir = self._last_npz_dir
                 self._selected_npz_launch_path = (
                     npz_path

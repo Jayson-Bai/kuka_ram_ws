@@ -454,7 +454,6 @@ def test_zero_length_print_paths_are_omitted(tmp_path):
     assert paths[1].end == pytest.approx((3.0, 0.0, 0.2))
 
 
-
 def test_preview_paths_break_across_noncontiguous_rows_after_layer_filtering(tmp_path):
     from gcode_planner.path_preview import (
         PathType,
@@ -487,6 +486,7 @@ def test_preview_paths_break_across_noncontiguous_rows_after_layer_filtering(tmp
         and path.end == pytest.approx((50.0, 50.0, 0.2))
         for path in print_paths
     )
+
 
 def test_print_rows_without_extrusion_are_treated_as_travel(tmp_path):
     from gcode_planner.path_preview import (

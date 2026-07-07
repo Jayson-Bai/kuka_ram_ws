@@ -342,6 +342,7 @@ def generate_test_matrix_gcode(
         )
     return lines
 
+
 def _gcode_tool_for_head(tool: str) -> int:
     normalized = str(tool).strip().lower()
     if normalized == "fiber":
@@ -453,7 +454,7 @@ def _append_tool_change_compensation(
 
 
 def _matrix_body_without_header(lines: Sequence[str]) -> list[str]:
-    return list(lines[len(_header((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))) :])
+    return list(lines[len(_header((0.0, 0.0, 0.0, 0.0, 0.0, 0.0))):])
 
 
 def generate_composite_test_matrix_gcode(
@@ -591,6 +592,7 @@ def generate_composite_test_matrix_gcode(
     )
     lines.extend(_matrix_body_without_header(fiber_lines))
     return lines
+
 
 def format_gcode(lines: Iterable[str]) -> str:
     return "\n".join(lines) + "\n"

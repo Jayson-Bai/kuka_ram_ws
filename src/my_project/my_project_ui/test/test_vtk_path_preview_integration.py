@@ -95,7 +95,9 @@ def test_vtk_origin_axes_are_hidden_by_default_and_have_toggle():
     assert "show_origin_axes: bool = False" in base_plane_block
     assert "actors = [self._grid_actor" in base_plane_block
     assert "if show_origin_axes:" in base_plane_block
-    assert base_plane_block.index("actors = [self._grid_actor") < base_plane_block.index("if show_origin_axes:")
+    assert base_plane_block.index("actors = [self._grid_actor") < base_plane_block.index(
+        "if show_origin_axes:"
+    )
 
 
 def test_vtk_path_preview_loads_npz_data_on_background_threads():

@@ -1,6 +1,5 @@
-import json
 from datetime import datetime
-from pathlib import Path
+import json
 
 from path_processing_core.head_calibration import (
     DEFAULT_HEAD_CALIBRATION,
@@ -76,7 +75,6 @@ def test_load_head_calibration_preserves_present_fields_and_defaults_missing_fie
     )
 
 
-
 def test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key(tmp_path):
     path = tmp_path / "head_offsets.json"
     path.write_text(
@@ -92,6 +90,7 @@ def test_load_head_calibration_accepts_legacy_fiber_z_print_compensation_key(tmp
     cal = load_head_calibration(path)
 
     assert cal.fiber_z_print_compensation_mm == -7.5
+
 
 def test_save_head_calibration_overwrites_current_file_with_timestamp(tmp_path):
     path = tmp_path / "head_offsets.json"

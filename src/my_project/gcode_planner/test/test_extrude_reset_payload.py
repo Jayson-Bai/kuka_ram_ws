@@ -1,5 +1,3 @@
-import json
-
 import numpy as np
 
 import path_processing_core.npz_exporter as npz_exporter
@@ -129,6 +127,7 @@ def test_npz_export_includes_layer_progress_metadata(tmp_path):
     assert data["layer_index"][-1] == 2
     assert data["total_layers"][0] == 3
     assert data["total_layers"][-1] == 3
+
 
 def _decoded_src_lines(data):
     return [item.decode("utf-8").rstrip("\x00") for item in data["src_line"]]
@@ -531,6 +530,7 @@ def test_export_npz_defaults_to_resin_tool_without_initial_tool_change(tmp_path)
 
     assert non_empty_events == ["extrude_reset"]
     assert int(data["tool_id"][0]) == 2
+
 
 def test_export_npz_records_resin_z_compensation_sidecar(tmp_path):
     import json
