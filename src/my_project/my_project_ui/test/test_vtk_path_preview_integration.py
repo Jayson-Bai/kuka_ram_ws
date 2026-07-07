@@ -146,7 +146,7 @@ def test_vtk_path_preview_caps_render_geometry_for_large_npz_layers():
     assert "_sample_points(path.points, max_points=sample_limit)" in line_block
 
 
-def test_vtk_path_preview_defaults_to_complete_print_paths_and_trackball():
+def test_vtk_path_preview_defaults_to_complete_chunked_print_paths_and_trackball():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "vtkInteractorStyleTrackballCamera" in src
@@ -158,6 +158,7 @@ def test_vtk_path_preview_defaults_to_complete_print_paths_and_trackball():
     assert "self._show_resin" in src
     assert "visible_count = self._enabled_path_count()" in src
     assert "self._path_slider.setValue(visible_count)" in src
+    assert "return self._display_paths()[: self._path_slider.value()]" in src
 
 
 def test_vtk_path_preview_uses_ascii_window_title_and_endpoint_toggle():
@@ -245,6 +246,30 @@ def test_vtk_preview_renders_paths_events_and_nozzle_with_display_points():
     assert "self._display_point_for_path(path, path.end)" in src
     assert "display_end = self._display_point_for_path(" in src
     assert "current_path.end, current_path.end_abc" not in src
+
+
+def test_vtk_path_preview_splits_large_paths_for_stepwise_review():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "_MAX_STEP_REVIEW_POINTS_PER_PATH" in src
+    assert "def _split_preview_paths_for_step_review" in src
+    assert "self._current_paths = _split_preview_paths_for_step_review(" in src
+
+
+def test_vtk_path_preview_preserves_camera_when_switching_layers():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    init_block = src.split("    def __init__(", 1)[1].split(
+        "    def closeEvent", 1
+    )[0]
+    loaded_block = src.split("    def _on_paths_loaded", 1)[1].split(
+        "    def _enabled_types", 1
+    )[0]
+
+    assert "self._has_reset_camera_for_preview = False" in init_block
+    assert "reset_camera = not self._has_reset_camera_for_preview" in loaded_block
+    assert "self._has_reset_camera_for_preview = True" in loaded_block
+    assert "self._update_scene(reset_camera=reset_camera)" in loaded_block
+    assert "self._update_scene(reset_camera=True)" not in loaded_block
 
 
 def test_vtk_path_preview_renders_tool_change_markers_and_moving_nozzle():
@@ -337,12 +362,12 @@ def test_vtk_bead_mesh_uses_material_coordinates_and_physical_z_thickness():
     assert "poly_data.SetPolys(cells)" in bead_block
 
 
-def test_vtk_travel_paths_are_yellow_and_visible_by_default():
+def test_vtk_travel_paths_are_yellow_but_hidden_by_default():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "PathType.TRAVEL: (1.0, 0.85, 0.0)" in src
     default_block = src.split("        default_enabled = {", 1)[1].split("        }", 1)[0]
-    assert "self._show_travel" in default_block
+    assert "self._show_travel" not in default_block
 
 
 def test_vtk_tool_change_markers_use_event_row_display_position():
@@ -373,3 +398,45 @@ def test_vtk_preview_cleans_up_render_window_on_close_and_ignores_late_callbacks
     assert "self._vtk_widget = None" in cleanup_block
     assert "self._renderer = None" in cleanup_block
     assert "if self._closing:" in src
+
+
+def test_vtk_path_preview_filters_origin_to_first_print_bridge():
+    import sys
+
+    sys.path.insert(0, str(UI_PACKAGE.parent.parent / "gcode_planner"))
+    sys.path.insert(0, str(UI_PACKAGE.parent))
+
+    from gcode_planner.path_preview import PathType, PreviewPath
+    from my_project_ui.vtk_path_preview import _filter_origin_bridge_artifacts
+
+    bridge = PreviewPath(
+        layer=0,
+        order_index=0,
+        path_type=PathType.RESIN_PRINT,
+        tool_id=2,
+        points=((0.0, 0.0, -25.9), (93.819, 86.789, -28.2)),
+        poses=((0.0, 0.0, -25.9, 0.0, 0.0, 0.0), (93.819, 86.789, -28.2, 0.0, 0.0, 0.0)),
+        start=(0.0, 0.0, -25.9),
+        end=(93.819, 86.789, -28.2),
+        start_abc=(0.0, 0.0, 0.0),
+        end_abc=(0.0, 0.0, 0.0),
+        src_line_start="25",
+        src_line_end="905-1006",
+    )
+    real_print = PreviewPath(
+        layer=0,
+        order_index=1,
+        path_type=PathType.RESIN_PRINT,
+        tool_id=2,
+        points=((93.819, 86.789, -28.2), (91.560, 85.764, -28.2)),
+        poses=((93.819, 86.789, -28.2, 0.0, 0.0, 0.0), (91.560, 85.764, -28.2, 0.0, 0.0, 0.0)),
+        start=(93.819, 86.789, -28.2),
+        end=(91.560, 85.764, -28.2),
+        start_abc=(0.0, 0.0, 0.0),
+        end_abc=(0.0, 0.0, 0.0),
+        src_line_start="905-1006",
+        src_line_end="905-1006",
+    )
+
+    assert _filter_origin_bridge_artifacts([bridge, real_print]) == [real_print]
+    assert real_print.order_index == 0

@@ -8,7 +8,10 @@ def _write_npz(path: Path, **arrays):
     path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         str(path),
-        seq=np.arange(len(arrays["x"]), dtype=np.uint32),
+        seq=np.array(
+            arrays.get("seq", np.arange(len(arrays["x"]))),
+            dtype=np.uint32,
+        ),
         x=np.array(arrays["x"], dtype=np.float32),
         y=np.array(arrays["y"], dtype=np.float32),
         z=np.array(arrays["z"], dtype=np.float32),
@@ -450,6 +453,40 @@ def test_zero_length_print_paths_are_omitted(tmp_path):
     assert paths[1].start == pytest.approx((2.0, 0.0, 0.2))
     assert paths[1].end == pytest.approx((3.0, 0.0, 0.2))
 
+
+
+def test_preview_paths_break_across_noncontiguous_rows_after_layer_filtering(tmp_path):
+    from gcode_planner.path_preview import (
+        PathType,
+        extract_layer_preview_paths,
+    )
+
+    root = tmp_path / "seq_gap"
+    _write_npz(
+        root / "seq_gap.npz",
+        seq=[10, 11, 20000, 20001, 20002],
+        x=[0.0, 0.0, 50.0, 51.0, 52.0],
+        y=[0.0, 0.0, 50.0, 50.0, 50.0],
+        z=[0.2] * 5,
+        e=[0.0, -1.0, 10.0, 10.5, 11.0],
+        tool_id=[2, 2, 2, 2, 2],
+        move_type=[1, 1, 3, 3, 3],
+        src_line=["25", "25", "905-1006", "905-1006", "905-1006"],
+        layer_index=[0] * 5,
+        preview_layer_index=[0] * 5,
+    )
+
+    paths = extract_layer_preview_paths(root, 0)
+    print_paths = [path for path in paths if path.path_type == PathType.RESIN_PRINT]
+
+    assert len(print_paths) == 1
+    assert print_paths[0].start == pytest.approx((50.0, 50.0, 0.2))
+    assert print_paths[0].end == pytest.approx((52.0, 50.0, 0.2))
+    assert not any(
+        path.start == pytest.approx((0.0, 0.0, 0.2))
+        and path.end == pytest.approx((50.0, 50.0, 0.2))
+        for path in print_paths
+    )
 
 def test_print_rows_without_extrusion_are_treated_as_travel(tmp_path):
     from gcode_planner.path_preview import (

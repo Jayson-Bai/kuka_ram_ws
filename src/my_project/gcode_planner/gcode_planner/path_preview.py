@@ -21,6 +21,9 @@ Point3 = tuple[float, float, float]
 Pose6 = tuple[float, float, float, float, float, float]
 
 
+_ROW_CONTINUITY_GAP_LIMIT = 1000
+
+
 @dataclass
 class PreviewPath:
     layer: int
@@ -459,10 +462,21 @@ def _extract_paths_from_rows(
         current_rows = []
 
     prev_e = None
+    prev_seq = None
     for index, row in enumerate(rows):
+        current_seq = row.get("seq")
+        if (
+            prev_seq is not None
+            and current_seq is not None
+            and int(current_seq) - int(prev_seq) > _ROW_CONTINUITY_GAP_LIMIT
+        ):
+            flush()
+            prev_e = None
+
         next_e = rows[index + 1].get("e") if index + 1 < len(rows) else None
         key = _classification_key(row, prev_e, next_e)
         prev_e = row.get("e", prev_e)
+        prev_seq = current_seq
         if key is None:
             flush()
             continue

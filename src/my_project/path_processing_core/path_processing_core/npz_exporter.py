@@ -751,8 +751,105 @@ def export_npz(
             out.append(_collapse_moves_to_single(moves[suffix_start:]))
         return out
 
+    def _is_wall_outline_subtype(subtype: str) -> bool:
+        normalized = (subtype or "").strip().lower().replace("_", "-")
+        return normalized in {
+            "wall",
+            "wall-outer",
+            "wall-inner",
+            "outer wall",
+            "inner wall",
+            "perimeter",
+            "external perimeter",
+            "internal perimeter",
+        }
+
     def _should_disable_spline_for_subtype(subtype: str) -> bool:
         return (subtype or "").strip().lower() == "solid infill"
+
+    def _can_merge_collinear_moves(
+            moves: List[MoveCommand],
+            candidate: MoveCommand,
+            tolerance: float = 0.05,
+            min_cos: float = math.cos(math.radians(5.0))) -> bool:
+        if not moves:
+            return False
+        first = moves[0]
+        if (
+            candidate.type != first.type
+            or candidate.layer != first.layer
+            or candidate.subtype != first.subtype
+        ):
+            return False
+        if math.dist((moves[-1].pos.x, moves[-1].pos.y, moves[-1].pos.z),
+                     (candidate.start_pos.x, candidate.start_pos.y, candidate.start_pos.z)) > 1e-6:
+            return False
+
+        prev = moves[-1]
+        prev_vec = (
+            prev.pos.x - prev.start_pos.x,
+            prev.pos.y - prev.start_pos.y,
+            prev.pos.z - prev.start_pos.z,
+        )
+        cand_vec = (
+            candidate.pos.x - candidate.start_pos.x,
+            candidate.pos.y - candidate.start_pos.y,
+            candidate.pos.z - candidate.start_pos.z,
+        )
+        prev_len = math.sqrt(sum(v * v for v in prev_vec))
+        cand_len = math.sqrt(sum(v * v for v in cand_vec))
+        if prev_len <= 1e-9 or cand_len <= 1e-9:
+            return True
+        dot = sum(a * b for a, b in zip(prev_vec, cand_vec)) / (prev_len * cand_len)
+        if dot < min_cos:
+            return False
+
+        start = first.start_pos
+        end = candidate.pos
+        axis = (end.x - start.x, end.y - start.y, end.z - start.z)
+        axis_len = math.sqrt(sum(v * v for v in axis))
+        if axis_len <= 1e-9:
+            return False
+
+        for point in [m.pos for m in moves] + [candidate.pos]:
+            rel = (point.x - start.x, point.y - start.y, point.z - start.z)
+            projection = sum(a * b for a, b in zip(rel, axis)) / axis_len
+            if projection < -tolerance or projection > axis_len + tolerance:
+                return False
+            cross = (
+                rel[1] * axis[2] - rel[2] * axis[1],
+                rel[2] * axis[0] - rel[0] * axis[2],
+                rel[0] * axis[1] - rel[1] * axis[0],
+            )
+            distance = math.sqrt(sum(v * v for v in cross)) / axis_len
+            if distance > tolerance:
+                return False
+        return True
+
+    def _merge_collinear_wall_moves(moves: List[MoveCommand]) -> List[MoveCommand]:
+        if not moves or not _is_wall_outline_subtype(moves[0].subtype):
+            return moves
+        merged: List[MoveCommand] = []
+        group: List[MoveCommand] = []
+
+        def flush_group():
+            nonlocal group
+            if not group:
+                return
+            merged.append(_collapse_moves_to_single(group) if len(group) > 1 else group[0])
+            group = []
+
+        for move in moves:
+            if not group:
+                group = [move]
+                continue
+            if _can_merge_collinear_moves(group, move):
+                group.append(move)
+            else:
+                flush_group()
+                group = [move]
+        flush_group()
+        return merged
 
     def _rebuild_solid_infill_core(moves: List[MoveCommand]) -> List[MoveCommand]:
         if not moves:
@@ -895,8 +992,26 @@ def export_npz(
                 original_moves=[move],
             )
 
-        work_buffer = _rebuild_solid_infill_core(_sanitize_solid_infill_endpoints(buffer))
-        if work_buffer and _should_disable_spline_for_subtype(work_buffer[0].subtype):
+        work_buffer = _merge_collinear_wall_moves(
+            _rebuild_solid_infill_core(_sanitize_solid_infill_endpoints(buffer))
+        )
+        if work_buffer and _is_wall_outline_subtype(work_buffer[0].subtype):
+            first = work_buffer[0]
+            last = work_buffer[-1]
+            gc_list = [GlobalCurveCommand(
+                type=first.type,
+                cmd="POLYLINE",
+                start_pos=first.start_pos,
+                control_points=[move.pos for move in work_buffer],
+                e_val=last.e_val,
+                delta_e=sum(move.delta_e for move in work_buffer),
+                feedrate=first.feedrate,
+                line=first.line,
+                raw=(first.raw or "") + " | wall_polyline",
+                constraints=[],
+                original_moves=work_buffer,
+            )]
+        elif work_buffer and _should_disable_spline_for_subtype(work_buffer[0].subtype):
             t0 = time.perf_counter()
             gc = planner.fit_global_curve(
                 work_buffer,

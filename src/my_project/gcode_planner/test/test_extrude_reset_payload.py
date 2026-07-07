@@ -144,6 +144,79 @@ def _decoded_event_type_vocab(data):
     }
 
 
+def _move(start, end, e_start, e_end, line, subtype="WALL-OUTER"):
+    return MoveCommand(
+        type="PRINT",
+        cmd="G1",
+        start_pos=Position(start[0], start[1], start[2], 0.0, 0.0, 0.0),
+        pos=Position(end[0], end[1], end[2], 0.0, 0.0, 0.0),
+        e_val=e_end,
+        delta_e=e_end - e_start,
+        feedrate=600.0,
+        line=line,
+        layer=0,
+        subtype=subtype,
+        raw=f"G1 X{end[0]} Y{end[1]} E{e_end}",
+        is_pure_state_change=False,
+    )
+
+
+def test_wall_outline_export_preserves_original_polyline_without_spline_range(tmp_path):
+    out = tmp_path / "wall_outline.npz"
+    parsed = [
+        _move((0.0, 0.0, 0.0), (20.0, 0.0, 0.0), 0.0, 2.0, 1),
+        _move((20.0, 0.0, 0.0), (40.0, 0.0, 0.0), 2.0, 4.0, 2),
+        _move((40.0, 0.0, 0.0), (40.15, 0.01, 0.0), 4.0, 4.02, 3),
+        _move((40.15, 0.01, 0.0), (40.28, 0.02, 0.0), 4.02, 4.04, 4),
+        _move((40.28, 0.02, 0.0), (40.4, 0.02, 0.0), 4.04, 4.06, 5),
+        _move((40.4, 0.02, 0.0), (40.4, 10.0, 0.0), 4.06, 5.0, 6),
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    src_lines = set(_decoded_src_lines(data))
+    assert len(src_lines) < len(parsed)
+    assert len(data["x"]) < 130
+    assert np.min(data["x"]) >= -1e-4
+    assert np.max(data["x"]) <= 40.4001
+    assert np.min(data["y"]) >= -1e-4
+    assert np.max(data["y"]) <= 10.0001
+
+
+def test_wall_outline_many_short_segments_use_single_polyline_time_profile(tmp_path):
+    out = tmp_path / "wall_polyline.npz"
+    points = [
+        (10.0, 0.0, 0.0),
+        (9.8, 2.0, 0.0),
+        (9.2, 3.9, 0.0),
+        (8.3, 5.6, 0.0),
+        (7.1, 7.1, 0.0),
+        (5.6, 8.3, 0.0),
+        (3.9, 9.2, 0.0),
+        (2.0, 9.8, 0.0),
+        (0.0, 10.0, 0.0),
+    ]
+    parsed = []
+    start = (10.0, -2.0, 0.0)
+    e_start = 0.0
+    for index, end in enumerate(points, start=1):
+        e_end = e_start + 0.2
+        parsed.append(_move(start, end, e_start, e_end, index))
+        start = end
+        e_start = e_end
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    assert len(data["x"]) < 120
+    assert np.min(data["x"]) >= -1e-4
+    assert np.max(data["x"]) <= 10.0001
+    assert np.min(data["y"]) >= -2.0001
+    assert np.max(data["y"]) <= 10.0001
+    assert np.isclose(data["e"][-1], e_start)
+
+
 def test_prime_extrude_wait_overlaps_previous_travel_by_default(tmp_path):
     out = tmp_path / "prime_overlap.npz"
     parsed = [

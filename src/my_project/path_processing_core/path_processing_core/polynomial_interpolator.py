@@ -391,6 +391,91 @@ def sample_global_curve_iter(
         profile.setdefault("sample_pose_s", 0.0)
         profile.setdefault("sample_extrude_s", 0.0)
 
+    if (curve.cmd or "").upper() == "POLYLINE":
+        points = [curve.start_pos] + list(curve.control_points)
+        seg_lengths = []
+        total_length = 0.0
+        for start, end in zip(points, points[1:]):
+            length = math.sqrt(
+                (end.x - start.x) ** 2
+                + (end.y - start.y) ** 2
+                + (end.z - start.z) ** 2
+            )
+            seg_lengths.append(length)
+            total_length += length
+        if total_length <= 1e-9:
+            yield InterpolatedPoint(
+                t=0.0,
+                pos=curve.start_pos,
+                e=curve.e_val,
+                extrude_speed=0.0,
+                feedrate_mm_min=curve.feedrate,
+                cmd_type=curve.type,
+                line=curve.line,
+                raw=curve.raw,
+            )
+            return
+
+        total_time, _ = _compute_time_profile(total_length, target_velocity, t_acc, t_dec)
+        if total_time <= 0.0:
+            return
+        num_steps = int(math.ceil(total_time / dt))
+        corrected_total_time = num_steps * dt
+        start_e = curve.e_val - curve.delta_e
+        current_e = start_e
+        prev_s = 0.0
+        seg_idx = 0
+        seg_start_s = 0.0
+
+        for i in range(num_steps + 1):
+            t = i * dt
+            s_norm = _three_stage_sept_poly(t, corrected_total_time, t_acc, t_dec)
+            s_norm_clamped = max(0.0, min(1.0, s_norm))
+            if i == num_steps:
+                s_norm_clamped = 1.0
+
+            curr_s = s_norm_clamped * total_length
+            while (
+                seg_idx < len(seg_lengths) - 1
+                and curr_s > seg_start_s + seg_lengths[seg_idx]
+            ):
+                seg_start_s += seg_lengths[seg_idx]
+                seg_idx += 1
+
+            seg_len = seg_lengths[seg_idx]
+            local = 0.0 if seg_len <= 1e-9 else (curr_s - seg_start_s) / seg_len
+            local = max(0.0, min(1.0, local))
+            start = points[seg_idx]
+            end = points[seg_idx + 1]
+            pos = Position(
+                x=start.x + (end.x - start.x) * local,
+                y=start.y + (end.y - start.y) * local,
+                z=start.z + (end.z - start.z) * local,
+                a=start.a + (end.a - start.a) * local,
+                b=start.b + (end.b - start.b) * local,
+                c=start.c + (end.c - start.c) * local,
+            )
+
+            delta_s = curr_s - prev_s
+            delta_e = curve.delta_e * (delta_s / total_length)
+            current_e += delta_e
+            prev_s = curr_s
+            feed_mm_s = delta_s / dt if dt > 0 else 0.0
+            feed_mm_min = feed_mm_s * 60.0
+            extrude_speed = delta_e / dt if dt > 0 else 0.0
+
+            yield InterpolatedPoint(
+                t=t,
+                pos=pos,
+                e=current_e,
+                extrude_speed=extrude_speed,
+                feedrate_mm_min=feed_mm_min,
+                cmd_type=curve.type,
+                line=curve.line,
+                raw=curve.raw,
+            )
+        return
+
     if _is_linear_fallback_curve(curve):
         end_pos = curve.control_points[-1]
         dx = end_pos.x - curve.start_pos.x

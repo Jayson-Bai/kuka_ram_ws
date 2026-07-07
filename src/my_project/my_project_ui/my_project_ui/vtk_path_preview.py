@@ -22,6 +22,8 @@ from gcode_planner.path_preview import (
 
 
 _MAX_POINTS_PER_PATH = 1000
+_MAX_STEP_REVIEW_POINTS_PER_PATH = 600
+_MAX_STEP_REVIEW_LENGTH_MM = 25.0
 _MAX_RENDER_POINTS_PER_ACTOR = 50000
 _MAX_BEAD_SEGMENTS_PER_ACTOR = 25000
 _FIXED_PLANE_SIZE_MM = 500.0
@@ -95,6 +97,107 @@ def _load_vtk_modules():
     }
 
 
+def _path_length(points):
+    total = 0.0
+    for start, end in zip(points, points[1:]):
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        dz = end[2] - start[2]
+        total += math.sqrt(dx * dx + dy * dy + dz * dz)
+    return total
+
+
+def _copy_path_chunk(path, points, poses, order_index):
+    return PreviewPath(
+        layer=path.layer,
+        order_index=order_index,
+        path_type=path.path_type,
+        tool_id=path.tool_id,
+        points=tuple(points),
+        poses=tuple(poses),
+        start=points[0],
+        end=points[-1],
+        start_abc=poses[0][3:6],
+        end_abc=poses[-1][3:6],
+        src_line_start=path.src_line_start,
+        src_line_end=path.src_line_end,
+        event_type=path.event_type,
+        payload=path.payload,
+    )
+
+
+def _split_path_for_step_review(path):
+    if path.path_type in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT):
+        return [path]
+    if len(path.points) <= 2:
+        return [path]
+    if (
+        len(path.points) <= _MAX_STEP_REVIEW_POINTS_PER_PATH
+        and _path_length(path.points) <= _MAX_STEP_REVIEW_LENGTH_MM
+    ):
+        return [path]
+
+    chunks = []
+    start = 0
+    distance = 0.0
+    for index in range(1, len(path.points)):
+        prev_point = path.points[index - 1]
+        point = path.points[index]
+        segment_len = math.dist(prev_point, point)
+        distance += segment_len
+        point_count = index - start + 1
+        should_split = (
+            point_count >= _MAX_STEP_REVIEW_POINTS_PER_PATH
+            or distance >= _MAX_STEP_REVIEW_LENGTH_MM
+        )
+        if should_split and point_count >= 2:
+            chunks.append(
+                (path.points[start:index + 1], path.poses[start:index + 1])
+            )
+            start = index
+            distance = 0.0
+
+    if start < len(path.points) - 1:
+        chunks.append((path.points[start:], path.poses[start:]))
+
+    if not chunks:
+        return [path]
+    return [
+        _copy_path_chunk(path, points, poses, path.order_index)
+        for points, poses in chunks
+    ]
+
+
+def _split_preview_paths_for_step_review(paths):
+    split_paths = []
+    for path in paths:
+        split_paths.extend(_split_path_for_step_review(path))
+    for index, path in enumerate(split_paths):
+        path.order_index = index
+    return split_paths
+
+
+def _is_origin_bridge_artifact(path):
+    if path.path_type not in (PathType.FIBER_PRINT, PathType.RESIN_PRINT):
+        return False
+    if len(path.points) > 4:
+        return False
+    if len(path.points) < 2:
+        return False
+    start = path.points[0]
+    end = path.points[-1]
+    start_xy = math.hypot(start[0], start[1])
+    end_xy = math.hypot(end[0], end[1])
+    span = math.dist(start, end)
+    return min(start_xy, end_xy) <= 1.0 and max(start_xy, end_xy) >= 20.0 and span >= 20.0
+
+
+def _filter_origin_bridge_artifacts(paths):
+    filtered = [path for path in paths if not _is_origin_bridge_artifact(path)]
+    for index, path in enumerate(filtered):
+        path.order_index = index
+    return filtered
+
 def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
     max_points = max(2, int(max_points))
     if len(points) <= max_points:
@@ -126,6 +229,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._layers = []
         self._current_paths: list[PreviewPath] = []
         self._loading_layer = None
+        self._has_reset_camera_for_preview = False
         self._vtk = None
         self._renderer = None
         self._vtk_widget = None
@@ -211,7 +315,6 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         default_enabled = {
             self._show_fiber,
             self._show_resin,
-            self._show_travel,
         }
         for checkbox in (
             self._show_fiber,
@@ -377,6 +480,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._loading_layer = layer
         self._current_paths = []
         self._path_slider.blockSignals(True)
+        self._path_slider.setMinimum(0)
         self._path_slider.setMaximum(0)
         self._path_slider.setValue(0)
         self._path_slider.setEnabled(False)
@@ -411,14 +515,19 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             self._path_label.setText(f"当前层路径: {error}")
             return
 
-        self._current_paths = list(paths)
+        self._current_paths = _split_preview_paths_for_step_review(
+            _filter_origin_bridge_artifacts(list(paths))
+        )
         self._path_slider.blockSignals(True)
         visible_count = self._enabled_path_count()
+        self._path_slider.setMinimum(1 if visible_count else 0)
         self._path_slider.setMaximum(visible_count)
         self._path_slider.setValue(visible_count)
         self._path_slider.setEnabled(bool(visible_count))
         self._path_slider.blockSignals(False)
-        self._update_scene(reset_camera=True)
+        reset_camera = not self._has_reset_camera_for_preview
+        self._has_reset_camera_for_preview = True
+        self._update_scene(reset_camera=reset_camera)
 
     def _enabled_types(self) -> set[PathType]:
         enabled = set()
@@ -460,6 +569,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             return
         visible_count = self._enabled_path_count()
         self._path_slider.blockSignals(True)
+        self._path_slider.setMinimum(1 if visible_count else 0)
         self._path_slider.setMaximum(visible_count)
         self._path_slider.setValue(visible_count)
         self._path_slider.setEnabled(bool(visible_count))
@@ -470,9 +580,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         if self._closing:
             return
         visible = self._visible_paths()
+        enabled_count = self._enabled_path_count()
+        current_index = min(max(self._path_slider.value(), 0), enabled_count)
         self._path_label.setText(
-            f"当前层路径: {min(self._path_slider.value(), len(visible))} / "
-            f"{self._enabled_path_count()}"
+            f"当前层路径: {current_index} / "
+            f"{enabled_count}"
             f"{self._filter_status_text()}"
         )
         if self._renderer is None:

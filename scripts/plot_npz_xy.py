@@ -29,19 +29,98 @@ def _resolve_npz_files(path: Path) -> List[Path]:
     return files
 
 
-def load_xy(files: List[Path]) -> np.ndarray:
+def _decode_value(value) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace").rstrip("\x00")
+    if hasattr(value, "item"):
+        return _decode_value(value.item())
+    return str(value)
+
+
+def _move_type_vocab(data) -> dict[int, str]:
+    if "move_type_vocab_keys" not in data or "move_type_vocab_vals" not in data:
+        return {}
+    return {
+        int(value): _decode_value(key)
+        for key, value in zip(
+            data["move_type_vocab_keys"],
+            data["move_type_vocab_vals"],
+        )
+    }
+
+
+def _append_positive_extrusion_xy(xs, ys, data, prev_point, prev_e):
+    if not {"x", "y", "e", "move_type"}.issubset(data.files):
+        return prev_point, prev_e
+
+    x_arr = data["x"].astype(np.float32, copy=False)
+    y_arr = data["y"].astype(np.float32, copy=False)
+    e_arr = data["e"].astype(np.float32, copy=False)
+    move_type_arr = data["move_type"]
+    move_vocab = _move_type_vocab(data)
+    in_segment = False
+
+    for idx in range(len(x_arr)):
+        current_point = (x_arr[idx], y_arr[idx])
+        current_e = e_arr[idx]
+        if prev_point is None or prev_e is None:
+            prev_point = current_point
+            prev_e = current_e
+            continue
+
+        move_type_value = int(move_type_arr[idx])
+        move_type = move_vocab.get(move_type_value, str(move_type_value))
+        is_deposit = (
+            move_type in ("PRINT", "PRINT_FIT")
+            and (current_e - prev_e) > 1e-6
+        )
+        if is_deposit:
+            if not in_segment:
+                if xs:
+                    xs.append(np.float32(np.nan))
+                    ys.append(np.float32(np.nan))
+                xs.append(np.float32(prev_point[0]))
+                ys.append(np.float32(prev_point[1]))
+                in_segment = True
+            xs.append(np.float32(current_point[0]))
+            ys.append(np.float32(current_point[1]))
+        else:
+            in_segment = False
+
+        prev_point = current_point
+        prev_e = current_e
+
+    return prev_point, prev_e
+
+
+def load_xy(files: List[Path], include_travel: bool = False) -> np.ndarray:
     xs = []
     ys = []
+    prev_point = None
+    prev_e = None
     for f in files:
-        data = np.load(str(f))
-        if "x" not in data or "y" not in data:
-            continue
-        xs.append(data["x"].astype(np.float32, copy=False))
-        ys.append(data["y"].astype(np.float32, copy=False))
+        with np.load(str(f)) as data:
+            if "x" not in data or "y" not in data:
+                continue
+            if include_travel:
+                xs.append(data["x"].astype(np.float32, copy=False))
+                ys.append(data["y"].astype(np.float32, copy=False))
+                continue
+            prev_point, prev_e = _append_positive_extrusion_xy(
+                xs,
+                ys,
+                data,
+                prev_point,
+                prev_e,
+            )
     if not xs:
         return np.empty((0, 2), dtype=np.float32)
-    x = np.concatenate(xs)
-    y = np.concatenate(ys)
+    if include_travel:
+        x = np.concatenate(xs)
+        y = np.concatenate(ys)
+    else:
+        x = np.array(xs, dtype=np.float32)
+        y = np.array(ys, dtype=np.float32)
     return np.stack([x, y], axis=1)
 
 
@@ -51,6 +130,11 @@ def main() -> int:
     parser.add_argument("--out", default="xy_path.png", help="Output image path (png)")
     parser.add_argument("--dpi", type=int, default=150, help="Output image DPI")
     parser.add_argument("--stride", type=int, default=1, help="Plot every Nth point to speed up")
+    parser.add_argument(
+        "--include-travel",
+        action="store_true",
+        help="Plot all XY points, including travel and non-extruding moves",
+    )
     args = parser.parse_args()
 
     npz_path = Path(args.npz).expanduser().resolve()
@@ -58,7 +142,7 @@ def main() -> int:
     if not files:
         raise SystemExit(f"[error] no npz files found for: {npz_path}")
 
-    xy = load_xy(files)
+    xy = load_xy(files, include_travel=args.include_travel)
     if xy.size == 0:
         raise SystemExit("[error] no x/y data found in npz files")
 
