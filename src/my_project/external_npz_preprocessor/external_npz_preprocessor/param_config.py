@@ -48,6 +48,18 @@ def load_print_params(path: str | Path | None = None) -> ProcessParams:
 def process_params_from_dict(data: dict[str, Any]) -> ProcessParams:
     defaults = asdict(ProcessParams())
     merged = _deep_merge(defaults, data)
+    if (
+        "spline_max_error_mm" not in data
+        and float(merged.get("corner_angle_deg", defaults["corner_angle_deg"])) == 10.0
+        and float(merged.get("corner_retreat_ratio", defaults["corner_retreat_ratio"])) == 0.2
+    ):
+        merged["corner_angle_deg"] = defaults["corner_angle_deg"]
+        merged["corner_retreat_ratio"] = defaults["corner_retreat_ratio"]
+    if (
+        "corner_blend_segments" not in data
+        and float(merged.get("corner_retreat_ratio", defaults["corner_retreat_ratio"])) == 0.25
+    ):
+        merged["corner_retreat_ratio"] = defaults["corner_retreat_ratio"]
     return ProcessParams(
         resin=ResinProcessParams(**_known_fields(ResinProcessParams, merged.get("resin", {}))),
         fiber=FiberProcessParams(**_known_fields(FiberProcessParams, merged.get("fiber", {}))),
@@ -60,6 +72,17 @@ def process_params_from_dict(data: dict[str, Any]) -> ProcessParams:
         dt=float(merged.get("dt", defaults["dt"])),
         corner_angle_deg=float(merged.get("corner_angle_deg", defaults["corner_angle_deg"])),
         corner_retreat_ratio=float(merged.get("corner_retreat_ratio", defaults["corner_retreat_ratio"])),
+        spline_max_error_mm=float(merged.get("spline_max_error_mm", defaults["spline_max_error_mm"])),
+        spline_max_angle_deg=float(merged.get("spline_max_angle_deg", defaults["spline_max_angle_deg"])),
+        source_merge_distance_mm=float(
+            merged.get("source_merge_distance_mm", defaults["source_merge_distance_mm"])
+        ),
+        corner_retreat_max_mm=float(
+            merged.get("corner_retreat_max_mm", defaults["corner_retreat_max_mm"])
+        ),
+        corner_blend_segments=int(
+            merged.get("corner_blend_segments", defaults["corner_blend_segments"])
+        ),
         density=int(merged.get("density", defaults["density"])),
         degree=int(merged.get("degree", defaults["degree"])),
         max_fit_points_per_segment=int(

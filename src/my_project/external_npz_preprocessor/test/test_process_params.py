@@ -59,6 +59,13 @@ def test_default_process_params_match_current_material_setup():
     assert params.travel_feed_mm_s == 10.0
     assert params.start_x_mm == 0.0
     assert params.start_y_mm == 0.0
+    assert params.corner_angle_deg == 45.0
+    assert params.corner_retreat_ratio == 0.65
+    assert params.spline_max_error_mm == 0.1
+    assert params.spline_max_angle_deg == 45.0
+    assert params.source_merge_distance_mm == 0.04
+    assert params.corner_retreat_max_mm == 0.4
+    assert params.corner_blend_segments == 8
 
 
 def test_resin_line_width_is_not_part_of_user_configurable_model():

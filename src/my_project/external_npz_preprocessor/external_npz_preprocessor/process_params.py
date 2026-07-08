@@ -59,8 +59,13 @@ class ProcessParams:
     start_x_mm: float = 0.0
     start_y_mm: float = 0.0
     dt: float = 0.004
-    corner_angle_deg: float = 10.0
-    corner_retreat_ratio: float = 0.2
+    corner_angle_deg: float = 45.0
+    corner_retreat_ratio: float = 0.65
+    spline_max_error_mm: float = 0.1
+    spline_max_angle_deg: float = 45.0
+    source_merge_distance_mm: float = 0.04
+    corner_retreat_max_mm: float = 0.4
+    corner_blend_segments: int = 8
     density: int = 0
     degree: int = 3
     max_fit_points_per_segment: int = 20000

@@ -134,17 +134,39 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert 'QtWidgets.QPushButton("导出设置")' in export_section
     assert '_PanelDialog("导出设置", self, 560)' in export_section
     assert 'QtWidgets.QGroupBox("外部 NPZ 工艺参数")' in export_section
+    assert export_section.index("external_defaults = {") < export_section.index(
+        'QtWidgets.QGroupBox("外部 NPZ 工艺参数")'
+    )
+    assert export_section.index("fixed_resin_width = 2.0") < export_section.index(
+        "fixed_resin_width_label"
+    )
+    assert '_external_param_group("树脂材料")' in export_section
+    assert '_external_param_group("纤维材料")' in export_section
+    assert '_external_param_group("运动与坐标")' in export_section
+    assert '_external_param_group("路径平滑")' in export_section
     assert "self._external_npz_inputs = {}" in export_section
     assert '"resin_layer_height_mm"' in export_section
-    assert '"树脂层高 mm"' in export_section
+    assert '"层高 mm"' in export_section
     assert '"fiber_prime_length_mm"' in export_section
-    assert '"纤维预挤出长度 mm"' in export_section
+    assert '"预挤出长度 mm"' in export_section
     assert '"default_c"' in export_section
     assert '"默认 C"' in export_section
     assert '"start_x_mm"' in export_section
     assert '"起点 X mm"' in export_section
     assert '"start_y_mm"' in export_section
     assert '"起点 Y mm"' in export_section
+    assert '"corner_angle_deg"' in export_section
+    assert '"角点阈值 deg"' in export_section
+    assert '"spline_max_error_mm"' in export_section
+    assert '"B样条误差上限 mm"' in export_section
+    assert '"spline_max_angle_deg"' in export_section
+    assert '"B样条转角上限 deg"' in export_section
+    assert '"source_merge_distance_mm"' in export_section
+    assert '"源短段合并 mm"' in export_section
+    assert '"corner_retreat_max_mm"' in export_section
+    assert '"角点回退上限 mm"' in export_section
+    assert '"corner_blend_segments"' in export_section
+    assert '"角点细分段数"' in export_section
     assert (
         'self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")'
         in export_section
@@ -161,6 +183,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )[0]
     assert "external_process_params =" in export_method
     assert "self._external_npz_process_params(params)" in export_method
+    assert 'return replace(process_params, dt=planner_params["dt"])' in src
     assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
     assert "load_print_params" not in npz_branch
     assert "process_params = external_process_params" in npz_branch

@@ -1934,10 +1934,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         external_layout = QtWidgets.QVBoxLayout(external_tab)
         external_layout.setContentsMargins(0, 0, 0, 0)
         external_layout.setSpacing(8)
-        external_group = QtWidgets.QGroupBox("外部 NPZ 工艺参数")
-        external_grid = QtWidgets.QGridLayout(external_group)
-        external_grid.setHorizontalSpacing(8)
-        external_grid.setVerticalSpacing(4)
 
         external_defaults = {
             "resin_layer_height_mm": 0.5,
@@ -1964,6 +1960,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "default_c": 0.0,
             "start_x_mm": 0.0,
             "start_y_mm": 0.0,
+            "corner_angle_deg": 45.0,
+            "corner_retreat_ratio": 0.65,
+            "spline_max_error_mm": 0.1,
+            "spline_max_angle_deg": 45.0,
+            "source_merge_distance_mm": 0.04,
+            "corner_retreat_max_mm": 0.4,
+            "corner_blend_segments": 8.0,
         }
         fixed_resin_width = 2.0
         try:
@@ -1999,15 +2002,21 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "default_c": saved_params.default_c,
                 "start_x_mm": saved_params.start_x_mm,
                 "start_y_mm": saved_params.start_y_mm,
+                "corner_angle_deg": saved_params.corner_angle_deg,
+                "corner_retreat_ratio": saved_params.corner_retreat_ratio,
+                "spline_max_error_mm": saved_params.spline_max_error_mm,
+                "spline_max_angle_deg": saved_params.spline_max_angle_deg,
+                "source_merge_distance_mm": saved_params.source_merge_distance_mm,
+                "corner_retreat_max_mm": saved_params.corner_retreat_max_mm,
+                "corner_blend_segments": saved_params.corner_blend_segments,
             })
         except Exception:
             pass
 
-        fixed_resin_width_label = QtWidgets.QLabel(
-            f"固定树脂线宽: {fixed_resin_width:.1f} mm"
-        )
-        fixed_resin_width_label.setObjectName("fieldLabel")
-        external_grid.addWidget(fixed_resin_width_label, 0, 0, 1, 4)
+        external_group = QtWidgets.QGroupBox("外部 NPZ 工艺参数")
+        external_group_layout = QtWidgets.QVBoxLayout(external_group)
+        external_group_layout.setContentsMargins(8, 8, 8, 8)
+        external_group_layout.setSpacing(8)
 
         def _external_spin(value, minimum=0.0, maximum=100000.0):
             spin = _NoWheelDoubleSpinBox()
@@ -2017,151 +2026,234 @@ class _UiStatusWidget(QtWidgets.QWidget):
             spin.setMinimumHeight(26)
             return spin
 
-        _EXTERNAL_NPZ_PARAMS = [
-            (
-                "resin_layer_height_mm",
-                "树脂层高 mm",
-                _external_spin(external_defaults["resin_layer_height_mm"]),
-                "fiber_layer_height_mm",
-                "纤维层高 mm",
-                _external_spin(external_defaults["fiber_layer_height_mm"]),
-            ),
-            (
-                "resin_extrusion_scale",
-                "树脂挤出倍率",
-                _external_spin(external_defaults["resin_extrusion_scale"]),
-                "fiber_extrusion_scale",
-                "纤维挤出倍率",
-                _external_spin(external_defaults["fiber_extrusion_scale"]),
-            ),
-            (
-                "resin_feed_mm_s",
-                "树脂速度 mm/s",
-                _external_spin(external_defaults["resin_feed_mm_s"]),
-                "fiber_feed_mm_s",
-                "纤维速度 mm/s",
-                _external_spin(external_defaults["fiber_feed_mm_s"]),
-            ),
-            (
-                "resin_temperature_c",
-                "树脂温度 C",
-                _external_spin(
-                    external_defaults["resin_temperature_c"], maximum=500.0
-                ),
-                "fiber_temperature_c",
-                "纤维温度 C",
-                _external_spin(
-                    external_defaults["fiber_temperature_c"], maximum=500.0
-                ),
-            ),
-            (
-                "resin_prime_length_mm",
-                "树脂预挤出长度 mm",
-                _external_spin(external_defaults["resin_prime_length_mm"]),
-                "fiber_prime_length_mm",
-                "纤维预挤出长度 mm",
-                _external_spin(external_defaults["fiber_prime_length_mm"]),
-            ),
-            (
-                "resin_prime_speed_mm_s",
-                "树脂预挤出速度 mm/s",
-                _external_spin(external_defaults["resin_prime_speed_mm_s"]),
-                "fiber_prime_speed_mm_s",
-                "纤维预挤出速度 mm/s",
-                _external_spin(external_defaults["fiber_prime_speed_mm_s"]),
-            ),
-            (
-                "resin_retract_length_mm",
-                "树脂回抽长度 mm",
-                _external_spin(external_defaults["resin_retract_length_mm"]),
-                "fiber_retract_length_mm",
-                "纤维回抽长度 mm",
-                _external_spin(external_defaults["fiber_retract_length_mm"]),
-            ),
-            (
-                "resin_retract_speed_mm_s",
-                "树脂回抽速度 mm/s",
-                _external_spin(external_defaults["resin_retract_speed_mm_s"]),
-                "fiber_retract_speed_mm_s",
-                "纤维回抽速度 mm/s",
-                _external_spin(external_defaults["fiber_retract_speed_mm_s"]),
-            ),
-            (
-                "travel_feed_mm_s",
-                "空走速度 mm/s",
-                _external_spin(external_defaults["travel_feed_mm_s"]),
-                "default_a",
-                "默认 A",
-                _external_spin(
-                    external_defaults["default_a"], minimum=-360.0, maximum=360.0
-                ),
-            ),
-            (
-                "start_x_mm",
-                "起点 X mm",
-                _external_spin(
-                    external_defaults["start_x_mm"],
-                    minimum=-100000.0,
-                    maximum=100000.0,
-                ),
-                "start_y_mm",
-                "起点 Y mm",
-                _external_spin(
-                    external_defaults["start_y_mm"],
-                    minimum=-100000.0,
-                    maximum=100000.0,
-                ),
-            ),
-            (
-                None,
-                "",
-                QtWidgets.QLabel(""),
-                "default_b",
-                "默认 B",
-                _external_spin(
-                    external_defaults["default_b"], minimum=-360.0, maximum=360.0
-                ),
-            ),
-            (
-                None,
-                "",
-                QtWidgets.QLabel(""),
-                "default_c",
-                "默认 C",
-                _external_spin(
-                    external_defaults["default_c"], minimum=-360.0, maximum=360.0
-                ),
-            ),
-        ]
+        def _external_param_group(title):
+            group = QtWidgets.QGroupBox(title)
+            grid = QtWidgets.QGridLayout(group)
+            grid.setHorizontalSpacing(8)
+            grid.setVerticalSpacing(4)
+            return group, grid
+
+        def _add_external_rows(grid, rows):
+            for row, fields in enumerate(rows):
+                (
+                    left_key,
+                    left_label,
+                    left_widget,
+                    right_key,
+                    right_label,
+                    right_widget,
+                ) = fields
+                if left_key:
+                    grid.addWidget(QtWidgets.QLabel(left_label), row, 0)
+                    grid.addWidget(left_widget, row, 1)
+                    self._external_npz_inputs[left_key] = left_widget
+                if right_key:
+                    grid.addWidget(QtWidgets.QLabel(right_label), row, 2)
+                    grid.addWidget(right_widget, row, 3)
+                    self._external_npz_inputs[right_key] = right_widget
+
+        fixed_resin_width_label = QtWidgets.QLabel(
+            f"固定树脂线宽: {fixed_resin_width:.1f} mm"
+        )
+        fixed_resin_width_label.setObjectName("fieldLabel")
+        external_group_layout.addWidget(fixed_resin_width_label)
+
         self._external_npz_inputs = {}
-        for row, fields in enumerate(_EXTERNAL_NPZ_PARAMS, start=1):
-            (
-                left_key,
-                left_label,
-                left_widget,
-                right_key,
-                right_label,
-                right_widget,
-            ) = fields
-            if left_key:
-                external_grid.addWidget(QtWidgets.QLabel(left_label), row, 0)
-                external_grid.addWidget(left_widget, row, 1)
-                self._external_npz_inputs[left_key] = left_widget
-            external_grid.addWidget(QtWidgets.QLabel(right_label), row, 2)
-            external_grid.addWidget(right_widget, row, 3)
-            self._external_npz_inputs[right_key] = right_widget
 
         resin_fan = QtWidgets.QCheckBox()
         resin_fan.setChecked(bool(external_defaults["resin_fan_enabled"]))
         fiber_fan = QtWidgets.QCheckBox()
         fiber_fan.setChecked(bool(external_defaults["fiber_fan_enabled"]))
-        fan_row = len(_EXTERNAL_NPZ_PARAMS) + 1
-        external_grid.addWidget(QtWidgets.QLabel("树脂风扇"), fan_row, 0)
-        external_grid.addWidget(resin_fan, fan_row, 1)
-        external_grid.addWidget(QtWidgets.QLabel("纤维风扇"), fan_row, 2)
-        external_grid.addWidget(fiber_fan, fan_row, 3)
-        self._external_npz_inputs["resin_fan_enabled"] = resin_fan
-        self._external_npz_inputs["fiber_fan_enabled"] = fiber_fan
+
+        resin_group, resin_grid = _external_param_group("树脂材料")
+        _add_external_rows(
+            resin_grid,
+            [
+                (
+                    "resin_layer_height_mm",
+                    "层高 mm",
+                    _external_spin(external_defaults["resin_layer_height_mm"]),
+                    "resin_extrusion_scale",
+                    "挤出倍率",
+                    _external_spin(external_defaults["resin_extrusion_scale"]),
+                ),
+                (
+                    "resin_feed_mm_s",
+                    "速度 mm/s",
+                    _external_spin(external_defaults["resin_feed_mm_s"]),
+                    "resin_temperature_c",
+                    "温度 C",
+                    _external_spin(external_defaults["resin_temperature_c"], maximum=500.0),
+                ),
+                (
+                    "resin_prime_length_mm",
+                    "预挤出长度 mm",
+                    _external_spin(external_defaults["resin_prime_length_mm"]),
+                    "resin_prime_speed_mm_s",
+                    "预挤出速度 mm/s",
+                    _external_spin(external_defaults["resin_prime_speed_mm_s"]),
+                ),
+                (
+                    "resin_retract_length_mm",
+                    "回抽长度 mm",
+                    _external_spin(external_defaults["resin_retract_length_mm"]),
+                    "resin_retract_speed_mm_s",
+                    "回抽速度 mm/s",
+                    _external_spin(external_defaults["resin_retract_speed_mm_s"]),
+                ),
+                (
+                    "resin_fan_enabled",
+                    "风扇",
+                    resin_fan,
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
+            ],
+        )
+
+        fiber_group, fiber_grid = _external_param_group("纤维材料")
+        _add_external_rows(
+            fiber_grid,
+            [
+                (
+                    "fiber_layer_height_mm",
+                    "层高 mm",
+                    _external_spin(external_defaults["fiber_layer_height_mm"]),
+                    "fiber_extrusion_scale",
+                    "挤出倍率",
+                    _external_spin(external_defaults["fiber_extrusion_scale"]),
+                ),
+                (
+                    "fiber_feed_mm_s",
+                    "速度 mm/s",
+                    _external_spin(external_defaults["fiber_feed_mm_s"]),
+                    "fiber_temperature_c",
+                    "温度 C",
+                    _external_spin(external_defaults["fiber_temperature_c"], maximum=500.0),
+                ),
+                (
+                    "fiber_prime_length_mm",
+                    "预挤出长度 mm",
+                    _external_spin(external_defaults["fiber_prime_length_mm"]),
+                    "fiber_prime_speed_mm_s",
+                    "预挤出速度 mm/s",
+                    _external_spin(external_defaults["fiber_prime_speed_mm_s"]),
+                ),
+                (
+                    "fiber_retract_length_mm",
+                    "回抽长度 mm",
+                    _external_spin(external_defaults["fiber_retract_length_mm"]),
+                    "fiber_retract_speed_mm_s",
+                    "回抽速度 mm/s",
+                    _external_spin(external_defaults["fiber_retract_speed_mm_s"]),
+                ),
+                (
+                    "fiber_fan_enabled",
+                    "风扇",
+                    fiber_fan,
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
+            ],
+        )
+
+        motion_group, motion_grid = _external_param_group("运动与坐标")
+        _add_external_rows(
+            motion_grid,
+            [
+                (
+                    "travel_feed_mm_s",
+                    "空走速度 mm/s",
+                    _external_spin(external_defaults["travel_feed_mm_s"]),
+                    "start_x_mm",
+                    "起点 X mm",
+                    _external_spin(
+                        external_defaults["start_x_mm"],
+                        minimum=-100000.0,
+                        maximum=100000.0,
+                    ),
+                ),
+                (
+                    "start_y_mm",
+                    "起点 Y mm",
+                    _external_spin(
+                        external_defaults["start_y_mm"],
+                        minimum=-100000.0,
+                        maximum=100000.0,
+                    ),
+                    "default_a",
+                    "默认 A",
+                    _external_spin(
+                        external_defaults["default_a"], minimum=-360.0, maximum=360.0
+                    ),
+                ),
+                (
+                    "default_b",
+                    "默认 B",
+                    _external_spin(
+                        external_defaults["default_b"], minimum=-360.0, maximum=360.0
+                    ),
+                    "default_c",
+                    "默认 C",
+                    _external_spin(
+                        external_defaults["default_c"], minimum=-360.0, maximum=360.0
+                    ),
+                ),
+            ],
+        )
+
+        smoothing_group, smoothing_grid = _external_param_group("路径平滑")
+        _add_external_rows(
+            smoothing_grid,
+            [
+                (
+                    "corner_angle_deg",
+                    "角点阈值 deg",
+                    _external_spin(external_defaults["corner_angle_deg"], maximum=180.0),
+                    "corner_retreat_ratio",
+                    "角点回退比例",
+                    _external_spin(external_defaults["corner_retreat_ratio"], maximum=1.0),
+                ),
+                (
+                    "spline_max_error_mm",
+                    "B样条误差上限 mm",
+                    _external_spin(external_defaults["spline_max_error_mm"], maximum=10.0),
+                    "spline_max_angle_deg",
+                    "B样条转角上限 deg",
+                    _external_spin(external_defaults["spline_max_angle_deg"], maximum=180.0),
+                ),
+                (
+                    "source_merge_distance_mm",
+                    "源短段合并 mm",
+                    _external_spin(external_defaults["source_merge_distance_mm"], maximum=10.0),
+                    "corner_retreat_max_mm",
+                    "角点回退上限 mm",
+                    _external_spin(external_defaults["corner_retreat_max_mm"], maximum=10.0),
+                ),
+                (
+                    "corner_blend_segments",
+                    "角点细分段数",
+                    _external_spin(external_defaults["corner_blend_segments"], maximum=64.0),
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
+            ],
+        )
+
+        material_layout = QtWidgets.QHBoxLayout()
+        material_layout.setSpacing(8)
+        material_layout.addWidget(resin_group, 1)
+        material_layout.addWidget(fiber_group, 1)
+        external_group_layout.addLayout(material_layout)
+
+        path_layout = QtWidgets.QHBoxLayout()
+        path_layout.setSpacing(8)
+        path_layout.addWidget(motion_group, 1)
+        path_layout.addWidget(smoothing_group, 1)
+        external_group_layout.addLayout(path_layout)
 
         external_layout.addWidget(external_group)
         self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")
@@ -4707,18 +4799,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
             default_c=values["default_c"].value(),
             start_x_mm=values["start_x_mm"].value(),
             start_y_mm=values["start_y_mm"].value(),
+            corner_angle_deg=values["corner_angle_deg"].value(),
+            corner_retreat_ratio=values["corner_retreat_ratio"].value(),
+            spline_max_error_mm=values["spline_max_error_mm"].value(),
+            spline_max_angle_deg=values["spline_max_angle_deg"].value(),
+            source_merge_distance_mm=values["source_merge_distance_mm"].value(),
+            corner_retreat_max_mm=values["corner_retreat_max_mm"].value(),
+            corner_blend_segments=int(values["corner_blend_segments"].value()),
         )
         if planner_params is None:
             return process_params
-        return replace(
-            process_params,
-            dt=planner_params["dt"],
-            corner_angle_deg=planner_params["corner_angle_deg"],
-            corner_retreat_ratio=planner_params["corner_retreat_ratio"],
-            density=planner_params["density"],
-            degree=planner_params["degree"],
-            max_fit_points_per_segment=planner_params["max_fit_points_per_segment"],
-        )
+        return replace(process_params, dt=planner_params["dt"])
 
     def _on_save_external_npz_params(self):
         try:

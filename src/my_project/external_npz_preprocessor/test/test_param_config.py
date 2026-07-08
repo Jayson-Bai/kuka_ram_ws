@@ -84,3 +84,36 @@ def test_legacy_resin_bead_width_is_ignored_on_load(tmp_path):
     assert not hasattr(params.resin, "bead_width_mm")
     assert params.resin.layer_height_mm == 0.4
     assert params.resin.e_per_mm() == pytest.approx(1.6)
+
+
+def test_legacy_spline_defaults_are_migrated_to_current_safe_defaults(tmp_path):
+    path = tmp_path / "legacy_spline.json"
+    path.write_text(
+        '{"params":{"corner_angle_deg":10.0,"corner_retreat_ratio":0.2}}',
+        encoding="utf-8",
+    )
+
+    params = load_print_params(path)
+
+    assert params.corner_angle_deg == 45.0
+    assert params.corner_retreat_ratio == 0.65
+    assert params.spline_max_error_mm == 0.1
+    assert params.spline_max_angle_deg == 45.0
+    assert params.source_merge_distance_mm == 0.04
+    assert params.corner_retreat_max_mm == 0.4
+    assert params.corner_blend_segments == 8
+
+
+def test_previous_external_npz_corner_retreat_default_is_migrated(tmp_path):
+    path = tmp_path / "previous_spline.json"
+    path.write_text(
+        '{"params":{"corner_angle_deg":45.0,"corner_retreat_ratio":0.25,"spline_max_error_mm":0.1}}',
+        encoding="utf-8",
+    )
+
+    params = load_print_params(path)
+
+    assert params.corner_angle_deg == 45.0
+    assert params.corner_retreat_ratio == 0.65
+    assert params.spline_max_error_mm == 0.1
+    assert params.corner_blend_segments == 8
