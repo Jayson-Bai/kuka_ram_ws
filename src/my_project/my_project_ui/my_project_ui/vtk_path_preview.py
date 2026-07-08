@@ -24,10 +24,10 @@ from gcode_planner.path_preview import (
 _MAX_POINTS_PER_PATH = 1000
 _MAX_STEP_REVIEW_POINTS_PER_PATH = 600
 _MAX_STEP_REVIEW_LENGTH_MM = 25.0
-_MAX_RENDER_POINTS_PER_ACTOR = 50000
+_MAX_RENDER_POINTS_PER_ACTOR = 18000
 _MAX_BEAD_SEGMENTS_PER_ACTOR = 25000
 _FIXED_PLANE_SIZE_MM = 500.0
-_FIXED_PLANE_GRID_STEP_MM = 50.0
+_FIXED_PLANE_GRID_STEP_MM = 100.0
 _BEAD_DIMENSIONS_MM = {
     PathType.FIBER_PRINT: (1.0, 0.1),
     PathType.RESIN_PRINT: (2.0, 0.5),
@@ -121,6 +121,7 @@ def _copy_path_chunk(path, points, poses, order_index):
         end_abc=poses[-1][3:6],
         src_line_start=path.src_line_start,
         src_line_end=path.src_line_end,
+        path_id=getattr(path, "path_id", 0),
         event_type=path.event_type,
         payload=path.payload,
     )
@@ -128,6 +129,8 @@ def _copy_path_chunk(path, points, poses, order_index):
 
 def _split_path_for_step_review(path):
     if path.path_type in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT):
+        return [path]
+    if getattr(path, "path_id", 0) > 0:
         return [path]
     if len(path.points) <= 2:
         return [path]
@@ -313,6 +316,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._show_tool_change = QtWidgets.QCheckBox("工具切换")
         self._show_endpoints = QtWidgets.QCheckBox("起/终点")
         self._show_origin_axes = QtWidgets.QCheckBox("原点坐标系")
+        self._show_grid = QtWidgets.QCheckBox("底面网格")
+        self._show_solid_beads = QtWidgets.QCheckBox("实体路径")
         default_enabled = {
             self._show_fiber,
             self._show_resin,
@@ -336,6 +341,16 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             lambda _state: self._update_scene()
         )
         filter_row.addWidget(self._show_origin_axes)
+        self._show_grid.setChecked(False)
+        self._show_grid.stateChanged.connect(
+            lambda _state: self._update_scene()
+        )
+        filter_row.addWidget(self._show_grid)
+        self._show_solid_beads.setChecked(False)
+        self._show_solid_beads.stateChanged.connect(
+            lambda _state: self._update_scene()
+        )
+        filter_row.addWidget(self._show_solid_beads)
         filter_row.addStretch()
         self._btn_top_view = QtWidgets.QPushButton("顶视")
         self._btn_iso_view = QtWidgets.QPushButton("斜视")
@@ -598,6 +613,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         for actor in self._base_plane_actors(
             self._current_paths or visible,
             show_origin_axes=self._show_origin_axes.isChecked(),
+            show_grid=self._show_grid.isChecked(),
         ):
             self._renderer.AddActor(actor)
             self._actors.append(actor)
@@ -639,7 +655,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         return actors
 
     def _actor_for_paths(self, path_type: PathType, paths: list[PreviewPath]):
-        if path_type in _BEAD_DIMENSIONS_MM:
+        if self._show_solid_beads.isChecked() and path_type in _BEAD_DIMENSIONS_MM:
             return self._bead_actor_for_paths(path_type, paths)
         return self._line_actor_for_paths(path_type, paths)
 
@@ -776,6 +792,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self,
         paths: list[PreviewPath],
         show_origin_axes: bool = False,
+        show_grid: bool = False,
     ):
         del paths
         min_x = 0.0
@@ -785,7 +802,9 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         z = 0.0
         step = _FIXED_PLANE_GRID_STEP_MM
 
-        actors = [self._grid_actor(min_x, max_x, min_y, max_y, z, step)]
+        actors = []
+        if show_grid:
+            actors.append(self._grid_actor(min_x, max_x, min_y, max_y, z, step))
         if show_origin_axes:
             axis_len = _FIXED_PLANE_SIZE_MM * 0.18
             for axis, color, direction, label_position in (

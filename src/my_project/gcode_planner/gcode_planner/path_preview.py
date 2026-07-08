@@ -38,6 +38,7 @@ class PreviewPath:
     end_abc: Point3
     src_line_start: str
     src_line_end: str
+    path_id: int = 0
     event_type: str = ""
     payload: str = ""
 
@@ -370,6 +371,8 @@ def _rows_from_npz(
             event_type = _optional_array(data, "event_type", count, 0)
             payload = _optional_array(data, "payload", count, "")
             seq = _optional_array(data, "seq", count, 0)
+            path_id = _optional_array(data, "path_id", count, 0)
+            path_end_flag = _optional_array(data, "path_end_flag", count, 0)
 
             row_indices = np.nonzero(mask)[0]
             if max_rows is not None and len(row_indices) > int(max_rows):
@@ -407,11 +410,33 @@ def _rows_from_npz(
                             _decode_value(event_type[idx]),
                         ),
                         "payload": _decode_value(payload[idx]),
+                        "path_id": int(path_id[idx]),
+                        "path_end_flag": int(path_end_flag[idx]),
                     }
                 )
             return rows
     except Exception:
         return []
+
+
+def _path_id_classification(rows: Sequence[dict]):
+    for row in rows:
+        if int(row.get("event_flag", 0)) == 1 or row.get("move_type") == "EVENT":
+            event_type = row.get("event_type", "")
+            path_type = (
+                PathType.TOOL_CHANGE_EVENT
+                if event_type in ("tool_change_cf", "tool_change_resin")
+                else PathType.EVENT
+            )
+            return path_type, int(row.get("tool_id", 0)), event_type
+    for row in rows:
+        if row.get("move_type") in ("PRINT", "PRINT_FIT"):
+            tool_id = int(row.get("tool_id", 0))
+            if tool_id == 1:
+                return PathType.FIBER_PRINT, tool_id, ""
+            return PathType.RESIN_PRINT, tool_id, ""
+    tool_id = int(rows[0].get("tool_id", 0)) if rows else 0
+    return PathType.TRAVEL, tool_id, ""
 
 
 def _extract_paths_from_rows(
@@ -429,7 +454,12 @@ def _extract_paths_from_rows(
             current_key = None
             current_rows = []
             return
-        path_type, tool_id, event_type = current_key
+        if current_key and current_key[0] == "PATH_ID":
+            path_type, tool_id, event_type = _path_id_classification(current_rows)
+            path_id = int(current_key[1])
+        else:
+            path_type, tool_id, event_type = current_key[:3]
+            path_id = 0
         points = tuple((_point(row)) for row in current_rows)
         poses = tuple((_pose(row)) for row in current_rows)
         if _is_degenerate_print_path(path_type, points):
@@ -454,6 +484,7 @@ def _extract_paths_from_rows(
                 end_abc=poses[-1][3:6],
                 src_line_start=current_rows[0]["src_line"],
                 src_line_end=current_rows[-1]["src_line"],
+                path_id=path_id,
                 event_type=event_type,
                 payload=current_rows[-1]["payload"],
             )
@@ -482,16 +513,22 @@ def _extract_paths_from_rows(
             continue
         if max_paths is not None and len(paths) >= max_paths:
             break
+        grouping_key = key
+        path_id = int(row.get("path_id", 0) or 0)
+        if path_id > 0 and key[0] not in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT):
+            grouping_key = ("PATH_ID", path_id)
         if key[0] in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT):
             flush()
             current_key = key
             current_rows = [row]
             flush()
             continue
-        if current_key != key:
+        if current_key != grouping_key:
             flush()
-            current_key = key
+            current_key = grouping_key
         current_rows.append(row)
+        if int(row.get("path_end_flag", 0) or 0) == 1 and path_id > 0:
+            flush()
     flush()
     return paths
 

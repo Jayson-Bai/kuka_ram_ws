@@ -23,6 +23,7 @@
 #include <unistd.h>
 //并发/容器
 #include <atomic>
+#include <cmath>
 #include <cctype>
 #include <limits>
 #include <mutex>
@@ -45,7 +46,7 @@ using my_project_interfaces::msg::KukaStatus; //KUKA状态
 class RSINode : public rclcpp::Node
 {
 private:
-  enum class State {RUN, WAIT, PAUSE, ABORT}; //状态机四种状态
+  enum class State {RUN, WAIT, PAUSE, PAUSE_ARMED, PAUSE_RETRACT, PAUSE_LIFT, PAUSE_HOLD, PAUSE_RETURN, ABORT}; //状态机
 
   //订阅
   rclcpp::Subscription<TrajectoryPoint>::SharedPtr traj_sub_; //轨迹点
@@ -61,6 +62,7 @@ private:
   rclcpp::Publisher<PlannedEvent>::SharedPtr triggered_event_pub_; //转发给UART的事件
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr sent_xml_pub_; //发出的RSI XML
   rclcpp::Publisher<TrajectoryPoint>::SharedPtr current_correction_pub_; //当前RSI修正量
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr system_cmd_pub_; //暂停流程状态回报
 
   //数据缓存
   //互斥锁
@@ -90,6 +92,21 @@ private:
   std::atomic<State> state_{State::WAIT}; //默认状态
   std::atomic<State> pre_pause_state_{State::WAIT}; //暂停前的状态，用于RESUME恢复
   std::optional<PlannedEvent> current_wait_;//当前事件
+  std::atomic<bool> pause_request_active_{false};
+  bool pause_cut_seen_{false};
+  int pause_requested_tool_id_{0};
+  uint32_t pause_requested_path_id_{0};
+  TrajectoryPoint pause_resume_pose_;
+  bool pause_resume_pose_valid_{false};
+  double pause_safe_lift_mm_{20.0};
+  double pause_lift_speed_mm_s_{10.0};
+  double pause_retract_mm_{2.0};
+  double pause_retract_speed_mm_s_{2.0};
+  double pause_lift_step_mm_{0.0};
+  double pause_retract_step_mm_{0.0};
+  std::atomic<int> pause_retract_remaining_{0};
+  std::atomic<int> pause_lift_remaining_{0};
+  std::atomic<int> pause_return_remaining_{0};
 
   //ABORT Z轴抬升
   double abort_lift_mm_{100.0}; //抬升距离(mm)
@@ -119,11 +136,17 @@ public:
     local_port_ = declare_parameter<int>("local_port", 49152);  //端口
     abort_lift_mm_ = declare_parameter<double>("abort_lift_mm", 100.0);  //ABORT抬升距离(mm)
     abort_lift_speed_mm_s_ = declare_parameter<double>("abort_lift_speed_mm_s", 10.0);  //ABORT抬升速度(mm/s)
+    pause_safe_lift_mm_ = declare_parameter<double>("pause_safe_lift_mm", 20.0);
+    pause_lift_speed_mm_s_ = declare_parameter<double>("pause_lift_speed_mm_s", 10.0);
+    pause_retract_mm_ = declare_parameter<double>("pause_retract_mm", 2.0);
+    pause_retract_speed_mm_s_ = declare_parameter<double>("pause_retract_speed_mm_s", 2.0);
     fast_first_reply_ = declare_parameter<bool>("fast_first_reply", true);  //仅首个KUKA包快速回包，不推进挤出链路
 
     // 计算每帧(4ms)的Z轴抬升步长
     constexpr double RSI_PERIOD_S = 0.004; // 4ms
     abort_step_mm_ = abort_lift_speed_mm_s_ * RSI_PERIOD_S;
+    pause_lift_step_mm_ = pause_lift_speed_mm_s_ * RSI_PERIOD_S;
+    pause_retract_step_mm_ = pause_retract_speed_mm_s_ * RSI_PERIOD_S;
 
     last_sent_ = TrajectoryPoint();//全0，不进入队列，不影响对齐
 
@@ -205,6 +228,7 @@ public:
 
     //发布当前 RSI 修正量，供测试模式生成下一段临时 NPZ。
     current_correction_pub_ = create_publisher<TrajectoryPoint>("/rsi/current_correction", 10);
+    system_cmd_pub_ = create_publisher<std_msgs::msg::String>("/system/command", 10);
 
     //打开UDP
     sockfd_ = socket(AF_INET, SOCK_DGRAM, 0); //ipv4 udp套接字
@@ -292,11 +316,14 @@ private:
       State current_state = state_.load();
 
       //状态机 严格对齐seq
-      if (current_state == State::RUN) {
+      if (current_state == State::RUN || current_state == State::PAUSE_ARMED) {
         if (should_enter_wait(next_seq_)) { //事件触发了等待:判断trigger_seq是否到达当前traj序号
           current_wait_ = pop_next_event();
           if (current_wait_) {
             triggered_event_pub_->publish(*current_wait_);
+            if (pause_request_active_.load() && current_wait_->event_type == "cut") {
+              pause_cut_seen_ = true;
+            }
             last_event_seq_triggered_ = current_wait_->trigger_seq;
             state_.store(State::WAIT);
           }
@@ -315,6 +342,9 @@ private:
               last_sent_ = to_send;
               ++next_seq_;
               resync_sent_ = false;
+              if (current_state == State::PAUSE_ARMED && should_enter_staged_pause(to_send)) {
+                begin_staged_pause(to_send);
+              }
             } else { //队头比期望快
               if ((last_event_seq_triggered_ && *last_event_seq_triggered_ == next_seq_) ||
                 has_event_between(next_seq_, tp->seq) ||
@@ -326,6 +356,9 @@ private:
                 last_sent_ = to_send;
                 ++next_seq_;
                 resync_sent_ = false;
+                if (current_state == State::PAUSE_ARMED && should_enter_staged_pause(to_send)) {
+                  begin_staged_pause(to_send);
+                }
               } else {
                 RCLCPP_WARN_THROTTLE(
                   get_logger(),
@@ -356,12 +389,52 @@ private:
         }
       } else if (current_state == State::WAIT) {
         if (is_wait_cleared()) { // UART当前事件就绪后解除等待
-          state_.store(State::RUN);
+          state_.store(pause_request_active_.load() ? State::PAUSE_ARMED : State::RUN);
           current_wait_.reset();
         }
         // WAIT期间始终重发 last_sent_
       } else if (current_state == State::PAUSE) {
         // PAUSE期间始终重发 last_sent_（冻结帧），保持KUKA存活
+      } else if (current_state == State::PAUSE_RETRACT) {
+        to_send = *last_sent_;
+        if (pause_retract_remaining_.load() > 0) {
+          to_send.e -= pause_retract_step_mm_;
+          last_sent_ = to_send;
+          pause_retract_remaining_.fetch_sub(1);
+        } else {
+          state_.store(State::PAUSE_LIFT);
+        }
+      } else if (current_state == State::PAUSE_LIFT) {
+        to_send = *last_sent_;
+        if (pause_lift_remaining_.load() > 0) {
+          to_send.z += pause_lift_step_mm_;
+          last_sent_ = to_send;
+          pause_lift_remaining_.fetch_sub(1);
+        } else {
+          publish_system_command("PAUSE_READY");
+          state_.store(State::PAUSE_HOLD);
+        }
+      } else if (current_state == State::PAUSE_HOLD) {
+        // 安全高度保活，不推进seq。
+      } else if (current_state == State::PAUSE_RETURN) {
+        to_send = *last_sent_;
+        if (pause_return_remaining_.load() > 0 && pause_resume_pose_valid_) {
+          to_send.z -= pause_lift_step_mm_;
+          if (to_send.z < pause_resume_pose_.z) {
+            to_send.z = pause_resume_pose_.z;
+          }
+          last_sent_ = to_send;
+          pause_return_remaining_.fetch_sub(1);
+        } else if (pause_resume_pose_valid_) {
+          last_sent_ = pause_resume_pose_;
+          to_send = pause_resume_pose_;
+          pause_request_active_.store(false);
+          pause_cut_seen_ = false;
+          state_.store(State::RUN);
+        } else {
+          pause_request_active_.store(false);
+          state_.store(State::RUN);
+        }
       } else if (current_state == State::ABORT) {
         // ABORT: 在last_sent_基础上逐帧Z轴抬升
         if (abort_lift_remaining_.load() > 0) {
@@ -497,9 +570,68 @@ private:
     }
   }
 
+  void publish_system_command(const std::string & cmd)
+  {
+    std_msgs::msg::String msg;
+    msg.data = cmd;
+    system_cmd_pub_->publish(msg);
+  }
+
+  bool should_enter_staged_pause(const TrajectoryPoint & tp)
+  {
+    if (!pause_request_active_.load() || !tp.path_end_flag) {
+      return false;
+    }
+    if (pause_requested_path_id_ != 0 && tp.path_id != pause_requested_path_id_) {
+      return false;
+    }
+    if (pause_requested_tool_id_ == 2) {
+      return true;
+    }
+    if (pause_requested_tool_id_ == 1) {
+      return pause_cut_seen_;
+    }
+    return true;
+  }
+
+  void begin_staged_pause(const TrajectoryPoint & tp)
+  {
+    pause_resume_pose_ = tp;
+    pause_resume_pose_valid_ = true;
+    int retract_frames = pause_retract_step_mm_ > 1e-9 ?
+      static_cast<int>(std::ceil(pause_retract_mm_ / pause_retract_step_mm_)) : 0;
+    int lift_frames = pause_lift_step_mm_ > 1e-9 ?
+      static_cast<int>(std::ceil(pause_safe_lift_mm_ / pause_lift_step_mm_)) : 0;
+    pause_retract_remaining_.store(retract_frames);
+    pause_lift_remaining_.store(lift_frames);
+    pause_return_remaining_.store(lift_frames);
+    if (retract_frames > 0) {
+      state_.store(State::PAUSE_RETRACT);
+    } else if (lift_frames > 0) {
+      state_.store(State::PAUSE_LIFT);
+    } else {
+      publish_system_command("PAUSE_READY");
+      state_.store(State::PAUSE_HOLD);
+    }
+  }
+
   void on_system_command(const std::string & cmd)
   {
-    if (cmd == "PAUSE") {
+    if (cmd == "REQUEST_PAUSE") {
+      State cur = state_.load();
+      if (cur == State::ABORT || cur == State::PAUSE || cur == State::PAUSE_ARMED ||
+        cur == State::PAUSE_RETRACT || cur == State::PAUSE_LIFT || cur == State::PAUSE_HOLD ||
+        cur == State::PAUSE_RETURN) {
+        return;
+      }
+      pause_request_active_.store(true);
+      pause_cut_seen_ = false;
+      pause_requested_tool_id_ = last_sent_ ? last_sent_->tool_id : 0;
+      pause_requested_path_id_ = last_sent_ ? last_sent_->path_id : 0;
+      pre_pause_state_.store(cur);
+      state_.store(cur == State::WAIT ? State::WAIT : State::PAUSE_ARMED);
+      RCLCPP_INFO(get_logger(), "RSI收到REQUEST_PAUSE命令，等待当前路径安全收尾");
+    } else if (cmd == "PAUSE") {
       State cur = state_.load();
       if (cur == State::PAUSE || cur == State::ABORT) {
         return;                                                // 已暂停或已终止
@@ -508,10 +640,17 @@ private:
       state_.store(State::PAUSE);
       RCLCPP_INFO(get_logger(), "RSI收到PAUSE命令，冻结轨迹推进");
     } else if (cmd == "RESUME") {
-      if (state_.load() != State::PAUSE) {
-        return;                                   // 仅从PAUSE状态恢复
+      State cur = state_.load();
+      if (cur == State::PAUSE_HOLD) {
+        state_.store(State::PAUSE_RETURN);
+      } else if (cur == State::PAUSE || cur == State::PAUSE_ARMED || cur == State::PAUSE_RETRACT ||
+        cur == State::PAUSE_LIFT) {
+        pause_request_active_.store(false);
+        pause_cut_seen_ = false;
+        state_.store(pre_pause_state_.load());
+      } else {
+        return;
       }
-      state_.store(pre_pause_state_.load()); // 恢复暂停前的状态
       RCLCPP_INFO(get_logger(), "RSI收到RESUME命令，恢复轨迹推进");
     } else if (cmd == "ABORT") {
       if (state_.load() == State::ABORT) {

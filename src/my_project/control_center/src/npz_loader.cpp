@@ -116,6 +116,8 @@ bool NpzLoader::next_row(NpzRow & out)
   out.trigger_seq = c.trigger_seq[i];
   out.layer_index = c.layer_index[i];
   out.total_layers = c.total_layers[i];
+  out.path_id = c.path_id[i];
+  out.path_end_flag = c.path_end_flag[i] != 0;
 
   if (chunk_row_idx_ >= c.size) {
     cache_.pop_front();
@@ -344,6 +346,16 @@ NpzChunk NpzLoader::load_chunk(const std::string & file)
     c.total_layers = to_vec<uint32_t>(npz.at("total_layers"));
   } else {
     c.total_layers.assign(c.size, 0);
+  }
+  if (npz.count("path_id")) {
+    c.path_id = to_vec<uint32_t>(npz.at("path_id"));
+  } else {
+    c.path_id.assign(c.size, 0);
+  }
+  if (npz.count("path_end_flag")) {
+    c.path_end_flag = to_vec<uint8_t>(npz.at("path_end_flag"));
+  } else {
+    c.path_end_flag.assign(c.size, 0);
   }
 
   return c;

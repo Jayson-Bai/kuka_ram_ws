@@ -10,3 +10,5 @@ int32 tool_id
 uint32 seq
 uint32 layer_index
 uint32 total_layers
+uint32 path_id
+bool path_end_flag

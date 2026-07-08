@@ -46,7 +46,11 @@ public:
       rclcpp::QoS(10).reliable(),
       [this](std_msgs::msg::String::SharedPtr msg) {
         std::lock_guard<std::mutex> lk(mutex_);
-        if (msg->data == "PAUSE") {
+        if (msg->data == "REQUEST_PAUSE") {
+          system_command_ = "PAUSE_REQUESTED";
+        } else if (msg->data == "PAUSE_READY") {
+          system_command_ = "PAUSE_READY";
+        } else if (msg->data == "PAUSE") {
           system_command_ = "PAUSED";
         } else if (msg->data == "RESUME") {
           system_command_ = "";           // 清除，恢复正常状态判定

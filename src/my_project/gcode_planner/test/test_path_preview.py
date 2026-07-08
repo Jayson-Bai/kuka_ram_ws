@@ -48,6 +48,14 @@ def _write_npz(path: Path, **arrays):
             arrays.get("preview_layer_index", arrays["layer_index"]),
             dtype=np.int32,
         ),
+        path_id=np.array(
+            arrays.get("path_id", [0] * len(arrays["x"])),
+            dtype=np.uint32,
+        ),
+        path_end_flag=np.array(
+            arrays.get("path_end_flag", [0] * len(arrays["x"])),
+            dtype=np.uint8,
+        ),
         total_layers=np.array([2] * len(arrays["x"]), dtype=np.uint32),
         move_type_vocab_keys=np.array(
             [b"TRAVEL", b"PRINT", b"TRAVEL_FIT", b"PRINT_FIT", b"EVENT"],
@@ -114,6 +122,70 @@ def test_extract_preview_paths_classifies_process_paths_from_flat_npz(
     assert paths[3].tool_id == 2
     assert paths[4].points[0] == pytest.approx((4.0, 2.0, 0.2))
     assert [p.order_index for p in paths] == list(range(len(paths)))
+
+
+def test_extract_preview_paths_prefers_path_id_boundaries(tmp_path):
+    from gcode_planner.path_preview import (
+        PathType,
+        extract_layer_preview_paths,
+    )
+
+    root = tmp_path / "job"
+    _write_npz(
+        root / "job.npz",
+        x=[0, 1, 2, 3],
+        y=[0, 0, 0, 0],
+        z=[0.2, 0.2, 0.2, 0.2],
+        e=[0.1, 0.5, 0.6, 1.0],
+        tool_id=[2, 2, 2, 2],
+        move_type=[1, 1, 1, 1],
+        path_id=[11, 11, 12, 12],
+        path_end_flag=[0, 1, 0, 1],
+        src_line=["10", "11", "12", "13"],
+        layer_index=[0, 0, 0, 0],
+    )
+
+    paths = extract_layer_preview_paths(root, 0)
+
+    assert [p.path_type for p in paths] == [
+        PathType.RESIN_PRINT,
+        PathType.RESIN_PRINT,
+    ]
+    assert [p.path_id for p in paths] == [11, 12]
+    assert paths[0].start == pytest.approx((0.0, 0.0, 0.2))
+    assert paths[0].end == pytest.approx((1.0, 0.0, 0.2))
+    assert paths[1].start == pytest.approx((2.0, 0.0, 0.2))
+    assert paths[1].end == pytest.approx((3.0, 0.0, 0.2))
+
+
+def test_extract_preview_paths_does_not_split_one_path_id_on_local_e_plateaus(tmp_path):
+    from gcode_planner.path_preview import (
+        PathType,
+        extract_layer_preview_paths,
+    )
+
+    root = tmp_path / "job"
+    _write_npz(
+        root / "job.npz",
+        x=[0, 1, 2, 3, 4],
+        y=[0, 0, 0, 0, 0],
+        z=[0.2] * 5,
+        e=[0.1, 0.1, 0.5, 0.5, 1.0],
+        tool_id=[2, 2, 2, 2, 2],
+        move_type=[1, 1, 1, 1, 1],
+        path_id=[42, 42, 42, 42, 42],
+        path_end_flag=[0, 0, 0, 0, 1],
+        src_line=["10", "11", "12", "13", "14"],
+        layer_index=[0] * 5,
+    )
+
+    paths = extract_layer_preview_paths(root, 0)
+
+    assert len(paths) == 1
+    assert paths[0].path_type == PathType.RESIN_PRINT
+    assert paths[0].path_id == 42
+    assert paths[0].start == pytest.approx((0.0, 0.0, 0.2))
+    assert paths[0].end == pytest.approx((4.0, 0.0, 0.2))
 
 
 def test_extract_preview_paths_uses_split_layer_directory(tmp_path):

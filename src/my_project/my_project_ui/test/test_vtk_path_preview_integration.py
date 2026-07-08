@@ -93,9 +93,11 @@ def test_vtk_origin_axes_are_hidden_by_default_and_have_toggle():
         "    def _grid_actor", 1
     )[0]
     assert "show_origin_axes: bool = False" in base_plane_block
-    assert "actors = [self._grid_actor" in base_plane_block
+    assert "show_grid: bool = False" in base_plane_block
+    assert "if show_grid:" in base_plane_block
+    assert "actors.append(self._grid_actor" in base_plane_block
     assert "if show_origin_axes:" in base_plane_block
-    assert base_plane_block.index("actors = [self._grid_actor") < base_plane_block.index(
+    assert base_plane_block.index("if show_grid:") < base_plane_block.index(
         "if show_origin_axes:"
     )
 
@@ -250,12 +252,13 @@ def test_vtk_preview_renders_paths_events_and_nozzle_with_display_points():
     assert "current_path.end, current_path.end_abc" not in src
 
 
-def test_vtk_path_preview_splits_large_paths_for_stepwise_review():
+def test_vtk_path_preview_splits_only_legacy_large_paths_for_stepwise_review():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "_MAX_STEP_REVIEW_POINTS_PER_PATH" in src
     assert "def _split_preview_paths_for_step_review" in src
     assert "self._current_paths = _split_preview_paths_for_step_review(" in src
+    assert 'getattr(path, "path_id", 0) > 0' in src
 
 
 def test_vtk_path_preview_preserves_camera_when_switching_layers():
@@ -339,14 +342,29 @@ def test_vtk_abc_zero_keeps_nozzle_tip_on_path_with_body_above_it():
     assert "transform.RotateX(float(abc[2]))" in transform_block
 
 
-def test_vtk_print_paths_use_real_world_bead_width_and_layer_height():
+def test_vtk_print_paths_keep_bead_dimensions_for_optional_detail_mode():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "_BEAD_DIMENSIONS_MM" in src
     assert "PathType.FIBER_PRINT: (1.0, 0.1)" in src
     assert "PathType.RESIN_PRINT: (2.0, 0.5)" in src
-    assert "if path_type in _BEAD_DIMENSIONS_MM:" in src
+    assert "self._show_solid_beads = QtWidgets.QCheckBox" in src
+    assert "self._show_solid_beads.setChecked(False)" in src
+    assert "if self._show_solid_beads.isChecked() and path_type in _BEAD_DIMENSIONS_MM:" in src
     assert "return self._bead_actor_for_paths(path_type, paths)" in src
+
+
+def test_vtk_default_lightweight_preview_uses_lines_and_low_density_grid():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "_MAX_RENDER_POINTS_PER_ACTOR = 18000" in src
+    assert "_FIXED_PLANE_GRID_STEP_MM = 100.0" in src
+    assert "self._show_grid = QtWidgets.QCheckBox" in src
+    assert "self._show_grid.setChecked(False)" in src
+    update_block = src.split("    def _update_scene", 1)[1].split(
+        "    def _actors_for_paths", 1
+    )[0]
+    assert "show_grid=self._show_grid.isChecked()" in update_block
 
 
 def test_vtk_bead_mesh_uses_material_coordinates_and_physical_z_thickness():

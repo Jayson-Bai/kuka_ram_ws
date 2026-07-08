@@ -50,6 +50,8 @@ class CsvRow:
     layer_index: int = 0
     total_layers: int = 0
     preview_layer_index: int = 0
+    path_id: int = 0
+    path_end_flag: int = 0
 
 
 @dataclass
@@ -246,6 +248,8 @@ def export_npz(
                 [r.preview_layer_index for r in chunk],
                 dtype=np.int32,
             )
+            path_id = np.array([r.path_id for r in chunk], dtype=np.uint32)
+            path_end_flag = np.array([r.path_end_flag for r in chunk], dtype=np.uint8)
 
             np.savez_compressed(
                 out_path,
@@ -267,6 +271,8 @@ def export_npz(
                 layer_index=layer_index,
                 total_layers=total_layers_arr,
                 preview_layer_index=preview_layer_index,
+                path_id=path_id,
+                path_end_flag=path_end_flag,
                 move_type_vocab_keys=move_type_keys,
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
@@ -289,6 +295,8 @@ def export_npz(
     manifest = []
     manifest_by_key = {}
     occ_counters = {}
+    path_id_by_segment = {}
+    next_path_id = 1
     finalized_keys = set()
     plotted_layers = set()
     flat_preview_points = {}
@@ -324,11 +332,30 @@ def export_npz(
         return writers[key]
 
     def _ensure_segment(layer: int, subtype: str) -> int:
+        nonlocal next_path_id
         key = (layer, subtype)
         occ = occ_counters.get(key, 0) + 1
         occ_counters[key] = occ
         _writer_for(layer, subtype, occ)
+        path_id_by_segment[(layer, _normalize_subtype(subtype), occ)] = next_path_id
+        next_path_id += 1
         return occ
+
+    def _path_id_for(layer: int, subtype: str, occ: int) -> int:
+        return path_id_by_segment.get((layer, _normalize_subtype(subtype), occ), 0)
+
+    def _mark_path_end(layer: int, subtype: str, occ: int):
+        path_id = _path_id_for(layer, subtype, occ)
+        if path_id <= 0:
+            return
+        writer = _writer_for(layer, subtype, occ)
+        last_index = None
+        for idx, row in enumerate(writer.rows):
+            if row.path_id == path_id:
+                row.path_end_flag = 0
+                last_index = idx
+        if last_index is not None:
+            writer.rows[last_index].path_end_flag = 1
 
     processed_rows = 0
 
@@ -432,7 +459,8 @@ def export_npz(
         xs.append(row.x)
         ys.append(row.y)
 
-    def _append_sample(gc: GlobalCurveCommand, layer: int, subtype: str, occ: int):
+    def _append_sample(
+            gc: GlobalCurveCommand, layer: int, subtype: str, occ: int, mark_path_end: bool = True):
         nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map, last_pose
         t0 = time.perf_counter()
         sample_profile = {
@@ -458,6 +486,8 @@ def export_npz(
             src_lines = f"{move_lines[0]}-{move_lines[-1]}"
         else:
             src_lines = str(move_lines[0])
+        sampled_rows: List[CsvRow] = []
+        path_id = _path_id_for(layer, subtype, occ)
         for pt in sample_global_curve_iter(
                 gc,
                 dt=dt,
@@ -480,15 +510,22 @@ def export_npz(
                 event_type="",
                 payload="",
                 trigger_seq=None,
+                path_id=path_id,
             )
-            row = _with_layer_progress(row, layer)
-            _writer_for(layer, subtype, occ).add(row)
-            _record_flat_preview_point(layer, row)
-            processed_rows += 1
-            _maybe_yield()
+            sampled_rows.append(_with_layer_progress(row, layer))
             seq += 1
-            last_pose_map[(layer, subtype)] = row
-            last_pose = row
+
+        if sampled_rows:
+            writer = _writer_for(layer, subtype, occ)
+            for row in sampled_rows:
+                writer.add(row)
+                _record_flat_preview_point(layer, row)
+                processed_rows += 1
+                _maybe_yield()
+                last_pose_map[(layer, subtype)] = row
+                last_pose = row
+            if mark_path_end:
+                _mark_path_end(layer, subtype, occ)
         timings["sample_s"] += time.perf_counter() - t0
         timings["sample_arc_map_s"] += sample_profile["sample_arc_map_s"]
         timings["sample_lookup_s"] += sample_profile["sample_lookup_s"]
@@ -1061,8 +1098,8 @@ def export_npz(
         layer = buffer[0].layer if buffer else 0
         subtype = buffer[0].subtype if buffer else "UNKNOWN"
         occ = current_occ if current_occ is not None else _ensure_segment(layer, subtype)
-        for gc in gc_list:
-            _append_sample(gc, layer, subtype, occ)
+        for idx, gc in enumerate(gc_list):
+            _append_sample(gc, layer, subtype, occ, mark_path_end=(idx == len(gc_list) - 1))
         buffer = []
         current_type = None
         current_layer = None
@@ -1101,7 +1138,8 @@ def export_npz(
         _append_sample(gc, layer, "TRAVEL", occ)
         resin_z_offset = resin_z_print_compensation_mm
 
-    def _append_extrude_wait(cmd: ExtrudeWait, layer: int, subtype: str, occ: int):
+    def _append_extrude_wait(
+            cmd: ExtrudeWait, layer: int, subtype: str, occ: int, mark_path_end: bool = True):
         nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
         hold_row = last_pose or CsvRow(
             seq=seq,
@@ -1141,6 +1179,7 @@ def export_npz(
                 event_type="",
                 payload="",
                 trigger_seq=None,
+                path_id=_path_id_for(layer, subtype, occ),
             )
             row = _with_layer_progress(row, layer)
             writer.add(row)
@@ -1148,6 +1187,8 @@ def export_npz(
             _maybe_yield()
             seq += 1
             last_pose = row
+        if mark_path_end:
+            _mark_path_end(layer, subtype, occ)
         if cmd.feedrate > 0:
             last_feedrate_mm_min = cmd.feedrate
 
@@ -1188,7 +1229,7 @@ def export_npz(
                     layer=layer,
                     subtype=subtype,
                     raw="cut_wait",
-                ), layer, subtype, occ)
+                ), layer, subtype, occ, mark_path_end=False)
             return
 
         hold_row = last_pose or CsvRow(
@@ -1207,6 +1248,7 @@ def export_npz(
             event_type="",
             payload="",
             trigger_seq=None,
+            path_id=_path_id_for(layer, subtype, occ),
         )
         start_p = Position(hold_row.x, hold_row.y, hold_row.z, hold_row.a, hold_row.b, hold_row.c)
         end_p = Position(hold_row.x, hold_row.y, hold_row.z + lift_mm, hold_row.a, hold_row.b, hold_row.c)
@@ -1224,7 +1266,7 @@ def export_npz(
             constraints=[],
             original_moves=[],
         )
-        _append_sample(lift_gc, layer, subtype, occ)
+        _append_sample(lift_gc, layer, subtype, occ, mark_path_end=False)
 
         lift_duration_s = lift_mm / max(_feed_mm_s_from_feedrate(lift_feedrate), 1e-9)
         remaining_wait_s = max(0.0, wait_s - lift_duration_s)
@@ -1238,7 +1280,7 @@ def export_npz(
                 layer=layer,
                 subtype=subtype,
                 raw="cut_wait_remaining",
-            ), layer, subtype, occ)
+            ), layer, subtype, occ, mark_path_end=False)
 
         retract_feedrate = _next_retract_feedrate(command_index)
         retract_speed = max(_feed_mm_s_from_feedrate(retract_feedrate), 1e-9)
@@ -1251,7 +1293,7 @@ def export_npz(
             layer=layer,
             subtype=subtype,
             raw="cut_safety_retract",
-        ), layer, subtype, occ)
+        ), layer, subtype, occ, mark_path_end=True)
 
     def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose_map, last_pose
@@ -1271,6 +1313,7 @@ def export_npz(
             event_type="",
             payload="",
             trigger_seq=None,
+            path_id=_path_id_for(layer, subtype, occ),
         )
         row = CsvRow(
             seq=seq,
@@ -1288,6 +1331,7 @@ def export_npz(
             event_type=ev.event_type,
             payload=ev.payload,
             trigger_seq=seq,
+            path_id=_path_id_for(layer, subtype, occ),
         )
         _writer_for(layer, subtype, occ).add(_with_layer_progress(row, layer))
         processed_rows += 1

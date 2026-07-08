@@ -129,6 +129,115 @@ def test_npz_export_includes_layer_progress_metadata(tmp_path):
     assert data["total_layers"][-1] == 3
 
 
+def test_npz_export_includes_path_metadata_for_print_segments(tmp_path):
+    out = tmp_path / "path_metadata.npz"
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.5,
+            delta_e=0.5,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="Perimeter",
+            raw="G1 X1 E0.5 F600",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(2.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.0,
+            delta_e=0.5,
+            feedrate=600.0,
+            line=2,
+            layer=0,
+            subtype="Perimeter",
+            raw="G1 X2 E1.0 F600",
+            is_pure_state_change=False,
+        ),
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(2.0, 1.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(3.0, 1.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=1.5,
+            delta_e=0.5,
+            feedrate=600.0,
+            line=3,
+            layer=0,
+            subtype="Infill",
+            raw="G1 X3 Y1 E1.5 F600",
+            is_pure_state_change=False,
+        ),
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    assert "path_id" in data.files
+    assert "path_end_flag" in data.files
+    assert "move_type" in data.files
+    path_ids = data["path_id"]
+    end_flags = data["path_end_flag"]
+    assert path_ids[0] > 0
+    assert len(set(path_ids.tolist())) == 2
+    first_path = path_ids[0]
+    first_path_indices = np.where(path_ids == first_path)[0]
+    assert end_flags[first_path_indices[-1]] == 1
+    assert np.all(end_flags[first_path_indices[:-1]] == 0)
+    assert end_flags[-1] == 1
+    for path_id in sorted(set(path_ids.tolist())):
+        indices = np.where(path_ids == path_id)[0]
+        assert int(np.sum(end_flags[indices])) == 1
+        assert end_flags[indices[-1]] == 1
+
+
+def test_path_end_flag_marks_only_final_row_after_segment_extrude_wait(tmp_path):
+    out = tmp_path / "single_safe_pause_point.npz"
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.5,
+            delta_e=0.5,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="Perimeter",
+            raw="G1 X1 E0.5 F600",
+            is_pure_state_change=False,
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=0.2,
+            delta_e=-0.2,
+            feedrate=120.0,
+            line=2,
+            layer=0,
+            subtype="Perimeter",
+            raw="G1 E0.3 F120",
+        ),
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    path_ids = data["path_id"]
+    end_flags = data["path_end_flag"]
+    nonzero_ids = sorted(set(int(v) for v in path_ids if int(v) > 0))
+    assert nonzero_ids == [int(path_ids[0])]
+    indices = np.where(path_ids == nonzero_ids[0])[0]
+    assert int(np.sum(end_flags[indices])) == 1
+    assert end_flags[indices[-1]] == 1
+
+
 def _decoded_src_lines(data):
     return [item.decode("utf-8").rstrip("\x00") for item in data["src_line"]]
 

@@ -29,6 +29,8 @@ struct NpzRow
   int32_t trigger_seq{};
   uint32_t layer_index{};
   uint32_t total_layers{};
+  uint32_t path_id{};
+  bool path_end_flag{};
 };
 
 struct NpzChunk
@@ -50,6 +52,8 @@ struct NpzChunk
   std::vector<int32_t> trigger_seq;
   std::vector<uint32_t> layer_index;
   std::vector<uint32_t> total_layers;
+  std::vector<uint32_t> path_id;
+  std::vector<uint8_t> path_end_flag;
   size_t size{0};
 };
 

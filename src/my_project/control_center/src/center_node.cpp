@@ -408,7 +408,12 @@ private:
 
   void on_system_command(const std::string & cmd)
   {
-    if (cmd == "PAUSE") {
+    if (cmd == "REQUEST_PAUSE") {
+      RCLCPP_INFO(get_logger(), "center_node收到REQUEST_PAUSE命令，进入PAUSE_REQUESTED等待RSI到达安全暂停点");
+    } else if (cmd == "PAUSE_READY") {
+      paused_.store(true);
+      RCLCPP_INFO(get_logger(), "center_node收到PAUSE_READY命令，暂停轨迹发布");
+    } else if (cmd == "PAUSE") {
       paused_.store(true);
       RCLCPP_INFO(get_logger(), "center_node收到PAUSE命令，暂停轨迹发布");
     } else if (cmd == "RESUME") {

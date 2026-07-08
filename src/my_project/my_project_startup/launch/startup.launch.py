@@ -46,6 +46,10 @@ def generate_launch_description():
     local_port = LaunchConfiguration("local_port")
     abort_lift_mm = LaunchConfiguration("abort_lift_mm")
     abort_lift_speed_mm_s = LaunchConfiguration("abort_lift_speed_mm_s")
+    pause_safe_lift_mm = LaunchConfiguration("pause_safe_lift_mm")
+    pause_lift_speed_mm_s = LaunchConfiguration("pause_lift_speed_mm_s")
+    pause_retract_mm = LaunchConfiguration("pause_retract_mm")
+    pause_retract_speed_mm_s = LaunchConfiguration("pause_retract_speed_mm_s")
     fast_first_reply = LaunchConfiguration("fast_first_reply")
 
     # UART node params
@@ -65,6 +69,10 @@ def generate_launch_description():
             "local_port": local_port,
             "abort_lift_mm": abort_lift_mm,
             "abort_lift_speed_mm_s": abort_lift_speed_mm_s,
+            "pause_safe_lift_mm": pause_safe_lift_mm,
+            "pause_lift_speed_mm_s": pause_lift_speed_mm_s,
+            "pause_retract_mm": pause_retract_mm,
+            "pause_retract_speed_mm_s": pause_retract_speed_mm_s,
             "fast_first_reply": fast_first_reply,
         }],
     )
@@ -338,6 +346,26 @@ def generate_launch_description():
             "abort_lift_speed_mm_s",
             default_value="10.0",
             description="ABORT 时 Z 轴抬升速度（mm/s）。",
+        ),
+        DeclareLaunchArgument(
+            "pause_safe_lift_mm",
+            default_value="20.0",
+            description="暂停收尾后安全抬升距离（mm）。",
+        ),
+        DeclareLaunchArgument(
+            "pause_lift_speed_mm_s",
+            default_value="10.0",
+            description="暂停安全抬升和返回速度（mm/s）。",
+        ),
+        DeclareLaunchArgument(
+            "pause_retract_mm",
+            default_value="2.0",
+            description="暂停树脂回抽距离（mm）。",
+        ),
+        DeclareLaunchArgument(
+            "pause_retract_speed_mm_s",
+            default_value="2.0",
+            description="暂停树脂回抽速度（mm/s）。",
         ),
         rsi_node,
         uart_node,

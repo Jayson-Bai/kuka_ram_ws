@@ -68,6 +68,10 @@ LAUNCH_PARAMS = [
     ("local_port", "49152", "RSI 本地监听端口", "RSI 节点"),
     ("abort_lift_mm", "100.0", "ABORT 时 Z 轴抬升距离（mm）", "RSI 节点"),
     ("abort_lift_speed_mm_s", "10.0", "ABORT 时 Z 轴抬升速度（mm/s）", "RSI 节点"),
+    ("pause_safe_lift_mm", "20.0", "暂停安全抬升距离（mm）", "RSI 节点"),
+    ("pause_lift_speed_mm_s", "10.0", "暂停抬升/返回速度（mm/s）", "RSI 节点"),
+    ("pause_retract_mm", "2.0", "暂停树脂回抽距离（mm）", "RSI 节点"),
+    ("pause_retract_speed_mm_s", "2.0", "暂停树脂回抽速度（mm/s）", "RSI 节点"),
     ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART 节点"),
     ("baudrate", "115200", "UART 波特率", "UART 节点"),
     ("extrude_scale", "1.0", "UART 挤出倍率因子", "UART 节点"),
@@ -3607,7 +3611,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._set_value(key, "-", "#b42318")
 
     def _on_pause(self):
-        self.command_submit.emit("PAUSE")
+        self.command_submit.emit("REQUEST_PAUSE")
 
     def _on_resume(self):
         self.command_submit.emit("RESUME")
@@ -5054,13 +5058,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         "RUNNING": "#1b6e3c",
         "WAIT_HEARTBEAT": "#b15e00",
         "HEARTBEAT_LOST": "#b42318",
+        "PAUSE_REQUESTED": "#b15e00",
+        "PAUSE_READY": "#1a73e8",
         "PAUSED": "#1a73e8",
         "ABORTING": "#b42318",
         "ABORTED": "#b42318",
     }
 
     def _update_control_buttons(self, state):
-        if state == "PAUSED":
+        if state in ("PAUSE_REQUESTED", "PAUSE_READY", "PAUSED"):
             self._btn_pause.setEnabled(False)
             self._btn_resume.setEnabled(True)
             self._btn_stop.setEnabled(True)
