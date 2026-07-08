@@ -41,6 +41,20 @@ def test_formal_npz_export_passes_resin_z_print_compensation():
     )
 
 
+def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():
+    src = _source()
+    formal_export = src.split(
+        "    def _on_export_npz", 1)[1].split(
+        "    def _on_export_progress", 1)[0]
+
+    assert '("cut_lift_mm", "20.0", "剪切抬升距离（mm）")' in src
+    assert '("cut_wait_s", "15.0", "剪切等待时间（s）")' in src
+    assert '"cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text())' in formal_export
+    assert '"cut_wait_s": float(self._planner_inputs["cut_wait_s"].text())' in formal_export
+    assert 'cut_lift_mm=params["cut_lift_mm"]' in formal_export
+    assert 'cut_wait_s=params["cut_wait_s"]' in formal_export
+
+
 def test_npz_selection_validates_saved_resin_z_print_compensation():
     src = _source()
 

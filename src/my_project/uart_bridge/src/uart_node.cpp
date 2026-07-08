@@ -271,12 +271,21 @@ private:
     }
     write_line(oss.str());
 
-    // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
-    set_ready_state(false, ev.trigger_seq, ev.event_type);
     std::string ev_info = "event:" + ev.event_type;
     if (!ev.payload.empty()) {
       ev_info += " payload=" + ev.payload;
     }
+
+    if (ev.event_type == "cut") {
+      set_ready_state(true, ev.trigger_seq, ev.event_type);
+      publish_ready_state(ev_info + " nonblocking");
+      std::lock_guard<std::mutex> lk(event_mutex_);
+      current_event_.reset();
+      return;
+    }
+
+    // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
+    set_ready_state(false, ev.trigger_seq, ev.event_type);
     publish_ready_state(ev_info);
     // 事件完成由 MCU 上报 STAT 后 check_event_completion 判定
   }
@@ -499,8 +508,6 @@ private:
         std::abs(snapshot.last_e_abs) < 1e-9 &&
         snapshot.last_e_us == 0;
       done = stat_cleared;
-    } else if (ev.event_type == "cut") {
-      done = current_event_ack_received_ && current_event_done_received_;
     }
 
     if (done) {

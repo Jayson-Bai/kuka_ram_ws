@@ -216,6 +216,155 @@ def test_wall_outline_many_short_segments_use_single_polyline_time_profile(tmp_p
     assert np.isclose(data["e"][-1], e_start)
 
 
+def test_short_print_cluster_uses_single_polyline_time_profile(tmp_path):
+    out = tmp_path / "short_cluster_polyline.npz"
+    parsed = [
+        _move((0.0, 0.0, 0.0), (0.2, 0.0, 0.0), 0.0, 0.08, 1, subtype="SKIN"),
+        _move((0.2, 0.0, 0.0), (0.4, 0.0, 0.0), 0.08, 0.16, 2, subtype="SKIN"),
+        _move((0.4, 0.0, 0.0), (0.6, 0.0, 0.0), 0.16, 0.24, 3, subtype="SKIN"),
+        _move((0.6, 0.0, 0.0), (0.8, 0.0, 0.0), 0.24, 0.32, 4, subtype="SKIN"),
+        _move((0.8, 0.0, 0.0), (12.0, 0.0, 0.0), 0.32, 4.8, 5, subtype="SKIN"),
+    ]
+
+    export_npz(parsed, str(out), dt=0.1, default_feed_mm_s=10.0)
+
+    data = np.load(out)
+    src_lines = _decoded_src_lines(data)
+    assert len(data["x"]) < 125
+    assert src_lines.count("1-4") > 1
+    assert np.isclose(data["e"][-1], 4.8)
+
+
+def test_cut_event_lifts_with_matched_fiber_feed_and_preserves_next_prime(tmp_path):
+    out = tmp_path / "cut_lift_sequence.npz"
+    parsed = [
+        MoveCommand(
+            type="PRINT",
+            cmd="G1",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=5.0,
+            delta_e=5.0,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="FIBER",
+            raw="fiber_print",
+        ),
+        MCommand(
+            type="M_COMMAND",
+            code="CUT",
+            params={"P": 1.0},
+            line=2,
+            layer=0,
+            subtype="FIBER",
+            raw="external_npz_cut",
+            tool=1,
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=0.5,
+            delta_e=-2.0,
+            feedrate=300.0,
+            line=3,
+            layer=0,
+            subtype="FIBER",
+            raw="external_npz_retract",
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=0.5,
+            delta_e=2.0,
+            feedrate=300.0,
+            line=4,
+            layer=0,
+            subtype="FIBER",
+            raw="external_npz_prime",
+        ),
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=Position(10.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(20.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=5.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=5,
+            layer=0,
+            subtype="TRAVEL",
+            raw="next_path_travel",
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=0.5,
+            delta_e=3.0,
+            feedrate=300.0,
+            line=6,
+            layer=0,
+            subtype="FIBER",
+            raw="next_path_prime",
+        ),
+    ]
+
+    export_npz(
+        parsed,
+        str(out),
+        dt=1.0,
+        default_feed_mm_s=10.0,
+        enable_extrude_wait=True,
+        cut_lift_mm=20.0,
+        cut_wait_s=5.0,
+        initial_tool_id=1,
+    )
+
+    data = np.load(out)
+    src_lines = _decoded_src_lines(data)
+    event_vocab = _decoded_event_type_vocab(data)
+    event_types = [event_vocab[int(value)] for value in data["event_type"]]
+
+    cut_idx = event_types.index("cut")
+    assert np.isclose(data["x"][cut_idx], 10.0)
+    assert np.isclose(data["z"][cut_idx], 0.0)
+    assert np.isclose(data["e"][cut_idx], 5.0)
+
+    lift_idx = [idx for idx, src in enumerate(src_lines) if src == "2" and idx > cut_idx]
+    assert lift_idx
+    assert np.isclose(np.max(data["z"][lift_idx]), 20.0)
+    assert np.isclose(np.max(data["e"][lift_idx]), 25.0)
+
+    high_hold_idx = [
+        idx
+        for idx in lift_idx
+        if np.isclose(data["z"][idx], 20.0) and np.isclose(data["e"][idx], 25.0)
+    ]
+    assert len(high_hold_idx) >= 3
+
+    safety_retract_idx = [
+        idx
+        for idx in lift_idx
+        if idx > high_hold_idx[-1]
+        and np.isclose(data["z"][idx], 20.0)
+        and data["e"][idx] < 25.0
+    ]
+    assert safety_retract_idx
+    assert np.isclose(data["e"][safety_retract_idx[-1]], 5.0)
+
+    post_retract_idx = src_lines.index("3")
+    post_prime_idx = src_lines.index("4")
+    assert post_retract_idx > safety_retract_idx[-1]
+    assert post_prime_idx > post_retract_idx
+    assert np.isclose(data["e"][post_retract_idx], 3.0)
+    assert np.isclose(data["e"][post_prime_idx], 5.0)
+
+    travel_idx = [idx for idx, src in enumerate(src_lines) if src == "5"]
+    assert travel_idx
+    assert np.isclose(data["z"][travel_idx[0]], 20.0)
+    assert np.isclose(data["z"][travel_idx[-1]], 0.0)
+    assert np.isclose(data["e"][travel_idx[0]], 5.0)
+    assert np.isclose(data["e"][travel_idx[-1]], 8.0)
+    assert "6" not in src_lines
+
+
 def test_prime_extrude_wait_overlaps_previous_travel_by_default(tmp_path):
     out = tmp_path / "prime_overlap.npz"
     parsed = [

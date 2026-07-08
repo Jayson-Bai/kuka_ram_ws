@@ -36,6 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-b", type=float, default=0.0)
     parser.add_argument("--default-c", type=float, default=0.0)
     parser.add_argument("--dt", type=float, default=0.004)
+    parser.add_argument("--cut-lift-mm", type=float, default=20.0)
+    parser.add_argument("--cut-wait-s", type=float, default=15.0)
     parser.set_defaults(resin_fan=True, fiber_fan=True)
     return parser
 
@@ -77,7 +79,13 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         output = resolve_output_path(args.source, args.out)
-        stats = convert_external_npz(args.source, args.out, params_from_args(args))
+        stats = convert_external_npz(
+            args.source,
+            args.out,
+            params_from_args(args),
+            cut_lift_mm=args.cut_lift_mm,
+            cut_wait_s=args.cut_wait_s,
+        )
     except Exception as exc:
         print(f"[错误] 外部 NPZ 处理失败: {exc}", file=sys.stderr)
         return 1

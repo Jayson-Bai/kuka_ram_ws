@@ -83,6 +83,8 @@ def export_npz(
     resin_z_print_compensation_mm: float = 0.0,
     initial_tool_id: int = 2,
     tool_change_safe_lift_mm: float = 20.0,
+    cut_lift_mm: float = 20.0,
+    cut_wait_s: float = 15.0,
 ) -> dict:
     """
     导出 npz（分片）.
@@ -992,25 +994,28 @@ def export_npz(
                 original_moves=[move],
             )
 
+        def _make_polyline_gc(moves, raw_suffix):
+            first = moves[0]
+            last = moves[-1]
+            return GlobalCurveCommand(
+                type=first.type,
+                cmd="POLYLINE",
+                start_pos=first.start_pos,
+                control_points=[move.pos for move in moves],
+                e_val=last.e_val,
+                delta_e=sum(move.delta_e for move in moves),
+                feedrate=first.feedrate,
+                line=first.line,
+                raw=(first.raw or "") + raw_suffix,
+                constraints=[],
+                original_moves=list(moves),
+            )
+
         work_buffer = _merge_collinear_wall_moves(
             _rebuild_solid_infill_core(_sanitize_solid_infill_endpoints(buffer))
         )
         if work_buffer and _is_wall_outline_subtype(work_buffer[0].subtype):
-            first = work_buffer[0]
-            last = work_buffer[-1]
-            gc_list = [GlobalCurveCommand(
-                type=first.type,
-                cmd="POLYLINE",
-                start_pos=first.start_pos,
-                control_points=[move.pos for move in work_buffer],
-                e_val=last.e_val,
-                delta_e=sum(move.delta_e for move in work_buffer),
-                feedrate=first.feedrate,
-                line=first.line,
-                raw=(first.raw or "") + " | wall_polyline",
-                constraints=[],
-                original_moves=work_buffer,
-            )]
+            gc_list = [_make_polyline_gc(work_buffer, " | wall_polyline")]
         elif work_buffer and _should_disable_spline_for_subtype(work_buffer[0].subtype):
             t0 = time.perf_counter()
             gc = planner.fit_global_curve(
@@ -1028,6 +1033,11 @@ def export_npz(
         else:
             gc_list = []
             for segment_moves, force_linear in _partition_moves_for_export(work_buffer):
+                if force_linear and len(segment_moves) >= 3:
+                    gc_list.append(
+                        _make_polyline_gc(segment_moves, " | short_cluster_polyline")
+                    )
+                    continue
                 if force_linear or len(segment_moves) <= 2:
                     gc_list.extend(_make_gc(move) for move in segment_moves)
                     continue
@@ -1140,6 +1150,108 @@ def export_npz(
             last_pose = row
         if cmd.feedrate > 0:
             last_feedrate_mm_min = cmd.feedrate
+
+    def _feed_mm_s_from_feedrate(feedrate_mm_min: Optional[float]) -> float:
+        if feedrate_mm_min is not None and feedrate_mm_min > 0:
+            return feedrate_mm_min / 60.0
+        if last_feedrate_mm_min is not None and last_feedrate_mm_min > 0:
+            return last_feedrate_mm_min / 60.0
+        return float(default_feed_mm_s)
+
+    def _next_retract_feedrate(start_idx: int) -> float:
+        for next_cmd in parsed_commands[start_idx + 1:]:
+            if isinstance(next_cmd, ExtrudeWait) and next_cmd.delta_e < 0.0 and next_cmd.feedrate > 0:
+                return next_cmd.feedrate
+            if isinstance(next_cmd, MoveCommand) and not next_cmd.is_pure_state_change:
+                break
+            if isinstance(next_cmd, (ToolChangeCommand, MCommand, ResetECommand)):
+                break
+        return max(float(default_feed_mm_s), 1e-9) * 60.0
+
+    def _append_cut_sequence(cmd: MCommand, layer: int, subtype: str, occ: int, command_index: int):
+        nonlocal last_pose
+        ev = _mcommand_to_event(cmd, current_tool)
+        if ev is None:
+            return
+        _emit_event(ev, layer, subtype, occ)
+
+        lift_mm = max(0.0, float(cut_lift_mm))
+        wait_s = max(0.0, float(cut_wait_s))
+        if lift_mm <= 1e-9:
+            if wait_s > 1e-9:
+                _append_extrude_wait(ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=wait_s,
+                    delta_e=0.0,
+                    feedrate=max(float(default_feed_mm_s), 1e-9) * 60.0,
+                    line=cmd.line or 0,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="cut_wait",
+                ), layer, subtype, occ)
+            return
+
+        hold_row = last_pose or CsvRow(
+            seq=seq,
+            x=0.0,
+            y=0.0,
+            z=0.0,
+            a=0.0,
+            b=0.0,
+            c=0.0,
+            e=0.0,
+            tool_id=current_tool,
+            move_type="TRAVEL",
+            src_line=str(cmd.line),
+            event_flag=0,
+            event_type="",
+            payload="",
+            trigger_seq=None,
+        )
+        start_p = Position(hold_row.x, hold_row.y, hold_row.z, hold_row.a, hold_row.b, hold_row.c)
+        end_p = Position(hold_row.x, hold_row.y, hold_row.z + lift_mm, hold_row.a, hold_row.b, hold_row.c)
+        lift_feedrate = max(float(default_feed_mm_s), 1e-9) * 60.0
+        lift_gc = GlobalCurveCommand(
+            type="TRAVEL",
+            cmd="SPLINE",
+            start_pos=start_p,
+            control_points=[end_p, end_p, end_p],
+            e_val=hold_row.e + lift_mm,
+            delta_e=lift_mm,
+            feedrate=lift_feedrate,
+            line=cmd.line or 0,
+            raw="cut_lift_feed",
+            constraints=[],
+            original_moves=[],
+        )
+        _append_sample(lift_gc, layer, subtype, occ)
+
+        lift_duration_s = lift_mm / max(_feed_mm_s_from_feedrate(lift_feedrate), 1e-9)
+        remaining_wait_s = max(0.0, wait_s - lift_duration_s)
+        if remaining_wait_s > 1e-9:
+            _append_extrude_wait(ExtrudeWait(
+                type="EXTRUDE_WAIT",
+                wait_sec=remaining_wait_s,
+                delta_e=0.0,
+                feedrate=lift_feedrate,
+                line=cmd.line or 0,
+                layer=layer,
+                subtype=subtype,
+                raw="cut_wait_remaining",
+            ), layer, subtype, occ)
+
+        retract_feedrate = _next_retract_feedrate(command_index)
+        retract_speed = max(_feed_mm_s_from_feedrate(retract_feedrate), 1e-9)
+        _append_extrude_wait(ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=lift_mm / retract_speed,
+            delta_e=-lift_mm,
+            feedrate=retract_feedrate,
+            line=cmd.line or 0,
+            layer=layer,
+            subtype=subtype,
+            raw="cut_safety_retract",
+        ), layer, subtype, occ)
 
     def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
         nonlocal seq, processed_rows, last_pose_map, last_pose
@@ -1350,12 +1462,15 @@ def export_npz(
                     tool_id=current_tool,
                 ), cmd.layer, cmd.subtype, occ)
             else:
-                ev = _mcommand_to_event(cmd, current_tool)
-                if ev:
-                    occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
-                    if occ == 0:
-                        occ = _ensure_segment(cmd.layer, cmd.subtype)
-                    _emit_event(ev, cmd.layer, cmd.subtype, occ)
+                occ = occ_counters.get((cmd.layer, cmd.subtype), 0)
+                if occ == 0:
+                    occ = _ensure_segment(cmd.layer, cmd.subtype)
+                if isinstance(cmd, MCommand) and cmd.code.upper() == "CUT":
+                    _append_cut_sequence(cmd, cmd.layer, cmd.subtype, occ, idx)
+                else:
+                    ev = _mcommand_to_event(cmd, current_tool)
+                    if ev:
+                        _emit_event(ev, cmd.layer, cmd.subtype, occ)
             continue
 
         if isinstance(cmd, ExtrudeWait):
@@ -1374,10 +1489,18 @@ def export_npz(
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
                 continue
-            if resin_z_compensation_appended and current_type is None and last_pose is not None:
+            if current_type is None and last_pose is not None:
                 from .types import Position as _Pos
-                cmd.start_pos = _Pos(last_pose.x, last_pose.y, last_pose.z,
-                                     last_pose.a, last_pose.b, last_pose.c)
+                if (
+                    abs(cmd.start_pos.x - last_pose.x) > 1e-9
+                    or abs(cmd.start_pos.y - last_pose.y) > 1e-9
+                    or abs(cmd.start_pos.z - last_pose.z) > 1e-9
+                    or abs(cmd.start_pos.a - last_pose.a) > 1e-9
+                    or abs(cmd.start_pos.b - last_pose.b) > 1e-9
+                    or abs(cmd.start_pos.c - last_pose.c) > 1e-9
+                ):
+                    cmd.start_pos = _Pos(last_pose.x, last_pose.y, last_pose.z,
+                                         last_pose.a, last_pose.b, last_pose.c)
             if current_type is None:
                 current_type = cmd.type
                 current_layer = cmd.layer

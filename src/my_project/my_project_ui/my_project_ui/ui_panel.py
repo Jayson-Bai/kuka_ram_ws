@@ -1889,6 +1889,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("split_by_layer_type", "false", "按层+类型拆分 NPZ"),
             ("plot_layer_xy", "true", "每层生成 XY 路径图"),
             ("plot_stride", "5", "绘图采样步长"),
+            ("cut_lift_mm", "20.0", "剪切抬升距离（mm）"),
+            ("cut_wait_s", "15.0", "剪切等待时间（s）"),
         ]
         self._planner_inputs = {}
         for param_name, default_val, desc in _PLANNER_PARAMS:
@@ -4740,6 +4742,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "split_by_layer_type": self._planner_inputs["split_by_layer_type"].isChecked(),
                 "plot_layer_xy": self._planner_inputs["plot_layer_xy"].isChecked(),
                 "plot_stride": int(self._planner_inputs["plot_stride"].text()),
+                "cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text()),
+                "cut_wait_s": float(self._planner_inputs["cut_wait_s"].text()),
             }
             external_process_params = (
                 self._external_npz_process_params(params)
@@ -4785,6 +4789,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         npz_out,
                         process_params,
                         progress_callback=progress_cb,
+                        cut_lift_mm=params["cut_lift_mm"],
+                        cut_wait_s=params["cut_wait_s"],
                     )
                 elif source_ext in (".gcode", ".gc", ".g"):
                     self.export_progress.emit("读取 GCode...")
@@ -4815,6 +4821,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         plot_stride=params["plot_stride"],
                         enable_extrude_wait=True,
                         resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
+                        cut_lift_mm=params["cut_lift_mm"],
+                        cut_wait_s=params["cut_wait_s"],
                     )
                 else:
                     raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")

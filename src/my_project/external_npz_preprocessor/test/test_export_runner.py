@@ -58,10 +58,19 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
 
     monkeypatch.setattr(runner, "export_npz", fake_export_npz)
 
-    runner.convert_external_npz(source, tmp_path / "out.npz", ProcessParams(), calibration_path=calibration_path)
+    runner.convert_external_npz(
+        source,
+        tmp_path / "out.npz",
+        ProcessParams(),
+        calibration_path=calibration_path,
+        cut_lift_mm=22.0,
+        cut_wait_s=11.0,
+    )
 
     assert captured["kwargs"]["tool_offset"] == (2.0, -3.0, 4.0)
     assert captured["kwargs"]["resin_z_print_compensation_mm"] == 1.25
+    assert captured["kwargs"]["cut_lift_mm"] == 22.0
+    assert captured["kwargs"]["cut_wait_s"] == 11.0
 
 
 def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):

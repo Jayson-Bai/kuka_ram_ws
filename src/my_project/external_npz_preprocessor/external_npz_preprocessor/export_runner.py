@@ -65,6 +65,8 @@ def convert_external_npz(
     params: ProcessParams,
     progress_callback=None,
     calibration_path: str | Path = DEFAULT_HEAD_CALIBRATION_PATH,
+    cut_lift_mm: float = 20.0,
+    cut_wait_s: float = 15.0,
 ) -> dict:
     resolved_output = resolve_output_path(source_path, output_path)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
@@ -85,4 +87,6 @@ def convert_external_npz(
         enable_extrude_wait=True,
         tool_offset=tool_offset,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
+        cut_lift_mm=cut_lift_mm,
+        cut_wait_s=cut_wait_s,
     )
