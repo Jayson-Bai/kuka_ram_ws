@@ -51,6 +51,8 @@ ros2 run gcode_planner gcode_planner_npz \
 - `--export-sleep-ms` / `--export-yield-every`：大文件导出节流参数
 - `--split-by-layer-type`：按层和打印子类型拆分导出
 - `--plot-layer-xy` / `--plot-stride`：导出分层 XY 预览图
+- `--cut-lift-mm`：纤维 `CUT` 事件后的 Z 向抬升距离，默认 `20.0`
+- `--cut-wait-s`：从 `cut` 事件触发开始计算的剪切等待总时长，默认 `15.0`
 
 路径优先级：
 
@@ -86,6 +88,7 @@ GCode T1 -> 系统工具 2（树脂）
 - `M104/M109 S...` -> `heat_cf` / `heat_resin`
 - `M106/M107` -> `fan_cf` / `fan_resin`
 - `G92 E...` -> `extrude_reset`
+- 外部命令 `CUT` -> `cut`，并由共享 exporter 展开为非阻塞剪切事件、抬升、等待和安全回抽序列
 
 ## 拟合、采样和 NPZ 导出
 
@@ -93,7 +96,7 @@ GCode 路径进入 exporter 后的处理位于 `path_processing_core`：
 
 1. `path_processing_core.npz_exporter` 按连续同类型/同层/同子类型的 `MoveCommand` 分段。
 2. `path_processing_core.bspline_approximation` 对打印/空走段做角点回退、点加密和 B 样条控制点生成。
-3. `path_processing_core.polynomial_interpolator` 按 `dt` 做时间参数化与采样。
+3. `path_processing_core.polynomial_interpolator` 按 `dt` 做时间参数化与采样。连续过短线段簇会作为原始折线 `POLYLINE` 连续采样，避免每个短段独立加减速导致局部停滞；普通长路径仍走 B 样条拟合。
 4. exporter 写出系统 NPZ 字段、事件 vocab、offset sidecar 和预览分层字段。
 
 输出常用字段：

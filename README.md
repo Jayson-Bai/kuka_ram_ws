@@ -83,7 +83,7 @@ my_project_ui RQT panel
 
 ### 离线规划层
 
-`gcode_planner` 读取切片软件生成的 `.gcode`，解析运动、换刀、加热、风扇、挤出复位等指令，并将连续同类型路径拟合成更平滑的 B 样条轨迹。采样周期默认是 `0.004 s`，与 KUKA RSI 4 ms 控制周期对齐。
+`gcode_planner` 读取切片软件生成的 `.gcode`，解析运动、换刀、加热、风扇、挤出复位等指令，并将连续同类型路径交给共享 exporter 拟合或采样。普通长路径会拟合成更平滑的 B 样条轨迹；连续过短线段簇会保持原始折线点序作为 `POLYLINE` 连续采样，避免细碎段反复触发独立加减速。采样周期默认是 `0.004 s`，与 KUKA RSI 4 ms 控制周期对齐。
 
 主要模块：
 
@@ -123,7 +123,7 @@ E <seq_used> <tool_id> <extrude_abs>
 EV <trigger_seq> <event_type> <payload>
 ```
 
-MCU 返回的 `STAT`、`EVACK`、`EVDONE` 等行会被解析为 `/printhead/status`，同时原始串口日志发布到 `/uart/raw`。`extrude_scale` 是 `uart_node` 的运行时参数，只影响最终串口发送的挤出量，不改变轨迹、UI 或 RSI 心跳中的原始绝对 E。
+MCU 返回的 `STAT`、`EVACK`、`EVDONE` 等行会被解析为 `/printhead/status`，同时原始串口日志发布到 `/uart/raw`。`cut` 事件发送后在 UART 节点侧按非阻塞事件处理，避免 RSI 链路等待剪切 ACK/DONE；对应的抬升、等待补足和安全回抽已经在离线系统 NPZ 中展开。`extrude_scale` 是 `uart_node` 的运行时参数，只影响最终串口发送的挤出量，不改变轨迹、UI 或 RSI 心跳中的原始绝对 E。
 
 ### 操作界面与仿真层
 

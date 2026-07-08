@@ -59,6 +59,8 @@ With the default `fiber_extrusion_scale = 1.0`, a 10 mm path produces 10 mm of f
 - `travel_feed_mm_s`: feed speed for non-print travel moves.
 - `default_a/default_b/default_c`: pose values appended to Nx3 source paths.
 - `dt`: sample period forwarded to `npz_exporter`.
+- `cut_lift_mm`: Z lift distance after a fiber `CUT`; default `20.0`.
+- `cut_wait_s`: total wait time measured from the exported `cut` event trigger; default `15.0`.
 
 ## Prime and Retract
 
@@ -93,4 +95,4 @@ tool_offset = (fiber_x_print_compensation_mm,
 resin_z_print_compensation_mm = resin.z_print_compensation_mm
 ```
 
-These values are passed directly to `path_processing_core.npz_exporter.export_npz()`, so tool switching and resin-Z compensation stay centralized in the shared exporter logic. The exporter starts from resin tool `2`; before a tool-change event with non-zero head offset, it first lifts `20 mm`, then performs the XYZ offset travel, and only then emits the tool-change event.
+These values are passed directly to `path_processing_core.npz_exporter.export_npz()`, so tool switching, resin-Z compensation, cut lift/wait expansion, and short-segment polyline sampling stay centralized in the shared exporter logic. The exporter starts from resin tool `2`; before a tool-change event with non-zero head offset, it first lifts `20 mm`, then performs the XYZ offset travel, and only then emits the tool-change event. When a fiber path emits `CUT`, the exporter writes the `cut` event immediately, lifts Z by `cut_lift_mm` while increasing E by the same distance, holds for any remaining `cut_wait_s`, and then performs an equal safety retract at the lifted pose.

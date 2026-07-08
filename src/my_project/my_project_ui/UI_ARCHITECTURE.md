@@ -306,12 +306,14 @@ sequenceDiagram
 - 正式打印源文件选择支持 `.gcode/.gc/.g` 和约定格式 `.npz` 两类输入
 - GCode 输入走 `gcode_planner.gcode_parser`，约定源 NPZ 输入走 `external_npz_preprocessor`
 - 两条链路最终都调用 `path_processing_core.npz_exporter.export_npz()` 写出系统 NPZ，UI 只负责路由、参数收集和偏置一致性校验
+- UI 在正式导出参数中暴露 `cut_lift_mm` 和 `cut_wait_s`，并把它们传给共享 exporter；UI 不自行展开剪切抬升、等待或回抽
 - 三维预览仍使用 `gcode_planner.path_preview` 提取系统 NPZ 中的预览路径，并优先按 `preview_layer_index` 分层
 
 **正式打印导出约束**:
 
 - 正式打印 UI 显示并保存树脂 Z 打印补偿，以及纤维头 X/Y/Z 直接偏置
 - 本轮正式打印导出仍沿用既有补偿行为：`export_npz()` 接收 `tool_offset=(纤维头 X, 纤维头 Y, 纤维头 Z)` 和 `resin_z_print_compensation_mm=树脂 Z`；切到纤维头时 Z 向实际补偿为 `树脂 Z + 纤维头 Z 偏置`，不再使用旧的目标减当前喷头相减逻辑
+- 正式打印导出参数包含 `cut_lift_mm=20.0` 和 `cut_wait_s=15.0` 默认值；这两个值同时作用于 GCode 和约定源 NPZ 导出路径
 - 正式打印导出尚未接入测试模式的新复合补偿模型；复合矩阵中的树脂到纤维相对补偿只用于测试模式临时动作
 
 ---

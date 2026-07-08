@@ -72,7 +72,7 @@ source NPZ
 -> system NPZ
 ```
 
-preprocessor 会在转换开始处插入双喷头风扇/加热事件，在工具切换后插入挤出量重置，并在每条打印路径前后按 `回抽 -> 预挤出` 顺序插入等待段。最终事件编码、采样、偏置补偿和 NPZ 字段写入由 `path_processing_core.npz_exporter` 统一完成。
+preprocessor 会在转换开始处插入双喷头风扇/加热事件，在工具切换后插入挤出量重置，并在每条打印路径前后按 `回抽 -> 预挤出` 顺序插入等待段。纤维路径末端只插入语义级 `CUT` 命令；剪切事件、Z 向抬升、等待补足、安全回抽、短线段折线连续采样、偏置补偿和 NPZ 字段写入都由 `path_processing_core.npz_exporter` 统一完成。
 
 ## 模板与测试
 

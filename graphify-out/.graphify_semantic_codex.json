@@ -1,0 +1,237 @@
+{
+  "nodes": [
+    {
+      "id": "doc:README.md#offline-planning-polyline",
+      "label": "Offline planner POLYLINE sampling",
+      "type": "DocumentConcept",
+      "source": "README.md",
+      "location": "离线规划层, approx line 86",
+      "summary": "The system keeps clusters of very short same-type path segments as continuous POLYLINE samples instead of repeatedly accelerating and decelerating each tiny segment."
+    },
+    {
+      "id": "doc:README.md#nonblocking-cut-uart",
+      "label": "UART nonblocking cut event",
+      "type": "DocumentConcept",
+      "source": "README.md",
+      "location": "在线控制层, approx line 126",
+      "summary": "UART treats cut as a nonblocking event so the RSI path does not wait for cut ACK or DONE, because cut lift, wait, and retract are pre-expanded offline."
+    },
+    {
+      "id": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "label": "export_npz is the central writer",
+      "type": "DocumentConcept",
+      "source": "src/my_project/path_processing_core/README.md",
+      "location": "包定位 / 核心模块, approx lines 5-12",
+      "summary": "All formal print, test print, and preview-loadable system NPZ files must be written through path_processing_core.npz_exporter.export_npz()."
+    },
+    {
+      "id": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "label": "Short segment POLYLINE rule",
+      "type": "DocumentConcept",
+      "source": "src/my_project/path_processing_core/README.md",
+      "location": "拟合与短线段采样, approx lines 55-58",
+      "summary": "Three or more consecutive too-short print segments are merged into one POLYLINE sampling curve while preserving endpoint order and total delta_e."
+    },
+    {
+      "id": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "label": "Central CUT expansion",
+      "type": "DocumentConcept",
+      "source": "src/my_project/path_processing_core/README.md",
+      "location": "事件与偏置, approx lines 68-72",
+      "summary": "A semantic CUT command is expanded by the exporter into a cut event, Z lift with matching E increase, remaining wait at height, and equal safety retract."
+    },
+    {
+      "id": "doc:src/my_project/gcode_planner/README.md#gcode-adapter",
+      "label": "GCode adapter to core exporter",
+      "type": "DocumentConcept",
+      "source": "src/my_project/gcode_planner/README.md",
+      "location": "当前定位 / 事件映射, approx lines 5-91",
+      "summary": "gcode_planner parses GCode into shared command objects and delegates final system NPZ writing and CUT expansion to path_processing_core.export_npz()."
+    },
+    {
+      "id": "doc:src/my_project/gcode_planner/README.md#cli-cut-params",
+      "label": "GCode CLI cut parameters",
+      "type": "DocumentConcept",
+      "source": "src/my_project/gcode_planner/README.md",
+      "location": "CLI 参数, approx lines 54-55",
+      "summary": "The GCode CLI exposes cut_lift_mm and cut_wait_s as user parameters with defaults of 20.0 mm and 15.0 s."
+    },
+    {
+      "id": "doc:src/my_project/external_npz_preprocessor/README.md#external-npz-entry",
+      "label": "External NPZ input path",
+      "type": "DocumentConcept",
+      "source": "src/my_project/external_npz_preprocessor/README.md",
+      "location": "包定位 / 导出流程, approx lines 5-75",
+      "summary": "external_npz_preprocessor converts source NPZ layer and material paths into shared commands, then calls export_npz for the system NPZ."
+    },
+    {
+      "id": "doc:src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md#shared-params",
+      "label": "External NPZ shared parameters",
+      "type": "DocumentConcept",
+      "source": "src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md",
+      "location": "Shared Parameters / Shared Head Offsets, approx lines 61-98",
+      "summary": "External NPZ conversion forwards dt, cut_lift_mm, cut_wait_s, tool offsets, and resin Z compensation directly to the shared exporter."
+    },
+    {
+      "id": "doc:src/my_project/external_npz_preprocessor/docs/SOURCE_NPZ_FORMAT.md#semantic-cut-only",
+      "label": "Source NPZ emits semantic CUT only",
+      "type": "DocumentConcept",
+      "source": "src/my_project/external_npz_preprocessor/docs/SOURCE_NPZ_FORMAT.md",
+      "location": "Material Semantics, approx line 194",
+      "summary": "For fiber paths, the source NPZ converter inserts only a semantic CUT command and leaves final cut event, lift, wait, and retract generation to export_npz()."
+    },
+    {
+      "id": "doc:src/my_project/my_project_ui/UI_ARCHITECTURE.md#ui-formal-routing",
+      "label": "UI formal export routing",
+      "type": "DocumentConcept",
+      "source": "src/my_project/my_project_ui/UI_ARCHITECTURE.md",
+      "location": "5.4 正式打印输入适配, approx lines 304-316",
+      "summary": "The formal print UI routes GCode and source NPZ inputs to their adapters, collects parameters and offsets, and passes cut_lift_mm and cut_wait_s to the shared exporter."
+    }
+  ],
+  "edges": [
+    {
+      "source": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "target": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "relation": "contains",
+      "evidence": "npz_exporter is described as responsible for segmentation, short-segment polyline merging, fitting, sampling, and final NPZ fields.",
+      "confidence": 0.96
+    },
+    {
+      "source": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "contains",
+      "evidence": "The core exporter centrally handles fiber cut among other events.",
+      "confidence": 0.96
+    },
+    {
+      "source": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "target": "doc:README.md#nonblocking-cut-uart",
+      "relation": "describes",
+      "evidence": "Offline expansion supplies the lift, remaining wait, and retract that allow UART cut handling to be nonblocking online.",
+      "confidence": 0.93
+    },
+    {
+      "source": "doc:README.md#nonblocking-cut-uart",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "uses",
+      "evidence": "README says the UART cut path relies on offline NPZ expansion for lift, wait, and safety retract.",
+      "confidence": 0.92
+    },
+    {
+      "source": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "target": "doc:src/my_project/gcode_planner/README.md#gcode-adapter",
+      "relation": "expands_to",
+      "evidence": "GCode CUT maps to cut and is then expanded by the shared exporter into nonblocking cut event, lift, wait, and retract.",
+      "confidence": 0.91
+    },
+    {
+      "source": "doc:src/my_project/gcode_planner/README.md#cli-cut-params",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "passes_parameter_to",
+      "evidence": "GCode CLI cut_lift_mm and cut_wait_s correspond to the exporter lift distance and wait duration.",
+      "confidence": 0.88
+    },
+    {
+      "source": "doc:src/my_project/gcode_planner/README.md#gcode-adapter",
+      "target": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "relation": "uses",
+      "evidence": "gcode_planner parses into path_processing_core.types and calls export_npz to generate the system NPZ.",
+      "confidence": 0.98
+    },
+    {
+      "source": "doc:README.md#offline-planning-polyline",
+      "target": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "relation": "describes",
+      "evidence": "Top-level README summarizes the same short-segment POLYLINE continuous sampling rule defined in the core README.",
+      "confidence": 0.9
+    },
+    {
+      "source": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "target": "doc:README.md#offline-planning-polyline",
+      "relation": "avoids",
+      "evidence": "The rule avoids repeated independent acceleration and deceleration around tiny segments and local stalls.",
+      "confidence": 0.93
+    },
+    {
+      "source": "doc:src/my_project/gcode_planner/README.md#gcode-adapter",
+      "target": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "relation": "uses",
+      "evidence": "The GCode exporter path says short segments are sampled as original POLYLINE while normal long paths use B-splines.",
+      "confidence": 0.9
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/README.md#external-npz-entry",
+      "target": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "relation": "uses",
+      "evidence": "external_npz_preprocessor does not directly write system NPZ and delegates final output to export_npz.",
+      "confidence": 0.98
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/README.md#external-npz-entry",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "centralizes",
+      "evidence": "The preprocessor leaves cut event generation, Z lift, wait fill, safety retract, offsets, and NPZ fields to the core exporter.",
+      "confidence": 0.94
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md#shared-params",
+      "target": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "relation": "passes_parameter_to",
+      "evidence": "The parameter model says dt, tool_offset, resin_z_print_compensation_mm, cut lift/wait, and offsets are passed to export_npz.",
+      "confidence": 0.96
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md#shared-params",
+      "target": "doc:src/my_project/path_processing_core/README.md#short-segment-polyline",
+      "relation": "centralizes",
+      "evidence": "The shared exporter keeps short-segment polyline sampling centralized for external NPZ conversion.",
+      "confidence": 0.89
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/docs/PARAMETER_MODEL.md#shared-params",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "passes_parameter_to",
+      "evidence": "cut_lift_mm and cut_wait_s are documented as forwarded values that control the exporter cut expansion.",
+      "confidence": 0.94
+    },
+    {
+      "source": "doc:src/my_project/external_npz_preprocessor/docs/SOURCE_NPZ_FORMAT.md#semantic-cut-only",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "expands_to",
+      "evidence": "Source NPZ fiber paths emit only semantic CUT; export_npz generates the actual cut event, lift, wait, and retract.",
+      "confidence": 0.97
+    },
+    {
+      "source": "doc:src/my_project/my_project_ui/UI_ARCHITECTURE.md#ui-formal-routing",
+      "target": "doc:src/my_project/gcode_planner/README.md#gcode-adapter",
+      "relation": "uses",
+      "evidence": "Formal UI sends GCode files through gcode_planner.gcode_parser before export.",
+      "confidence": 0.95
+    },
+    {
+      "source": "doc:src/my_project/my_project_ui/UI_ARCHITECTURE.md#ui-formal-routing",
+      "target": "doc:src/my_project/external_npz_preprocessor/README.md#external-npz-entry",
+      "relation": "uses",
+      "evidence": "Formal UI sends agreed-format NPZ inputs through external_npz_preprocessor.",
+      "confidence": 0.95
+    },
+    {
+      "source": "doc:src/my_project/my_project_ui/UI_ARCHITECTURE.md#ui-formal-routing",
+      "target": "doc:src/my_project/path_processing_core/README.md#export-npz-authority",
+      "relation": "passes_parameter_to",
+      "evidence": "UI routes both adapters to export_npz, collecting parameters and offset consistency without duplicating export logic.",
+      "confidence": 0.96
+    },
+    {
+      "source": "doc:src/my_project/my_project_ui/UI_ARCHITECTURE.md#ui-formal-routing",
+      "target": "doc:src/my_project/path_processing_core/README.md#cut-expansion",
+      "relation": "avoids",
+      "evidence": "UI exposes cut_lift_mm and cut_wait_s but explicitly does not expand cut lift, wait, or retract itself.",
+      "confidence": 0.95
+    }
+  ],
+  "hyperedges": [],
+  "input_tokens": 24800,
+  "output_tokens": 3600
+}

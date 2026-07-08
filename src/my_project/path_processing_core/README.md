@@ -9,7 +9,7 @@
 ## 核心模块
 
 - `types.py`：定义 `Position`、`MoveCommand`、`ToolChangeCommand`、`MCommand`、`ResetECommand`、`ExtrudeWait`、`GlobalCurveCommand` 等共享命令和轨迹结构。
-- `npz_exporter.py`：系统 NPZ 的唯一核心导出实现，负责命令分段、B 样条拟合调用、采样、事件写入、offset sidecar 写入和 layer preview 元数据写入。
+- `npz_exporter.py`：系统 NPZ 的唯一核心导出实现，负责命令分段、短线段折线合并、B 样条拟合调用、采样、事件写入、offset sidecar 写入和 layer preview 元数据写入。
 - `head_calibration.py`：读取和保存共享喷头偏置数据，数据源位于 `data/head_calibration_offsets/head_offsets.json`。
 - `bspline_approximation.py`：上层 B 样条拟合前处理，包括角点回退、点密度加密和控制点组织。
 - `polynomial_interpolator.py`：对直线和拟合曲线做时间参数化与采样，输出带绝对 E 的采样点。
@@ -50,6 +50,12 @@ event_type_vocab_keys, event_type_vocab_vals
 
 其中 `preview_layer_index` 是三维预览优先使用的显示层编号；`layer_index` 保留为物理/解析层信息。这样可以避免同一物理 Z 或同一旧层编号导致阀座等短段在预览中被错误合并。
 
+## 拟合与短线段采样
+
+exporter 会先按连续同类型、同层、同子类型的 `MoveCommand` 分段。普通长路径仍优先进入 B 样条拟合；已有的 wall outline 路径继续作为原始折线 `POLYLINE` 输出，避免样条超出原始包围盒。
+
+当分段器识别到连续的过短打印线段簇时，3 段及以上的短簇会被合并为单条 `POLYLINE` 采样。该处理只改变时间参数化的承载曲线，不重排点、不做 B 样条平滑，也不改变总 `delta_e`；折线控制点仍是原始 GCode/源 NPZ 的每个终点。这样可以避免每个极短线段都独立触发固定加减速时间，在树脂路径起点、终点或细碎点附近造成长时间停滞。1 到 2 段的强制线性回退仍按原来的单段直线逻辑输出。
+
 ## 事件与偏置
 
 `npz_exporter` 统一处理以下事件：
@@ -59,6 +65,9 @@ event_type_vocab_keys, event_type_vocab_vals
 - 风扇：`fan_cf`、`fan_resin`
 - 挤出重置：`extrude_reset`
 - 原地预挤出/回抽：通过 `ExtrudeWait` 转成可采样的挤出等待段
+- 纤维剪切：`cut`
+
+`CUT` 命令在 exporter 中统一展开：先在当前纤维路径末端写入 `cut` 事件，再继续导出 Z 向抬升段。默认 `cut_lift_mm=20.0`，抬升过程中 Z 增加同样距离，E 也增加同样数值；若抬升耗时短于 `cut_wait_s`，则在高位补足剩余等待；随后在高位做等量安全回抽。之后的正式路径回抽、预挤出和 travel 仍按原命令顺序执行，第一段真实运动会从当前高位姿态重新连接。
 
 喷头偏置也集中在 exporter 路径中应用。默认初始工具写死为系统树脂工具 `2`。发生工具切换且存在纤维头偏置时，exporter 保持旧顺序：先安全抬升 `20 mm`，再执行喷头 XYZ 偏置补偿 travel，最后写入 `tool_change_cf/tool_change_resin` 事件。preprocessor 和 UI 只负责读取或传入共享偏置参数，不重复实现切换工具时的补偿数学。
 
