@@ -40,6 +40,8 @@ _PATH_COLORS = {
     PathType.TOOL_CHANGE_EVENT: (1.0, 0.45, 0.05),
     PathType.EVENT: (0.8, 0.8, 0.2),
 }
+_CUT_EVENT_COLOR = (0.9, 0.05, 0.12)
+
 
 
 _SIGNAL = getattr(QtCore, "pyqtSignal", None) or getattr(QtCore, "Signal")
@@ -313,7 +315,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         self._show_fiber = QtWidgets.QCheckBox("纤维路径")
         self._show_resin = QtWidgets.QCheckBox("树脂路径")
         self._show_travel = QtWidgets.QCheckBox("空走路径")
-        self._show_tool_change = QtWidgets.QCheckBox("工具切换")
+        self._show_tool_change = QtWidgets.QCheckBox("喷头切换/剪切")
         self._show_endpoints = QtWidgets.QCheckBox("起/终点")
         self._show_origin_axes = QtWidgets.QCheckBox("原点坐标系")
         self._show_grid = QtWidgets.QCheckBox("底面网格")
@@ -558,16 +560,31 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             enabled.add(PathType.EVENT)
         return enabled
 
+    def _is_visible_event_path(self, path: PreviewPath) -> bool:
+        if path.path_type == PathType.TOOL_CHANGE_EVENT:
+            return True
+        return path.path_type == PathType.EVENT and path.event_type == "cut"
+
+    def _displayable_paths(self) -> list[PreviewPath]:
+        return [
+            path for path in self._current_paths
+            if path.path_type != PathType.EVENT or self._is_visible_event_path(path)
+        ]
+
     def _filtered_paths(self) -> list[PreviewPath]:
         enabled = self._enabled_types()
         return [
-            path for path in self._current_paths
+            path for path in self._displayable_paths()
             if path.path_type in enabled
+            and (
+                path.path_type not in (PathType.TOOL_CHANGE_EVENT, PathType.EVENT)
+                or self._is_visible_event_path(path)
+            )
         ]
 
     def _display_paths(self) -> list[PreviewPath]:
         enabled_visible = self._filtered_paths()
-        return enabled_visible or list(self._current_paths)
+        return enabled_visible or self._displayable_paths()
 
     def _visible_paths(self) -> list[PreviewPath]:
         return self._display_paths()[: self._path_slider.value()]
@@ -947,17 +964,53 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         path_type: PathType,
         paths: list[PreviewPath],
     ):
-        color = _PATH_COLORS.get(path_type, (1.0, 0.45, 0.05))
+        del path_type
         all_points = [
             point for path in self._current_paths for point in path.points
         ]
         radius = self._endpoint_radius(all_points) * 1.5
-        return [
-            self._sphere_actor(
-                self._display_point_for_path(path, path.end), radius, color
-            )
-            for path in paths
-        ]
+        actors = []
+        for path in paths:
+            point = self._display_point_for_path(path, path.end)
+            if path.event_type == "cut":
+                actors.append(self._cut_marker_actor(point, radius))
+            elif path.path_type == PathType.TOOL_CHANGE_EVENT:
+                actors.append(
+                    self._sphere_actor(
+                        point, radius, _PATH_COLORS[PathType.TOOL_CHANGE_EVENT]
+                    )
+                )
+        return actors
+
+    def _cut_marker_actor(self, point, radius):
+        vtk_points = self._vtk["vtkPoints"]()
+        cells = self._vtk["vtkCellArray"]()
+        span = max(float(radius), 1e-6)
+        x, y, z = point
+        endpoints = (
+            ((x - span, y - span, z), (x + span, y + span, z)),
+            ((x - span, y + span, z), (x + span, y - span, z)),
+        )
+        idx = 0
+        for start, end in endpoints:
+            line = self._vtk["vtkPolyLine"]()
+            line.GetPointIds().SetNumberOfIds(2)
+            vtk_points.InsertNextPoint(*start)
+            vtk_points.InsertNextPoint(*end)
+            line.GetPointIds().SetId(0, idx)
+            line.GetPointIds().SetId(1, idx + 1)
+            idx += 2
+            cells.InsertNextCell(line)
+        poly_data = self._vtk["vtkPolyData"]()
+        poly_data.SetPoints(vtk_points)
+        poly_data.SetLines(cells)
+        mapper = self._vtk["vtkPolyDataMapper"]()
+        mapper.SetInputData(poly_data)
+        actor = self._vtk["vtkActor"]()
+        actor.SetMapper(mapper)
+        actor.GetProperty().SetColor(*_CUT_EVENT_COLOR)
+        actor.GetProperty().SetLineWidth(3.0)
+        return actor
 
     def _nozzle_actor_for_path(
         self,

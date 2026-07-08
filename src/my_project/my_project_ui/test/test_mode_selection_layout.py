@@ -93,7 +93,7 @@ def test_formal_print_export_defaults_to_named_npz_directory():
     export_finished = src.split("    def _on_export_finished", 1)[1].split(
         "    def _on_view_layers", 1
     )[0]
-    assert "_npz_layer_dir_from_launch_path(npz_path)" in export_finished
+    assert "preview_root = _npz_preview_root_from_path(npz_path)" in export_finished
 
 
 def test_formal_print_source_selector_accepts_gcode_and_external_npz():
@@ -797,3 +797,26 @@ def test_scissor_button_checks_fiber_tool_before_uart_command():
     assert uart_sends
     send_call = uart_sends[0]
     assert send_call.lineno > guard_if.end_lineno
+
+
+def test_external_npz_part_exports_have_directory_preview_entry():
+    src = _source()
+
+    helper = src.split("def _npz_preview_root_from_path", 1)[1].split(
+        "def _resolve_npz_launch_path_from_dir", 1
+    )[0]
+    assert "_part" in helper
+    assert "return str(p.parent)" in helper
+
+    export_finished = src.split("    def _on_export_finished", 1)[1].split(
+        "    def _on_view_layers", 1
+    )[0]
+    assert "preview_root = _npz_preview_root_from_path(npz_path)" in export_finished
+    assert "self._last_npz_dir = preview_root" in export_finished
+    assert "三维预览入口" in export_finished
+
+    selector = src.split("    def _on_select_npz_dir", 1)[1].split(
+        "    def _on_clear_npz_dir", 1
+    )[0]
+    assert "preview_root = _npz_preview_root_from_path(launch_path)" in selector
+    assert "self._selected_npz_dir_input.setText(preview_root or npz_file)" in selector

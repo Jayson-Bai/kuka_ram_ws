@@ -420,6 +420,23 @@ def _npz_layer_dir_from_launch_path(npz_path):
     return str(p.with_suffix(""))
 
 
+def _npz_preview_root_from_path(npz_path):
+    launch_path = _normalize_npz_launch_path(npz_path)
+    if not launch_path:
+        return None
+    p = Path(launch_path)
+    if re.search(r"_part\d+$", Path(npz_path).stem):
+        return str(Path(npz_path).parent)
+    if p.parent.name == p.stem:
+        return str(p.parent)
+    layer_dir = p.with_suffix("")
+    if layer_dir.is_dir():
+        return str(layer_dir)
+    if p.is_file():
+        return str(p)
+    return str(layer_dir)
+
+
 def _resolve_npz_launch_path_from_dir(npz_dir):
     root = Path(npz_dir)
     if not root.is_dir():
@@ -4859,19 +4876,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #1b6e3c;")
             npz_path = self._npz_out_input.text().strip()
             if npz_path:
-                self._last_npz_dir = (
-                    _npz_layer_dir_from_launch_path(npz_path)
-                    or os.path.splitext(npz_path)[0]
-                )
-                self._selected_npz_dir = self._last_npz_dir
+                preview_root = _npz_preview_root_from_path(npz_path)
+                self._last_npz_dir = preview_root
+                self._selected_npz_dir = preview_root
                 self._selected_npz_launch_path = (
-                    npz_path
+                    _normalize_npz_launch_path(npz_path)
                     if not getattr(self, "_last_export_split_by_layer_type", False)
                     else None
                 )
-                self._selected_npz_dir_input.setText(self._last_npz_dir)
-                self._btn_view_layers.setEnabled(True)
-                self._btn_view_vtk_paths.setEnabled(True)
+                self._selected_npz_dir_input.setText(preview_root or npz_path)
+                self._btn_view_layers.setEnabled(bool(preview_root))
+                self._btn_view_vtk_paths.setEnabled(bool(preview_root))
+                self._export_status.setText(
+                    f"{message}\n三维预览入口: {preview_root or npz_path}"
+                )
         else:
             self._export_status.setText(f"导出失败: {message}")
             self._export_status.setStyleSheet("color: #b42318;")
@@ -4885,14 +4903,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         dlg.exec_()
 
     def _on_view_vtk_paths(self):
-        if not self._last_npz_dir or not os.path.isdir(self._last_npz_dir):
-            self._export_status.setText("未找到 NPZ 导出目录。")
+        preview_root = self._last_npz_dir
+        if not preview_root or not os.path.exists(preview_root):
+            self._export_status.setText("未找到三维预览入口。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
         try:
             from my_project_ui.vtk_path_preview import VtkPathPreviewDialog
 
-            dlg = VtkPathPreviewDialog(self._last_npz_dir, self)
+            dlg = VtkPathPreviewDialog(preview_root, self)
             dlg.exec_()
         except Exception as exc:
             self._export_status.setText(f"三维路径预览启动失败: {exc}")
@@ -5035,14 +5054,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 warnings):
             return
 
-        layer_dir = _npz_layer_dir_from_launch_path(launch_path)
+        preview_root = _npz_preview_root_from_path(launch_path)
+        layer_dir = preview_root or _npz_layer_dir_from_launch_path(launch_path)
         self._selected_npz_dir = layer_dir
         self._selected_npz_launch_path = launch_path
         self._last_npz_dir = layer_dir
-        self._selected_npz_dir_input.setText(npz_file)
-        self._btn_view_layers.setEnabled(bool(layer_dir and os.path.isdir(layer_dir)))
-        self._btn_view_vtk_paths.setEnabled(bool(layer_dir and os.path.isdir(layer_dir)))
-        self._export_status.setText(f"已选择 NPZ 文件: {npz_file}")
+        self._selected_npz_dir_input.setText(preview_root or npz_file)
+        self._btn_view_layers.setEnabled(bool(layer_dir and os.path.exists(layer_dir)))
+        self._btn_view_vtk_paths.setEnabled(bool(layer_dir and os.path.exists(layer_dir)))
+        self._export_status.setText(
+            f"已选择 NPZ 文件: {npz_file}\n三维预览入口: {preview_root or npz_file}"
+        )
         self._export_status.setStyleSheet("color: #1b6e3c;")
 
     def _on_clear_npz_dir(self):

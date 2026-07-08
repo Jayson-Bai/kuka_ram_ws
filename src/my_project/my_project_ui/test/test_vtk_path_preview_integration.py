@@ -30,6 +30,38 @@ def test_vtk_path_preview_dialog_exposes_process_path_controls():
     assert "extract_layer_preview_paths" in src
 
 
+def test_vtk_event_toggle_only_shows_tool_changes_and_cuts():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert 'self._show_tool_change = QtWidgets.QCheckBox("喷头切换/剪切")' in src
+    assert "def _is_visible_event_path" in src
+    assert 'path.event_type == "cut"' in src
+    assert "PathType.TOOL_CHANGE_EVENT" in src
+    filtered_block = src.split("    def _filtered_paths", 1)[1].split(
+        "    def _display_paths", 1
+    )[0]
+    assert "self._is_visible_event_path(path)" in filtered_block
+
+
+def test_vtk_cut_event_uses_distinct_cross_marker_not_sphere():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+
+    assert "_CUT_EVENT_COLOR" in src
+    assert "def _cut_marker_actor" in src
+    event_block = src.split("    def _event_marker_actors", 1)[1].split(
+        "    def _cut_marker_actor", 1
+    )[0]
+    assert 'if path.event_type == "cut":' in event_block
+    assert "self._cut_marker_actor(" in event_block
+    assert "self._sphere_actor(" in event_block
+    cut_block = src.split("    def _cut_marker_actor", 1)[1].split(
+        "    def _nozzle_actor_for_path", 1
+    )[0]
+    assert "poly_data.SetLines(cells)" in cut_block
+    assert "actor.GetProperty().SetColor(*_CUT_EVENT_COLOR)" in cut_block
+    assert "actor.GetProperty().SetLineWidth(3.0)" in cut_block
+
+
 def test_ui_panel_adds_vtk_path_preview_entry_without_replacing_png_preview():
     src = UI_PANEL.read_text(encoding="utf-8")
 
@@ -178,12 +210,12 @@ def test_vtk_path_preview_uses_ascii_window_title_and_endpoint_toggle():
     assert 'self._show_endpoints.isChecked()' in src
 
 
-def test_vtk_path_preview_falls_back_when_enabled_filters_hide_layer():
+def test_vtk_path_preview_falls_back_to_displayable_paths_when_filters_hide_layer():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "def _display_paths" in src
     assert "enabled_visible = self._filtered_paths()" in src
-    assert "return enabled_visible or list(self._current_paths)" in src
+    assert "return enabled_visible or self._displayable_paths()" in src
     assert "当前过滤无路径" in src
 
 
