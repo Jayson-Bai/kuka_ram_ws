@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -9,6 +11,7 @@ from external_npz_preprocessor.process_params import (
     ResinProcessParams,
 )
 from external_npz_preprocessor.source_npz import LayerPaths, MaterialPath, SourceJob
+from path_processing_core.polynomial_interpolator import sample_global_curve_iter
 from path_processing_core.types import (
     ExtrudeWait,
     GlobalCurveCommand,
@@ -538,6 +541,55 @@ def test_external_npz_print_path_smooths_sharp_corners_before_polyline_fast_path
         [curves[0].start_pos] + curves[0].control_points,
         min_segment_mm=0.01,
     ) < 45.0
+
+
+def test_external_npz_resin_hairpin_smoothing_enforces_turn_angle_limit():
+    source = (
+        Path(__file__).resolve().parents[4]
+        / "data/input_gcode/i/single_lug_connector_thickness_5mm_source (2).npz"
+    )
+    with np.load(source, allow_pickle=True) as data:
+        resin_path = data["layer_0000_R"][5]
+    resin_path = resin_path[np.isfinite(resin_path).all(axis=1)]
+    resin_path = np.hstack(
+        (resin_path, np.zeros((resin_path.shape[0], 3), dtype=np.float32))
+    ).astype(np.float32)
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[MaterialPath("R", 0, resin_path)],
+                fiber_paths=[],
+            )
+        ],
+    )
+    params = ProcessParams(
+        corner_angle_deg=45.0,
+        corner_retreat_ratio=0.65,
+        corner_retreat_max_mm=0.4,
+        corner_blend_segments=8,
+        source_merge_distance_mm=0.04,
+    )
+
+    curves = [
+        cmd
+        for cmd in source_job_to_parsed_commands(job, params)
+        if isinstance(cmd, GlobalCurveCommand)
+    ]
+    sampled_points = [
+        sample.pos
+        for sample in sample_global_curve_iter(
+            curves[0],
+            dt=params.dt,
+            target_velocity=params.resin.feed_mm_s,
+        )
+    ]
+
+    assert curves[0].raw == "external_npz_smoothed_polyline"
+    assert converter._polyline_max_turn_angle_deg(
+        sampled_points, min_segment_mm=0.02
+    ) <= params.corner_angle_deg
 
 
 def test_external_npz_rejects_bspline_when_sampled_turn_angle_exceeds_limit(monkeypatch):

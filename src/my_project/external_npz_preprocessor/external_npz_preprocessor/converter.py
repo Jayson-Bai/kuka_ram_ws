@@ -431,6 +431,9 @@ def _blend_sharp_corners(
     blend_segments: int,
 ) -> list[Position]:
     retreats = [0.0] * len(positions)
+    min_fillet_radius = max(0.08, min(0.2, retreat_max_mm * 0.2))
+    nominal_retreat_max = retreat_max_mm * 0.5 if retreat_max_mm > _EPS else float("inf")
+
     for index in range(1, len(positions) - 1):
         prev_pos = positions[index - 1]
         corner = positions[index]
@@ -444,10 +447,11 @@ def _blend_sharp_corners(
             and turn_angle >= angle_threshold_deg
             and retreat_ratio > _EPS
         ):
-            retreat = min(in_len * retreat_ratio, out_len * retreat_ratio)
-            if retreat_max_mm > _EPS:
-                retreat = min(retreat, retreat_max_mm)
-            retreats[index] = retreat
+            shape_limit = min(in_len, out_len) * retreat_ratio
+            half_angle = math.radians(min(179.0, max(0.0, turn_angle))) * 0.5
+            radius_retreat = min_fillet_radius * math.tan(half_angle)
+            preferred_retreat = min(shape_limit, nominal_retreat_max)
+            retreats[index] = min(shape_limit, max(preferred_retreat, radius_retreat))
 
     for seg_index, (start, end) in enumerate(zip(positions, positions[1:])):
         seg_len = _distance(start, end)
@@ -466,6 +470,7 @@ def _blend_sharp_corners(
                 retreats[right_index] *= scale
 
     out = [positions[0]]
+    arc_step_deg = max(5.0, min(30.0, 90.0 / max(2, blend_segments)))
     for index in range(1, len(positions) - 1):
         prev_pos = positions[index - 1]
         corner = positions[index]
@@ -480,14 +485,105 @@ def _blend_sharp_corners(
         entry = _position_along(corner, prev_pos, retreat / in_len)
         exit_pos = _position_along(corner, next_pos, retreat / out_len)
         _append_distinct_position(out, entry)
-        for step in range(1, blend_segments):
-            t = step / blend_segments
-            _append_distinct_position(out, _quadratic_position(entry, corner, exit_pos, t))
+        if not _append_circular_fillet_positions(
+            out,
+            entry,
+            corner,
+            exit_pos,
+            prev_pos,
+            next_pos,
+            step_angle_deg=arc_step_deg,
+        ):
+            _append_midpoint_fillet_positions(out, entry, corner, exit_pos, blend_segments)
         _append_distinct_position(out, exit_pos)
 
     _append_distinct_position(out, positions[-1])
     return out
 
+
+def _append_circular_fillet_positions(
+    out: list[Position],
+    entry: Position,
+    corner: Position,
+    exit_pos: Position,
+    prev_pos: Position,
+    next_pos: Position,
+    *,
+    step_angle_deg: float,
+) -> bool:
+    in_dx = corner.x - prev_pos.x
+    in_dy = corner.y - prev_pos.y
+    out_dx = next_pos.x - corner.x
+    out_dy = next_pos.y - corner.y
+    in_len = math.hypot(in_dx, in_dy)
+    out_len = math.hypot(out_dx, out_dy)
+    if in_len <= _EPS or out_len <= _EPS:
+        return False
+
+    ux = in_dx / in_len
+    uy = in_dy / in_len
+    vx = out_dx / out_len
+    vy = out_dy / out_len
+    n1x = -uy
+    n1y = ux
+    n2x = -vy
+    n2y = vx
+    rhs_x = exit_pos.x - entry.x
+    rhs_y = exit_pos.y - entry.y
+    det = n2x * n1y - n1x * n2y
+    if abs(det) <= _EPS:
+        return False
+
+    scale = (rhs_x * (-n2y) - (-n2x) * rhs_y) / det
+    center_x = entry.x + scale * n1x
+    center_y = entry.y + scale * n1y
+    radius = math.hypot(entry.x - center_x, entry.y - center_y)
+    if radius <= _EPS:
+        return False
+
+    start_angle = math.atan2(entry.y - center_y, entry.x - center_x)
+    end_angle = math.atan2(exit_pos.y - center_y, exit_pos.x - center_x)
+    cross = ux * vy - uy * vx
+    if cross > 0.0:
+        while end_angle < start_angle:
+            end_angle += 2.0 * math.pi
+    else:
+        while end_angle > start_angle:
+            end_angle -= 2.0 * math.pi
+
+    sweep = end_angle - start_angle
+    if abs(sweep) <= _EPS:
+        return False
+    segment_count = max(2, int(math.ceil(abs(math.degrees(sweep)) / step_angle_deg)))
+    for step in range(1, segment_count):
+        t = step / segment_count
+        angle = start_angle + sweep * t
+        _append_distinct_position(
+            out,
+            Position(
+                x=center_x + radius * math.cos(angle),
+                y=center_y + radius * math.sin(angle),
+                z=entry.z + (exit_pos.z - entry.z) * t,
+                a=entry.a + (exit_pos.a - entry.a) * t,
+                b=entry.b + (exit_pos.b - entry.b) * t,
+                c=entry.c + (exit_pos.c - entry.c) * t,
+            ),
+        )
+    return True
+
+
+def _append_midpoint_fillet_positions(
+    out: list[Position],
+    entry: Position,
+    corner: Position,
+    exit_pos: Position,
+    blend_segments: int,
+) -> None:
+    control1 = _position_along(entry, corner, 0.25)
+    control2 = _position_along(exit_pos, corner, 0.25)
+    for step in range(1, max(2, blend_segments)):
+        t = step / max(2, blend_segments)
+        _append_distinct_position(out, _cubic_position(entry, control1, control2, exit_pos, t))
 
 def _polyline_max_turn_angle_deg(points: list[Position], *, min_segment_mm: float) -> float:
     max_angle = 0.0
@@ -527,20 +623,25 @@ def _position_along(start: Position, end: Position, ratio: float) -> Position:
     )
 
 
-def _quadratic_position(
+def _cubic_position(
     start: Position,
-    control: Position,
+    control1: Position,
+    control2: Position,
     end: Position,
     t: float,
 ) -> Position:
     omt = 1.0 - t
+    b0 = omt * omt * omt
+    b1 = 3.0 * omt * omt * t
+    b2 = 3.0 * omt * t * t
+    b3 = t * t * t
     return Position(
-        x=omt * omt * start.x + 2.0 * omt * t * control.x + t * t * end.x,
-        y=omt * omt * start.y + 2.0 * omt * t * control.y + t * t * end.y,
-        z=omt * omt * start.z + 2.0 * omt * t * control.z + t * t * end.z,
-        a=omt * omt * start.a + 2.0 * omt * t * control.a + t * t * end.a,
-        b=omt * omt * start.b + 2.0 * omt * t * control.b + t * t * end.b,
-        c=omt * omt * start.c + 2.0 * omt * t * control.c + t * t * end.c,
+        x=b0 * start.x + b1 * control1.x + b2 * control2.x + b3 * end.x,
+        y=b0 * start.y + b1 * control1.y + b2 * control2.y + b3 * end.y,
+        z=b0 * start.z + b1 * control1.z + b2 * control2.z + b3 * end.z,
+        a=b0 * start.a + b1 * control1.a + b2 * control2.a + b3 * end.a,
+        b=b0 * start.b + b1 * control1.b + b2 * control2.b + b3 * end.b,
+        c=b0 * start.c + b1 * control1.c + b2 * control2.c + b3 * end.c,
     )
 
 
