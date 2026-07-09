@@ -149,6 +149,8 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"层高 mm"' in export_section
     assert '"fiber_prime_length_mm"' in export_section
     assert '"预挤出长度 mm"' in export_section
+    assert '"fiber_start_accel_s"' in export_section
+    assert '"起步加速时间 s"' in export_section
     assert '"default_c"' in export_section
     assert '"默认 C"' in export_section
     assert '"start_x_mm"' in export_section
@@ -183,6 +185,8 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )[0]
     assert "external_process_params =" in export_method
     assert "self._external_npz_process_params(params)" in export_method
+    assert 'start_accel_s=values["fiber_start_accel_s"].value()' in src
+    assert '"fiber_start_accel_s": saved_params.fiber.start_accel_s' in src
     assert 'return replace(process_params, dt=planner_params["dt"])' in src
     assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
     assert "load_print_params" not in npz_branch
