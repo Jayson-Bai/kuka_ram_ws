@@ -1924,6 +1924,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(planner_toggle)
 
         planner_container = _PanelDialog("导出设置", self, 560)
+        planner_container.setMinimumSize(560, 420)
+        planner_container.resize(720, 620)
+        planner_container.setSizeGripEnabled(True)
+        settings_scroll = QtWidgets.QScrollArea()
+        settings_scroll.setWidgetResizable(True)
+        settings_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         settings_tabs = QtWidgets.QTabWidget()
 
         planner_tab = QtWidgets.QWidget()
@@ -1991,6 +1997,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "fiber_retract_length_mm": 10.0,
             "fiber_retract_speed_mm_s": 5.0,
             "fiber_fan_enabled": True,
+            "external_cut_lift_mm": 20.0,
+            "external_cut_wait_s": 15.0,
             "travel_feed_mm_s": 10.0,
             "default_a": 0.0,
             "default_b": 0.0,
@@ -2295,6 +2303,27 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ],
         )
 
+        cut_group, cut_grid = _external_param_group("剪切参数")
+        _add_external_rows(
+            cut_grid,
+            [
+                (
+                    "external_cut_lift_mm",
+                    "剪切抬升距离 mm",
+                    _external_spin(
+                        external_defaults["external_cut_lift_mm"],
+                        maximum=1000.0,
+                    ),
+                    "external_cut_wait_s",
+                    "剪切等待时间 s",
+                    _external_spin(
+                        external_defaults["external_cut_wait_s"],
+                        maximum=1000.0,
+                    ),
+                ),
+            ],
+        )
+
         material_layout = QtWidgets.QHBoxLayout()
         material_layout.setSpacing(8)
         material_layout.addWidget(resin_group, 1)
@@ -2306,6 +2335,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         path_layout.addWidget(motion_group, 1)
         path_layout.addWidget(smoothing_group, 1)
         external_group_layout.addLayout(path_layout)
+        external_group_layout.addWidget(cut_group)
 
         external_layout.addWidget(external_group)
         self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")
@@ -2318,11 +2348,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         external_layout.addStretch(1)
         settings_tabs.addTab(external_tab, "外部 NPZ")
 
-        planner_container.body_layout().addWidget(settings_tabs)
+        settings_scroll.setWidget(settings_tabs)
+        planner_container.body_layout().addWidget(settings_scroll, 1)
         self._planner_container = planner_container
 
         def _show_planner_settings():
-            planner_container.adjustSize()
             planner_container.show()
             planner_container.raise_()
             planner_container.activateWindow()
@@ -4910,11 +4940,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text()),
                 "cut_wait_s": float(self._planner_inputs["cut_wait_s"].text()),
             }
-            external_process_params = (
-                self._external_npz_process_params(params)
-                if source_ext == ".npz"
-                else None
-            )
+            external_cut_lift_mm = params["cut_lift_mm"]
+            external_cut_wait_s = params["cut_wait_s"]
+            if source_ext == ".npz":
+                external_process_params = self._external_npz_process_params(params)
+                external_cut_lift_mm = (
+                    self._external_npz_inputs["external_cut_lift_mm"].value()
+                )
+                external_cut_wait_s = (
+                    self._external_npz_inputs["external_cut_wait_s"].value()
+                )
+            else:
+                external_process_params = None
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
                 and source_ext in (".gcode", ".gc", ".g")
@@ -4954,8 +4991,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         npz_out,
                         process_params,
                         progress_callback=progress_cb,
-                        cut_lift_mm=params["cut_lift_mm"],
-                        cut_wait_s=params["cut_wait_s"],
+                        cut_lift_mm=external_cut_lift_mm,
+                        cut_wait_s=external_cut_wait_s,
                     )
                 elif source_ext in (".gcode", ".gc", ".g"):
                     self.export_progress.emit("读取 GCode...")

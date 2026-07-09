@@ -133,6 +133,9 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )[0]
     assert 'QtWidgets.QPushButton("导出设置")' in export_section
     assert '_PanelDialog("导出设置", self, 560)' in export_section
+    assert "settings_scroll = QtWidgets.QScrollArea()" in export_section
+    assert "settings_scroll.setWidgetResizable(True)" in export_section
+    assert "planner_container.setSizeGripEnabled(True)" in export_section
     assert 'QtWidgets.QGroupBox("外部 NPZ 工艺参数")' in export_section
     assert export_section.index("external_defaults = {") < export_section.index(
         'QtWidgets.QGroupBox("外部 NPZ 工艺参数")'
@@ -169,6 +172,10 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"角点回退上限 mm"' in export_section
     assert '"corner_blend_segments"' in export_section
     assert '"角点细分段数"' in export_section
+    assert '"external_cut_lift_mm"' in export_section
+    assert '"剪切抬升距离 mm"' in export_section
+    assert '"external_cut_wait_s"' in export_section
+    assert '"剪切等待时间 s"' in export_section
     assert (
         'self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")'
         in export_section
@@ -187,12 +194,18 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert "self._external_npz_process_params(params)" in export_method
     assert 'start_accel_s=values["fiber_start_accel_s"].value()' in src
     assert '"fiber_start_accel_s": saved_params.fiber.start_accel_s' in src
+    assert 'external_cut_lift_mm = params["cut_lift_mm"]' in src
+    assert 'external_cut_wait_s = params["cut_wait_s"]' in src
+    assert 'self._external_npz_inputs["external_cut_lift_mm"].value()' in src
+    assert 'self._external_npz_inputs["external_cut_wait_s"].value()' in src
     assert 'return replace(process_params, dt=planner_params["dt"])' in src
     assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
     assert "load_print_params" not in npz_branch
     assert "process_params = external_process_params" in npz_branch
     assert "convert_external_npz(" in npz_branch
     assert "process_params," in npz_branch
+    assert 'cut_lift_mm=external_cut_lift_mm' in npz_branch
+    assert 'cut_wait_s=external_cut_wait_s' in npz_branch
 
 
 def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
