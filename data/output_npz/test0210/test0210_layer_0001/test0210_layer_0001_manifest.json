@@ -3,7 +3,7 @@
     "layer": 0,
     "type": "TRAVEL",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0000/test0210_layer_0001_layer_0000_type_TRAVEL_occ_0001",
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0000/test0210_layer_0001_layer_0000_type_TRAVEL_occ_0001",
     "start_seq": 0,
     "end_seq": 1001
   },
@@ -11,7 +11,7 @@
     "layer": 0,
     "type": "Custom",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0000/test0210_layer_0001_layer_0000_type_Custom_occ_0001",
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0000/test0210_layer_0001_layer_0000_type_Custom_occ_0001",
     "start_seq": 1002,
     "end_seq": 1006
   },
@@ -19,7 +19,7 @@
     "layer": 1,
     "type": "Custom",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Custom_occ_0001",
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Custom_occ_0001",
     "start_seq": 1007,
     "end_seq": 1008
   },
@@ -27,7 +27,7 @@
     "layer": 1,
     "type": "TRAVEL",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0001",
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0001",
     "start_seq": 1009,
     "end_seq": 11536
   },
@@ -35,64 +35,64 @@
     "layer": 1,
     "type": "Perimeter",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Perimeter_occ_0001",
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Perimeter_occ_0001",
     "start_seq": 11537,
-    "end_seq": 18849
+    "end_seq": 18811
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 2,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0002",
-    "start_seq": 18850,
-    "end_seq": 19850
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0002",
+    "start_seq": 18812,
+    "end_seq": 19812
   },
   {
     "layer": 1,
     "type": "Perimeter",
     "occ": 2,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Perimeter_occ_0002",
-    "start_seq": 19851,
-    "end_seq": 29799
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Perimeter_occ_0002",
+    "start_seq": 19813,
+    "end_seq": 29698
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 3,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0003",
-    "start_seq": 29800,
-    "end_seq": 30800
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0003",
+    "start_seq": 29699,
+    "end_seq": 30699
   },
   {
     "layer": 1,
     "type": "External perimeter",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_External_perimeter_occ_0001",
-    "start_seq": 30801,
-    "end_seq": 42128
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_External_perimeter_occ_0001",
+    "start_seq": 30700,
+    "end_seq": 41962
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 4,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0004",
-    "start_seq": 41127,
-    "end_seq": 42127
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0004",
+    "start_seq": 40961,
+    "end_seq": 41961
   },
   {
     "layer": 1,
     "type": "TRAVEL",
     "occ": 5,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0005",
-    "start_seq": 42129,
-    "end_seq": 44917
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_TRAVEL_occ_0005",
+    "start_seq": 41963,
+    "end_seq": 44751
   },
   {
     "layer": 1,
     "type": "Solid infill",
     "occ": 1,
-    "base_path": "/home/jayson/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Solid_infill_occ_0001",
-    "start_seq": 44918,
-    "end_seq": 149772
+    "base_path": "/home/kuka/kuka_ram_ws/data/output_npz/test0210/test0210_layer_0001/layer_0001/test0210_layer_0001_layer_0001_type_Solid_infill_occ_0001",
+    "start_seq": 44752,
+    "end_seq": 149305
   }
 ]
