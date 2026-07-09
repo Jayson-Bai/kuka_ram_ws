@@ -155,7 +155,7 @@ def test_vtk_path_preview_groups_paths_into_few_vtk_actors():
 
     assert "def _actors_for_paths" in src
     assert "grouped.setdefault(path.path_type, []).append(path)" in src
-    assert "def _actor_for_paths" in src
+    assert "def _actors_for_path_type" in src
     assert "_MAX_POINTS_PER_PATH" in src
     assert "def _sample_points" in src
 
@@ -164,7 +164,7 @@ def test_vtk_path_preview_caps_render_geometry_for_large_npz_layers():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
     assert "_MAX_RENDER_POINTS_PER_ACTOR" in src
-    assert "_MAX_BEAD_SEGMENTS_PER_ACTOR" in src
+    assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR" in src
     assert "def _sample_limit_for_paths" in src
     assert "def _sample_points(points, max_points=_MAX_POINTS_PER_PATH)" in src
 
@@ -175,7 +175,7 @@ def test_vtk_path_preview_caps_render_geometry_for_large_npz_layers():
         "    def _base_plane_actors", 1
     )[0]
     assert "sample_limit = _sample_limit_for_paths(" in bead_block
-    assert "_MAX_BEAD_SEGMENTS_PER_ACTOR" in bead_block
+    assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR" in bead_block
     assert "_sample_points(path.points, max_points=sample_limit)" in bead_block
     assert "sample_limit = _sample_limit_for_paths(" in line_block
     assert "_MAX_RENDER_POINTS_PER_ACTOR" in line_block
@@ -383,7 +383,7 @@ def test_vtk_print_paths_keep_bead_dimensions_for_optional_detail_mode():
     assert "self._show_solid_beads = QtWidgets.QCheckBox" in src
     assert "self._show_solid_beads.setChecked(False)" in src
     assert "if self._show_solid_beads.isChecked() and path_type in _BEAD_DIMENSIONS_MM:" in src
-    assert "return self._bead_actor_for_paths(path_type, paths)" in src
+    assert "bead_actor = self._bead_actor_for_paths(path_type, paths)" in src
 
 
 def test_vtk_default_lightweight_preview_uses_lines_and_low_density_grid():
@@ -399,19 +399,51 @@ def test_vtk_default_lightweight_preview_uses_lines_and_low_density_grid():
     assert "show_grid=self._show_grid.isChecked()" in update_block
 
 
-def test_vtk_bead_mesh_uses_material_coordinates_and_physical_z_thickness():
+def test_vtk_bead_preview_uses_lightweight_closed_solids():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
     bead_block = src.split("    def _bead_actor_for_paths", 1)[1].split(
         "    def _line_actor_for_paths", 1
     )[0]
 
+    assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = 9000" in src
+    assert "PathType.FIBER_PRINT: 1.0" in src
+    assert "PathType.RESIN_PRINT: 1.0" in src
+    assert "_BEAD_PREVIEW_MIN_HEIGHT_MM" not in src
+    assert "_BEAD_PREVIEW_Z_LIFT_MM" not in src
     assert "width, height = _BEAD_DIMENSIONS_MM[path_type]" in bead_block
+    assert "display_height" not in bead_block
+    assert "preview_z_lift" not in bead_block
     assert "half_width = width / 2.0" in bead_block
-    assert "path_top_z = max(point[2] for point in points)" in bead_block
-    assert "top_z = path_top_z" in bead_block
-    assert "bottom_z = top_z - height" in bead_block
+    assert "path_z = max(point[2] for point in points)" in bead_block
+    assert "if path_type == PathType.FIBER_PRINT:" in bead_block
+    assert "bottom_z = path_z" in bead_block
+    assert "path_top_z = path_z + height" in bead_block
+    assert "path_top_z = path_z" in bead_block
+    assert "bottom_z = path_z - height" in bead_block
     assert "self._display_point_for_path(path, point)" in bead_block
-    assert "poly_data.SetPolys(cells)" in bead_block
+    assert 'solid_cells = self._vtk["vtkCellArray"]()' in bead_block
+    assert "add_quad((left_top[0], right_top[0], right_bottom[0], left_bottom[0]))" in bead_block
+    assert "add_quad((left_top[-1], left_bottom[-1], right_bottom[-1], right_top[-1]))" in bead_block
+    assert "poly_data.SetPolys(solid_cells)" in bead_block
+    assert "prop.SetOpacity(_BEAD_SOLID_OPACITY.get(path_type, 0.74))" in bead_block
+    assert "prop.EdgeVisibilityOn()" not in bead_block
+    assert "prop.SetSpecular(0.04 if path_type == PathType.FIBER_PRINT else 0.0)" in bead_block
+    assert "poly_data.SetLines" not in bead_block
+
+
+def test_vtk_solid_fiber_preview_uses_centerline_overlay_without_mesh_edges():
+    src = VTK_PREVIEW.read_text(encoding="utf-8")
+    actor_type_block = src.split("    def _actors_for_path_type", 1)[1].split(
+        "    def _bead_actor_for_paths", 1
+    )[0]
+
+    assert "bead_actor = self._bead_actor_for_paths(path_type, paths)" in actor_type_block
+    assert "if path_type == PathType.FIBER_PRINT:" in actor_type_block
+    assert "overlay_actor = self._line_actor_for_paths(path_type, paths)" in actor_type_block
+    assert "overlay_actor.GetProperty().SetColor(0.0, 0.95, 0.48)" in actor_type_block
+    assert "overlay_actor.GetProperty().SetOpacity(1.0)" in actor_type_block
+    assert "overlay_actor.GetProperty().SetLineWidth(2.5)" in actor_type_block
+    assert "actors.append(overlay_actor)" in actor_type_block
 
 
 def test_vtk_travel_paths_are_yellow_but_hidden_by_default():

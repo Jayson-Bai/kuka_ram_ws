@@ -152,9 +152,9 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"default_c"' in export_section
     assert '"默认 C"' in export_section
     assert '"start_x_mm"' in export_section
-    assert '"起点 X mm"' in export_section
+    assert '"左下角 X mm"' in export_section
     assert '"start_y_mm"' in export_section
-    assert '"起点 Y mm"' in export_section
+    assert '"左下角 Y mm"' in export_section
     assert '"corner_angle_deg"' in export_section
     assert '"角点阈值 deg"' in export_section
     assert '"spline_max_error_mm"' in export_section

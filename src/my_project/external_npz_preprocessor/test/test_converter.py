@@ -358,6 +358,59 @@ def test_start_xy_offsets_source_paths_and_inserts_initial_travel_without_z_over
     assert print_curves[0].control_points[-1].z == pytest.approx(2.6)
 
 
+def test_external_npz_start_xy_places_part_lower_left_at_requested_position():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [
+                                [-10.0, 5.0, 0.5, 0.0, 0.0, 0.0],
+                                [-5.0, 5.0, 0.5, 0.0, 0.0, 0.0],
+                            ],
+                            dtype=np.float32,
+                        ),
+                    ),
+                    MaterialPath(
+                        material="R",
+                        order=1,
+                        points=np.array(
+                            [
+                                [-8.0, -3.0, 0.5, 0.0, 0.0, 0.0],
+                                [-6.0, -3.0, 0.5, 0.0, 0.0, 0.0],
+                            ],
+                            dtype=np.float32,
+                        ),
+                    ),
+                ],
+                fiber_paths=[],
+            )
+        ],
+    )
+
+    curves = [
+        cmd
+        for cmd in source_job_to_parsed_commands(
+            job, ProcessParams(start_x_mm=50.0, start_y_mm=60.0)
+        )
+        if isinstance(cmd, GlobalCurveCommand)
+    ]
+    points = []
+    for curve in curves:
+        points.append(curve.start_pos)
+        points.extend(curve.control_points)
+
+    assert min(point.x for point in points) == pytest.approx(50.0)
+    assert min(point.y for point in points) == pytest.approx(60.0)
+    assert curves[0].start_pos.x == pytest.approx(50.0)
+    assert curves[0].start_pos.y == pytest.approx(68.0)
+
+
 def test_external_npz_print_path_uses_polyline_fast_path_without_extra_bspline_fit(monkeypatch):
     class FakePlanner:
         def __init__(self):

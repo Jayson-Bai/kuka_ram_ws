@@ -25,12 +25,16 @@ _MAX_POINTS_PER_PATH = 1000
 _MAX_STEP_REVIEW_POINTS_PER_PATH = 600
 _MAX_STEP_REVIEW_LENGTH_MM = 25.0
 _MAX_RENDER_POINTS_PER_ACTOR = 18000
-_MAX_BEAD_SEGMENTS_PER_ACTOR = 25000
+_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = 9000
 _FIXED_PLANE_SIZE_MM = 500.0
 _FIXED_PLANE_GRID_STEP_MM = 100.0
 _BEAD_DIMENSIONS_MM = {
     PathType.FIBER_PRINT: (1.0, 0.1),
     PathType.RESIN_PRINT: (2.0, 0.5),
+}
+_BEAD_SOLID_OPACITY = {
+    PathType.FIBER_PRINT: 1.0,
+    PathType.RESIN_PRINT: 1.0,
 }
 
 _PATH_COLORS = {
@@ -665,16 +669,31 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                     self._event_marker_actors(path_type, grouped_paths)
                 )
                 continue
-            actor = self._actor_for_paths(path_type, grouped_paths)
-            if actor is not None:
-                actors.append(actor)
+            path_actors = self._actors_for_path_type(path_type, grouped_paths)
+            actors.extend(path_actors)
 
         return actors
 
-    def _actor_for_paths(self, path_type: PathType, paths: list[PreviewPath]):
+    def _actors_for_path_type(
+        self,
+        path_type: PathType,
+        paths: list[PreviewPath],
+    ):
         if self._show_solid_beads.isChecked() and path_type in _BEAD_DIMENSIONS_MM:
-            return self._bead_actor_for_paths(path_type, paths)
-        return self._line_actor_for_paths(path_type, paths)
+            actors = []
+            bead_actor = self._bead_actor_for_paths(path_type, paths)
+            if bead_actor is not None:
+                actors.append(bead_actor)
+            if path_type == PathType.FIBER_PRINT:
+                overlay_actor = self._line_actor_for_paths(path_type, paths)
+                if overlay_actor is not None:
+                    overlay_actor.GetProperty().SetColor(0.0, 0.95, 0.48)
+                    overlay_actor.GetProperty().SetOpacity(1.0)
+                    overlay_actor.GetProperty().SetLineWidth(2.5)
+                    actors.append(overlay_actor)
+            return actors
+        actor = self._line_actor_for_paths(path_type, paths)
+        return [actor] if actor is not None else []
 
     def _bead_actor_for_paths(
         self,
@@ -685,79 +704,147 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         half_width = width / 2.0
         sample_limit = _sample_limit_for_paths(
             paths,
-            _MAX_BEAD_SEGMENTS_PER_ACTOR,
+            _MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR,
         )
         vtk_points = self._vtk["vtkPoints"]()
-        cells = self._vtk["vtkCellArray"]()
+        solid_cells = self._vtk["vtkCellArray"]()
         point_index = 0
+        segment_count = 0
 
         def add_quad(indices):
-            cells.InsertNextCell(4)
+            solid_cells.InsertNextCell(4)
             for index in indices:
-                cells.InsertCellPoint(index)
+                solid_cells.InsertCellPoint(index)
 
-        def bead_corners(point, normal, path_top_z):
-            top_z = path_top_z
-            bottom_z = top_z - height
-            nx, ny = normal
-            left_x = point[0] + nx * half_width
-            left_y = point[1] + ny * half_width
-            right_x = point[0] - nx * half_width
-            right_y = point[1] - ny * half_width
-            return (
-                (left_x, left_y, top_z),
-                (right_x, right_y, top_z),
-                (left_x, left_y, bottom_z),
-                (right_x, right_y, bottom_z),
-            )
+        def compact_points(points):
+            compacted = []
+            for point in points:
+                if not compacted or math.dist(compacted[-1], point) > 1e-7:
+                    compacted.append(point)
+            return compacted
+
+        def segment_normal(start, end):
+            dx = end[0] - start[0]
+            dy = end[1] - start[1]
+            length_xy = math.hypot(dx, dy)
+            if length_xy <= 1e-9:
+                return None
+            return -dy / length_xy, dx / length_xy
+
+        def point_normals(points):
+            segment_normals = [
+                segment_normal(start, end)
+                for start, end in zip(points, points[1:])
+            ]
+            normals = []
+            fallback = (0.0, 1.0)
+            for index in range(len(points)):
+                before = segment_normals[index - 1] if index > 0 else None
+                after = (
+                    segment_normals[index]
+                    if index < len(segment_normals) else None
+                )
+                if before is not None and after is not None:
+                    nx = before[0] + after[0]
+                    ny = before[1] + after[1]
+                    length = math.hypot(nx, ny)
+                    if length > 1e-9:
+                        fallback = (nx / length, ny / length)
+                    else:
+                        fallback = after
+                elif after is not None:
+                    fallback = after
+                elif before is not None:
+                    fallback = before
+                normals.append(fallback)
+            return normals
 
         for path in paths:
-            points = [
+            points = compact_points([
                 self._display_point_for_path(path, point)
                 for point in _sample_points(path.points, max_points=sample_limit)
-            ]
+            ])
             if len(points) < 2:
                 continue
-            path_top_z = max(point[2] for point in points)
-            for start, end in zip(points, points[1:]):
-                dx = end[0] - start[0]
-                dy = end[1] - start[1]
-                length_xy = math.hypot(dx, dy)
-                if length_xy <= 1e-9:
+            path_z = max(point[2] for point in points)
+            if path_type == PathType.FIBER_PRINT:
+                bottom_z = path_z
+                path_top_z = path_z + height
+            else:
+                path_top_z = path_z
+                bottom_z = path_z - height
+            left_top = []
+            right_top = []
+            left_bottom = []
+            right_bottom = []
+            for point, normal in zip(points, point_normals(points)):
+                nx, ny = normal
+                left_x = point[0] + nx * half_width
+                left_y = point[1] + ny * half_width
+                right_x = point[0] - nx * half_width
+                right_y = point[1] - ny * half_width
+                left_top.append(point_index)
+                vtk_points.InsertNextPoint(left_x, left_y, path_top_z)
+                point_index += 1
+                right_top.append(point_index)
+                vtk_points.InsertNextPoint(right_x, right_y, path_top_z)
+                point_index += 1
+                left_bottom.append(point_index)
+                vtk_points.InsertNextPoint(left_x, left_y, bottom_z)
+                point_index += 1
+                right_bottom.append(point_index)
+                vtk_points.InsertNextPoint(right_x, right_y, bottom_z)
+                point_index += 1
+
+            for index, (start, end) in enumerate(zip(points, points[1:])):
+                if segment_normal(start, end) is None:
                     continue
-                normal = (-dy / length_xy, dx / length_xy)
-                corners = (
-                    bead_corners(start, normal, path_top_z)
-                    + bead_corners(end, normal, path_top_z)
+                add_quad(
+                    (
+                        left_top[index],
+                        left_top[index + 1],
+                        right_top[index + 1],
+                        right_top[index],
+                    )
                 )
-                indices = list(
-                    range(point_index, point_index + len(corners))
+                add_quad(
+                    (
+                        left_top[index],
+                        left_bottom[index],
+                        left_bottom[index + 1],
+                        left_top[index + 1],
+                    )
                 )
-                for corner in corners:
-                    vtk_points.InsertNextPoint(*corner)
-                point_index += len(corners)
+                add_quad(
+                    (
+                        right_top[index],
+                        right_top[index + 1],
+                        right_bottom[index + 1],
+                        right_bottom[index],
+                    )
+                )
+                segment_count += 1
+            add_quad((left_top[0], right_top[0], right_bottom[0], left_bottom[0]))
+            add_quad((left_top[-1], left_bottom[-1], right_bottom[-1], right_top[-1]))
 
-                add_quad((indices[0], indices[4], indices[5], indices[1]))
-                add_quad((indices[2], indices[3], indices[7], indices[6]))
-                add_quad((indices[0], indices[2], indices[6], indices[4]))
-                add_quad((indices[1], indices[5], indices[7], indices[3]))
-                add_quad((indices[0], indices[1], indices[3], indices[2]))
-                add_quad((indices[4], indices[6], indices[7], indices[5]))
-
-        if point_index == 0:
+        if point_index == 0 or segment_count == 0:
             return None
 
         poly_data = self._vtk["vtkPolyData"]()
         poly_data.SetPoints(vtk_points)
-        poly_data.SetPolys(cells)
+        poly_data.SetPolys(solid_cells)
 
         mapper = self._vtk["vtkPolyDataMapper"]()
         mapper.SetInputData(poly_data)
         actor = self._vtk["vtkActor"]()
         actor.SetMapper(mapper)
         color = _PATH_COLORS.get(path_type, (1.0, 1.0, 1.0))
-        actor.GetProperty().SetColor(*color)
-        actor.GetProperty().SetOpacity(0.82)
+        prop = actor.GetProperty()
+        prop.SetColor(*color)
+        prop.SetOpacity(_BEAD_SOLID_OPACITY.get(path_type, 0.74))
+        prop.SetAmbient(0.22 if path_type == PathType.FIBER_PRINT else 0.08)
+        prop.SetDiffuse(0.78 if path_type == PathType.FIBER_PRINT else 0.52)
+        prop.SetSpecular(0.04 if path_type == PathType.FIBER_PRINT else 0.0)
         return actor
 
     def _line_actor_for_paths(

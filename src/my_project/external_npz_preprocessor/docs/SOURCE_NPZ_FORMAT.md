@@ -132,11 +132,11 @@ UI 中的树脂层高和纤维层高只作为工艺参数：
 
 ## Coordinate Offsets
 
-源 NPZ 中的 `x/y/z/a/b/c` 是源几何坐标。preprocessor 转命令时只会应用起点平移参数：
+源 NPZ 中的 `x/y/z/a/b/c` 是源几何坐标。preprocessor 转命令时会先计算整个源零件的 XY 最小点，再把这个左下角对齐到 UI 中设置的位置：
 
 ```text
-x_prime = x + start_x_mm
-y_prime = y + start_y_mm
+x_prime = x - min(source_x) + start_x_mm
+y_prime = y - min(source_y) + start_y_mm
 z_prime = z
 ```
 

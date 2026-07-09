@@ -94,7 +94,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             ("树脂回抽速度 mm/s", self.resin_retract_speed, "纤维回抽速度 mm/s", self.fiber_retract_speed),
             ("树脂风扇", self.resin_fan, "纤维风扇", self.fiber_fan),
             ("空走速度 mm/s", self.travel_feed, "默认 A", self.default_a),
-            ("起点 X mm", self.start_x, "起点 Y mm", self.start_y),
+            ("左下角 X mm", self.start_x, "左下角 Y mm", self.start_y),
             ("", QtWidgets.QLabel(""), "默认 B", self.default_b),
             ("", QtWidgets.QLabel(""), "默认 C", self.default_c),
         ]

@@ -40,6 +40,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     line = 0
 
     line = _append_startup_head_events(commands, params, line)
+    source_min_x, source_min_y = _job_source_xy_min(job)
 
     initial_travel_added = False
 
@@ -51,7 +52,10 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             tool = _tool_for_material(material_path.material)
             subtype = _subtype_for_material(material_path.material)
             first_pose = _offset_source_position(
-                _position_from_row(material_path.points[0]), params
+                _position_from_row(material_path.points[0]),
+                params,
+                source_min_x=source_min_x,
+                source_min_y=source_min_y,
             )
             if not initial_travel_added:
                 line = _append_initial_start_xy_travel(
@@ -107,7 +111,12 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             e_per_mm = _e_per_mm_for_material(material_path.material, params)
             feedrate = _feed_mm_s_for_material(material_path.material, params) * 60.0
             source_positions = [
-                _offset_source_position(_position_from_row(row), params)
+                _offset_source_position(
+                    _position_from_row(row),
+                    params,
+                    source_min_x=source_min_x,
+                    source_min_y=source_min_y,
+                )
                 for row in material_path.points
             ]
             previous_pose = source_positions[-1]
@@ -614,10 +623,31 @@ def _polyline_length(points: list[Position]) -> float:
     return sum(_distance(start, end) for start, end in zip(points, points[1:]))
 
 
-def _offset_source_position(position: Position, params: ProcessParams) -> Position:
+def _job_source_xy_min(job: SourceJob) -> tuple[float, float]:
+    min_x: float | None = None
+    min_y: float | None = None
+    for layer in job.layers:
+        for material_path in [*layer.resin_paths, *layer.fiber_paths]:
+            points = np.asarray(material_path.points, dtype=np.float32)
+            if points.size == 0:
+                continue
+            path_min_x = float(np.min(points[:, 0]))
+            path_min_y = float(np.min(points[:, 1]))
+            min_x = path_min_x if min_x is None else min(min_x, path_min_x)
+            min_y = path_min_y if min_y is None else min(min_y, path_min_y)
+    return (0.0 if min_x is None else min_x, 0.0 if min_y is None else min_y)
+
+
+def _offset_source_position(
+    position: Position,
+    params: ProcessParams,
+    *,
+    source_min_x: float,
+    source_min_y: float,
+) -> Position:
     return Position(
-        x=position.x + float(params.start_x_mm),
-        y=position.y + float(params.start_y_mm),
+        x=position.x - source_min_x + float(params.start_x_mm),
+        y=position.y - source_min_y + float(params.start_y_mm),
         z=position.z,
         a=position.a,
         b=position.b,
@@ -632,8 +662,6 @@ def _append_initial_start_xy_travel(
     line: int,
     layer: int,
 ) -> int:
-    if abs(float(params.start_x_mm)) <= _EPS and abs(float(params.start_y_mm)) <= _EPS:
-        return line
     start_pose = Position(
         x=0.0,
         y=0.0,

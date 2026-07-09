@@ -2168,7 +2168,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     "空走速度 mm/s",
                     _external_spin(external_defaults["travel_feed_mm_s"]),
                     "start_x_mm",
-                    "起点 X mm",
+                    "左下角 X mm",
                     _external_spin(
                         external_defaults["start_x_mm"],
                         minimum=-100000.0,
@@ -2177,7 +2177,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 ),
                 (
                     "start_y_mm",
-                    "起点 Y mm",
+                    "左下角 Y mm",
                     _external_spin(
                         external_defaults["start_y_mm"],
                         minimum=-100000.0,
