@@ -64,7 +64,7 @@ With the default `fiber_extrusion_scale = 1.0`, a 10 mm path produces 10 mm of f
 
 ## Prime and Retract
 
-Prime/retract defaults come from the existing test-mode UI values, but the source-NPZ converter now applies one unified rule for both materials: every print path gets `retract -> prime` before the path and `retract -> prime` after the path. The first path is not exempt.
+Prime/retract defaults come from the existing test-mode UI values. Resin paths get `retract -> prime` before and after printing. Fiber paths get `retract -> prime` before printing only; after a fiber path the converter emits `CUT` and lets the exporter perform cut lift with matched E increase, wait completion, and an equal cut safety retract before any travel to the next fiber path. The next fiber path then runs its own normal `retract -> prime`; this preparation is independent from the cut safety retract. The first path is not exempt from the pre-path preparation.
 
 The converter represents these as `ExtrudeWait` commands so `npz_exporter` remains the only system NPZ writer. `G92 E0` / `ResetECommand` is inserted after tool changes, matching the existing GCode tool-change placement, while E continues accumulating across consecutive paths using the same tool.
 

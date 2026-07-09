@@ -157,10 +157,11 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 )
                 line += 1
 
-            for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
-                commands.append(wait)
-                current_e += wait.delta_e
-                line += 1
+            if material_path.material != "F":
+                for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
+                    commands.append(wait)
+                    current_e += wait.delta_e
+                    line += 1
 
             current_pose = previous_pose
 

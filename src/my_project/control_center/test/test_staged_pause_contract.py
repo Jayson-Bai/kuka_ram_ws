@@ -52,6 +52,16 @@ def test_rsi_has_staged_pause_states_and_uses_path_end_flag():
     assert 'cut' in rsi
 
 
+def test_rsi_cut_event_is_nonblocking_and_continues_trajectory_same_cycle():
+    rsi = _read(RSI)
+    assert "bool is_nonblocking_event" in rsi
+    event_block = rsi.split("if (should_enter_wait(next_seq_))", 1)[1].split("} else if (current_state == State::WAIT)", 1)[0]
+    assert "if (is_nonblocking_event(*current_wait_))" in event_block
+    assert "current_wait_.reset();" in event_block
+    assert "state_.store(State::WAIT);" in event_block
+    assert "if (!current_wait_)" in event_block
+
+
 def test_center_reports_staged_pause_states_but_old_pause_remains_immediate():
     center = _read(CENTER)
     assert 'REQUEST_PAUSE' in center

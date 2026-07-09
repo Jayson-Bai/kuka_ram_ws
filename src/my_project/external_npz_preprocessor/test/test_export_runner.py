@@ -73,6 +73,114 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     assert captured["kwargs"]["cut_wait_s"] == 11.0
 
 
+def _decoded_src_lines(data):
+    return [raw.decode("utf-8").rstrip("\x00") for raw in data["src_line"]]
+
+
+def _decoded_event_types(data):
+    vocab = {
+        int(value): key.decode("utf-8").rstrip("\x00")
+        for key, value in zip(data["event_type_vocab_keys"], data["event_type_vocab_vals"])
+    }
+    return [vocab[int(value)] for value in data["event_type"]]
+
+
+def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_travel(tmp_path):
+    import json
+    import numpy as np
+
+    from external_npz_preprocessor.export_runner import convert_external_npz
+    from external_npz_preprocessor.process_params import FiberProcessParams, ProcessParams
+
+    source = tmp_path / "two_fiber_paths.npz"
+    fiber_paths = np.array(
+        [
+            [[0.0, 0.0, 0.6], [10.0, 0.0, 0.6]],
+            [[30.0, 0.0, 0.6], [40.0, 0.0, 0.6]],
+        ],
+        dtype=np.float32,
+    )
+    np.savez(
+        source,
+        meta=np.array(json.dumps({"format": "external_layer_paths_v1"})),
+        layer_0000_F=fiber_paths,
+    )
+    calibration_path = tmp_path / "head_offsets.json"
+    calibration_path.write_text(
+        json.dumps(
+            {
+                "resin": {"z_print_compensation_mm": 0.0},
+                "fiber": {
+                    "x_print_compensation_mm": 0.0,
+                    "y_print_compensation_mm": 0.0,
+                    "z_offset_mm": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "out.npz"
+    params = ProcessParams(
+        dt=1.0,
+        fiber=FiberProcessParams(
+            extrusion_scale=1.0,
+            feed_mm_s=10.0,
+            retract_length_mm=4.0,
+            prime_length_mm=6.0,
+            retract_speed_mm_s=4.0,
+            prime_speed_mm_s=6.0,
+        ),
+        travel_feed_mm_s=10.0,
+    )
+
+    convert_external_npz(
+        source,
+        out,
+        params,
+        calibration_path=calibration_path,
+        cut_lift_mm=20.0,
+        cut_wait_s=0.0,
+    )
+
+    data = np.load(out)
+    src_lines = _decoded_src_lines(data)
+    event_types = _decoded_event_types(data)
+    cut_idx = event_types.index("cut")
+    cut_src = src_lines[cut_idx]
+    cut_e = float(data["e"][cut_idx])
+    cut_z = float(data["z"][cut_idx])
+
+    first_after_cut_src = next(
+        idx for idx in range(cut_idx + 1, len(src_lines)) if src_lines[idx] != cut_src
+    )
+    cut_motion_idx = [
+        idx for idx in range(cut_idx + 1, first_after_cut_src) if src_lines[idx] == cut_src
+    ]
+
+    assert cut_motion_idx
+    assert np.isclose(np.max(data["z"][cut_motion_idx]), cut_z + 20.0)
+    assert np.isclose(np.max(data["e"][cut_motion_idx]), cut_e + 20.0)
+    assert np.isclose(data["z"][cut_motion_idx[-1]], cut_z + 20.0)
+    assert np.isclose(data["e"][cut_motion_idx[-1]], cut_e)
+
+    travel_src = src_lines[first_after_cut_src]
+    travel_idx = [
+        idx for idx in range(first_after_cut_src, len(src_lines)) if src_lines[idx] == travel_src
+    ]
+    assert travel_idx
+    assert np.isclose(data["e"][travel_idx[0]], cut_e)
+    assert np.isclose(data["e"][travel_idx[-1]], cut_e)
+    assert np.isclose(data["z"][travel_idx[0]], cut_z + 20.0)
+    assert np.isclose(data["z"][travel_idx[-1]], cut_z)
+
+    next_retract_idx = travel_idx[-1] + 1
+    next_prime_idx = next_retract_idx + 1
+    assert np.isclose(data["e"][next_retract_idx], cut_e - 4.0)
+    assert np.isclose(data["e"][next_prime_idx], cut_e + 2.0)
+    assert np.isclose(data["z"][next_retract_idx], cut_z)
+    assert np.isclose(data["z"][next_prime_idx], cut_z)
+
+
 def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
     import json
     import numpy as np

@@ -325,10 +325,15 @@ private:
               pause_cut_seen_ = true;
             }
             last_event_seq_triggered_ = current_wait_->trigger_seq;
-            state_.store(State::WAIT);
+            if (is_nonblocking_event(*current_wait_)) {
+              current_wait_.reset();
+            } else {
+              state_.store(State::WAIT);
+            }
           }
-          //此时保持last_sent_
-        } else {
+          // blocking event keeps last_sent_; nonblocking event continues below
+        }
+        if (!current_wait_) {
           while (auto tp = pop_next_traj()) {
             if (next_seq_ == 0 && tp->seq > 0) {
               // 首包对齐：允许从第一条轨迹的序号起步
@@ -505,6 +510,11 @@ private:
     auto ev = event_queue_.front();
     event_queue_.pop_front();
     return ev;
+  }
+
+  bool is_nonblocking_event(const PlannedEvent & ev) const
+  {
+    return ev.event_type == "cut";
   }
 
   bool is_wait_cleared()

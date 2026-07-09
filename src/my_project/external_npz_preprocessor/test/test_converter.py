@@ -91,7 +91,7 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert curves[1].layer == 0
 
 
-def test_adds_retract_then_prime_before_and_after_every_material_path():
+def test_adds_retract_then_prime_around_resin_and_before_fiber_paths():
     job = SourceJob(
         meta={},
         layers=[
@@ -132,8 +132,6 @@ def test_adds_retract_then_prime_before_and_after_every_material_path():
         (18.0, 900.0, "RESIN_PRINT"),
         (-10.0, 300.0, "FIBER_PRINT"),
         (12.0, 300.0, "FIBER_PRINT"),
-        (-10.0, 300.0, "FIBER_PRINT"),
-        (12.0, 300.0, "FIBER_PRINT"),
     ]
     assert [round(cmd.wait_sec, 6) for cmd in waits] == [
         0.5,
@@ -142,12 +140,10 @@ def test_adds_retract_then_prime_before_and_after_every_material_path():
         1.2,
         2.0,
         2.4,
-        2.0,
-        2.4,
     ]
 
 
-def test_inserts_cut_after_each_fiber_path_before_trailing_retract_prime():
+def test_inserts_cut_after_each_fiber_path_without_trailing_retract_prime():
     job = SourceJob(
         meta={},
         layers=[
@@ -184,6 +180,8 @@ def test_inserts_cut_after_each_fiber_path_before_trailing_retract_prime():
         if isinstance(cmd, GlobalCurveCommand) and cmd.type == "PRINT"
         else ("wait", cmd.delta_e)
         if isinstance(cmd, ExtrudeWait)
+        else ("travel", None)
+        if isinstance(cmd, MoveCommand) and cmd.type == "TRAVEL"
         else ("cut", cmd.params)
         if isinstance(cmd, MCommand) and cmd.code == "CUT"
         else None
@@ -196,14 +194,11 @@ def test_inserts_cut_after_each_fiber_path_before_trailing_retract_prime():
         ("wait", 12.0),
         ("print", None),
         ("cut", {"P": 1.0}),
-        ("wait", -10.0),
-        ("wait", 12.0),
+        ("travel", None),
         ("wait", -10.0),
         ("wait", 12.0),
         ("print", None),
         ("cut", {"P": 1.0}),
-        ("wait", -10.0),
-        ("wait", 12.0),
     ]
 
 

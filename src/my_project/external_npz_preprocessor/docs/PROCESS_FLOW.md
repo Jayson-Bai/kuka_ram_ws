@@ -128,16 +128,19 @@ extrude_reset
 enable_extrude_wait=True
 ```
 
-### 路径前后统一规则
+### 路径准备规则
 
-每条树脂/纤维打印路径的前后都会插入一组原地等待段，顺序固定为先回抽、再预挤出。第一条路径也执行同样规则：
+等待段顺序固定为先回抽、再预挤出。树脂路径在打印前后各插入一组。纤维路径的完整顺序是：路径前正常 `回抽 -> 预挤出`，打印到路径末端后触发 `CUT`，exporter 先执行剪切抬升并按抬升空间距离同步增加 E，再执行等量剪切安全回抽，随后 travel 到下一条纤维路径起点，最后再执行下一条路径自己的正常 `回抽 -> 预挤出`。剪切抬升挤出和剪切安全回抽独立于下一条路径前的准备等待。第一条路径也执行同样的前置准备：
 
 ```text
 ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
 ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
 PRINT path
+# Resin only:
 ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
 ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
+# Fiber only:
+CUT
 ```
 
 当前默认值：
