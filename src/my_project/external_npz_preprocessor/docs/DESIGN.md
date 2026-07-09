@@ -37,7 +37,7 @@ The package supports:
 - Nx6 `[x, y, z, a, b, c]` source paths when the source needs explicit pose values.
 - Source-side Z is trajectory geometry and is never overwritten by UI layer-height values.
 - Formal-print compatible input supports both agreed source `.npz` and legacy `.gcode/.gc/.g` files; this package owns only the `.npz` branch.
-- Resin extrusion derived from fixed `2.0 mm` resin line width, resin layer height, and resin extrusion scale.
+- Resin extrusion derived from fixed `2.0 mm` resin line width, resin layer height, resin extrusion scale, and fixed `1.75 mm` filament cross-section conversion.
 - Fiber extrusion matched to path length by default through fiber extrusion scale.
 - A basic Qt UI and CLI.
 

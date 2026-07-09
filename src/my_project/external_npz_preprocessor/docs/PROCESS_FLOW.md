@@ -175,10 +175,10 @@ sqrt(dx^2 + dy^2 + dz^2)
 树脂 `E/mm`：
 
 ```text
-resin_e_per_mm = 2.0 * resin_layer_height_mm * resin_extrusion_scale
+resin_e_per_mm = 2.0 * resin_layer_height_mm * resin_extrusion_scale / (pi * (1.75 / 2)^2)
 ```
 
-这里 `2.0 mm` 是固定树脂线宽，不允许用户输入。树脂层高只作为挤出计算参考，不改变源 Z。
+这里 `2.0 mm` 是固定树脂线宽，`1.75 mm` 是固定树脂耗材直径；计算方式与原 G-code 测试线一致，先得到每毫米路径的沉积体积，再除以耗材截面积换成 E 轴料长。树脂层高只作为挤出计算参考，不改变源 Z。
 
 纤维 `E/mm`：
 

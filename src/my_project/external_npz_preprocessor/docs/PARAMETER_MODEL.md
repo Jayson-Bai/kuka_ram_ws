@@ -7,6 +7,7 @@ The source NPZ provides geometry only. Extrusion is derived from material proces
 ## Current Defaults
 
 - Resin line width: fixed `2.0 mm` and not user configurable
+- Resin filament diameter: fixed `1.75 mm` for volume-to-filament-length conversion
 - Resin layer height: `0.5 mm`
 - Resin extrusion scale: `1.0`
 - Resin print speed: `10 mm/s`
@@ -39,10 +40,10 @@ Shared head offsets and tool-switch compensation are not duplicated here; they r
 Resin equivalent extrusion per millimeter is derived as:
 
 ```text
-resin_e_per_mm = 2.0 * layer_height_mm * extrusion_scale
+resin_e_per_mm = 2.0 * layer_height_mm * extrusion_scale / (pi * (1.75 / 2)^2)
 ```
 
-The old pump-volume-to-E ratio is intentionally removed from the UI and CLI. Resin line width is also fixed in code at `2.0 mm`, so the user-facing controls are `layer_height_mm` and `extrusion_scale`.
+This matches the original G-code test-line allocation: deposited resin volume per path millimeter is converted to 1.75 mm filament length by dividing by the filament cross-section area. Resin line width and filament diameter are fixed in code, so the user-facing controls remain `layer_height_mm` and `extrusion_scale`.
 
 ## Fiber
 

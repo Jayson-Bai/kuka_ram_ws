@@ -1,4 +1,5 @@
 from pathlib import Path
+import math
 
 import pytest
 
@@ -83,7 +84,9 @@ def test_legacy_resin_bead_width_is_ignored_on_load(tmp_path):
 
     assert not hasattr(params.resin, "bead_width_mm")
     assert params.resin.layer_height_mm == 0.4
-    assert params.resin.e_per_mm() == pytest.approx(1.6)
+    assert params.resin.e_per_mm() == pytest.approx(
+        2.0 * 0.4 * 2.0 / (math.pi * (1.75 / 2.0) ** 2)
+    )
 
 
 def test_legacy_spline_defaults_are_migrated_to_current_safe_defaults(tmp_path):

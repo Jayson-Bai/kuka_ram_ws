@@ -8,6 +8,7 @@ from external_npz_preprocessor.converter import source_job_to_parsed_commands
 from external_npz_preprocessor.process_params import (
     FiberProcessParams,
     ProcessParams,
+    RESIN_FILAMENT_LENGTH_PER_MM3,
     ResinProcessParams,
 )
 from external_npz_preprocessor.source_npz import LayerPaths, MaterialPath, SourceJob
@@ -78,7 +79,14 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert [curve.subtype for curve in curves] == ["RESIN_PRINT", "FIBER_PRINT"]
     assert [curve.cmd for curve in curves] == ["POLYLINE", "POLYLINE"]
     assert curves[0].feedrate == 600.0
-    assert round(curves[0].delta_e, 6) == round((10.0 ** 2 + 0.1 ** 2) ** 0.5 * 2.0 * 0.5 * 2.0, 6)
+    assert round(curves[0].delta_e, 6) == round(
+        (10.0 ** 2 + 0.1 ** 2) ** 0.5
+        * 2.0
+        * 0.5
+        * 2.0
+        * RESIN_FILAMENT_LENGTH_PER_MM3,
+        6,
+    )
     assert curves[1].feedrate == 360.0
     assert round(curves[1].delta_e, 6) == round((4.0 ** 2 + 0.2 ** 2) ** 0.5 * 0.25, 6)
     assert curves[0].start_pos.z == pytest.approx(2.5)

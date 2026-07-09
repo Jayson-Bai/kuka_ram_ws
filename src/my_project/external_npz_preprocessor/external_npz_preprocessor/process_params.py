@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 
 
 RESIN_FIXED_BEAD_WIDTH_MM = 2.0
+RESIN_FILAMENT_DIAMETER_MM = 1.75
+RESIN_FILAMENT_LENGTH_PER_MM3 = 1.0 / (
+    math.pi * (RESIN_FILAMENT_DIAMETER_MM / 2.0) ** 2
+)
 
 
 @dataclass(frozen=True)
@@ -28,6 +33,7 @@ class ResinProcessParams:
             RESIN_FIXED_BEAD_WIDTH_MM
             * float(self.layer_height_mm)
             * float(self.extrusion_scale)
+            * RESIN_FILAMENT_LENGTH_PER_MM3
         )
 
 
@@ -72,4 +78,8 @@ class ProcessParams:
 
     @property
     def default_abc(self) -> tuple[float, float, float]:
-        return (float(self.default_a), float(self.default_b), float(self.default_c))
+        return (
+            float(self.default_a),
+            float(self.default_b),
+            float(self.default_c),
+        )

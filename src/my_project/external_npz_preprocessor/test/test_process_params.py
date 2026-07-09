@@ -1,14 +1,18 @@
+import math
+
 import pytest
 
 from external_npz_preprocessor.process_params import (
     FiberProcessParams,
     ProcessParams,
+    RESIN_FILAMENT_DIAMETER_MM,
+    RESIN_FILAMENT_LENGTH_PER_MM3,
     RESIN_FIXED_BEAD_WIDTH_MM,
     ResinProcessParams,
 )
 
 
-def test_resin_e_per_mm_uses_fixed_line_width_layer_height_and_extrusion_scale():
+def test_resin_e_per_mm_uses_fixed_line_width_layer_height_scale_and_filament_area():
     params = ProcessParams(
         resin=ResinProcessParams(
             layer_height_mm=0.4,
@@ -18,7 +22,9 @@ def test_resin_e_per_mm_uses_fixed_line_width_layer_height_and_extrusion_scale()
         fiber=FiberProcessParams(extrusion_scale=0.8, feed_mm_s=5.0),
     )
 
-    assert params.resin.e_per_mm() == pytest.approx(1.2)
+    assert params.resin.e_per_mm() == pytest.approx(
+        2.0 * 0.4 * 1.5 / (math.pi * (1.75 / 2.0) ** 2)
+    )
 
 
 def test_resin_override_takes_precedence_over_derived_e_per_mm():
@@ -36,6 +42,10 @@ def test_default_process_params_match_current_material_setup():
     params = ProcessParams()
 
     assert RESIN_FIXED_BEAD_WIDTH_MM == 2.0
+    assert RESIN_FILAMENT_DIAMETER_MM == 1.75
+    assert RESIN_FILAMENT_LENGTH_PER_MM3 == pytest.approx(
+        1.0 / (math.pi * (1.75 / 2.0) ** 2)
+    )
     assert not hasattr(params.resin, "bead_width_mm")
     assert params.resin.layer_height_mm == 0.5
     assert params.resin.extrusion_scale == 1.0
@@ -76,6 +86,7 @@ def test_resin_line_width_is_not_part_of_user_configurable_model():
         RESIN_FIXED_BEAD_WIDTH_MM
         * params.resin.layer_height_mm
         * params.resin.extrusion_scale
+        * RESIN_FILAMENT_LENGTH_PER_MM3
     )
 
 
