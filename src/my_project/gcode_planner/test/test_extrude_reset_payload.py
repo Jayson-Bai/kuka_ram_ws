@@ -470,12 +470,16 @@ def test_cut_event_lifts_with_matched_fiber_feed_and_preserves_next_prime(tmp_pa
     assert np.isclose(data["z"][travel_idx[0]], 20.0)
     assert np.isclose(data["z"][travel_idx[-1]], 0.0)
     assert np.isclose(data["e"][travel_idx[0]], 5.0)
-    assert np.isclose(data["e"][travel_idx[-1]], 8.0)
-    assert "6" not in src_lines
+    assert np.isclose(data["e"][travel_idx[-1]], 5.0)
+    next_prime_idx = src_lines.index("6")
+    assert next_prime_idx > travel_idx[-1]
+    assert np.isclose(data["x"][next_prime_idx], data["x"][travel_idx[-1]])
+    assert np.isclose(data["z"][next_prime_idx], data["z"][travel_idx[-1]])
+    assert np.isclose(data["e"][next_prime_idx], 8.0)
 
 
-def test_prime_extrude_wait_overlaps_previous_travel_by_default(tmp_path):
-    out = tmp_path / "prime_overlap.npz"
+def test_prime_extrude_wait_runs_after_previous_travel_by_default(tmp_path):
+    out = tmp_path / "prime_after_travel.npz"
     parsed = [
         MoveCommand(
             type="TRAVEL",
@@ -512,10 +516,15 @@ def test_prime_extrude_wait_overlaps_previous_travel_by_default(tmp_path):
     data = np.load(out)
     src_lines = _decoded_src_lines(data)
     travel_idx = [idx for idx, src in enumerate(src_lines) if src == "1"]
+    extrude_wait_idx = [idx for idx, src in enumerate(src_lines) if src == "2"]
 
-    assert "2" not in src_lines
+    assert extrude_wait_idx
+    assert extrude_wait_idx[0] > travel_idx[-1]
     assert np.isclose(data["e"][travel_idx[0]], 0.0)
-    assert np.isclose(data["e"][travel_idx[-1]], 4.0)
+    assert np.isclose(data["e"][travel_idx[-1]], 0.0)
+    assert np.isclose(data["x"][extrude_wait_idx[0]], data["x"][travel_idx[-1]])
+    assert np.isclose(data["z"][extrude_wait_idx[0]], data["z"][travel_idx[-1]])
+    assert np.isclose(data["e"][extrude_wait_idx[-1]], 4.0)
 
 
 def test_retract_wait_overlaps_previous_travel_before_reset_by_default(
@@ -647,12 +656,17 @@ def test_retract_across_reset_keeps_existing_extrude_wait_rows(tmp_path):
     src_lines = _decoded_src_lines(data)
     retract_idx = src_lines.index("2")
     travel_idx = [idx for idx, src in enumerate(src_lines) if src == "4"]
+    prime_idx = [idx for idx, src in enumerate(src_lines) if src == "5"]
 
     assert "2" in src_lines
-    assert "5" not in src_lines
+    assert prime_idx
+    assert prime_idx[0] > travel_idx[-1]
     assert np.isclose(data["e"][retract_idx], 7.0)
     assert np.isclose(data["e"][travel_idx[0]], 0.0)
-    assert np.isclose(data["e"][travel_idx[-1]], 4.0)
+    assert np.isclose(data["e"][travel_idx[-1]], 0.0)
+    assert np.isclose(data["x"][prime_idx[0]], data["x"][travel_idx[-1]])
+    assert np.isclose(data["z"][prime_idx[0]], data["z"][travel_idx[-1]])
+    assert np.isclose(data["e"][prime_idx[-1]], 4.0)
 
 
 def test_travel_extrude_overlap_can_be_disabled(tmp_path):

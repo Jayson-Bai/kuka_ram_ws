@@ -575,9 +575,6 @@ def export_npz(
 
             prev = out[-1] if out else None
             next_cmd = commands[idx + 1] if idx + 1 < total else None
-            if cmd.delta_e > 0.0 and _can_overlap_on_travel(prev):
-                out[-1] = _add_extrude_overlap_to_travel(prev, cmd.delta_e, "prime")
-                continue
             if (
                 cmd.delta_e < 0.0
                 and _can_overlap_on_travel(prev)
