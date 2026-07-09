@@ -68,6 +68,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_layer_height = self._spin(0.1)
         self.fiber_extrusion_scale = self._spin(1.0)
         self.fiber_feed = self._spin(10.0)
+        self.fiber_start_accel = self._spin(2.0, minimum=0.001)
         self.fiber_temp = self._spin(250.0, maximum=500.0)
         self.fiber_prime_length = self._spin(12.0)
         self.fiber_prime_speed = self._spin(5.0)
@@ -87,6 +88,12 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             ("树脂层高 mm", self.resin_layer_height, "纤维层高 mm", self.fiber_layer_height),
             ("树脂挤出倍率", self.resin_extrusion_scale, "纤维挤出倍率", self.fiber_extrusion_scale),
             ("树脂速度 mm/s", self.resin_feed, "纤维速度 mm/s", self.fiber_feed),
+            (
+                "",
+                QtWidgets.QLabel(""),
+                "纤维起步加速时间 s",
+                self.fiber_start_accel,
+            ),
             ("树脂温度 C", self.resin_temp, "纤维温度 C", self.fiber_temp),
             ("树脂预挤出长度 mm", self.resin_prime_length, "纤维预挤出长度 mm", self.fiber_prime_length),
             ("树脂预挤出速度 mm/s", self.resin_prime_speed, "纤维预挤出速度 mm/s", self.fiber_prime_speed),
@@ -209,6 +216,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_layer_height.setValue(params.fiber.layer_height_mm)
         self.fiber_extrusion_scale.setValue(params.fiber.extrusion_scale)
         self.fiber_feed.setValue(params.fiber.feed_mm_s)
+        self.fiber_start_accel.setValue(params.fiber.start_accel_s)
         self.fiber_temp.setValue(params.fiber.temperature_c)
         self.fiber_prime_length.setValue(params.fiber.prime_length_mm)
         self.fiber_prime_speed.setValue(params.fiber.prime_speed_mm_s)
@@ -239,6 +247,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
                 layer_height_mm=self.fiber_layer_height.value(),
                 extrusion_scale=self.fiber_extrusion_scale.value(),
                 feed_mm_s=self.fiber_feed.value(),
+                start_accel_s=self.fiber_start_accel.value(),
                 temperature_c=self.fiber_temp.value(),
                 fan_enabled=self.fiber_fan.isChecked(),
                 prime_length_mm=self.fiber_prime_length.value(),

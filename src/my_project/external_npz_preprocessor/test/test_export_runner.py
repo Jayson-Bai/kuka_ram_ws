@@ -73,6 +73,64 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     assert captured["kwargs"]["cut_wait_s"] == 11.0
 
 
+def test_exporter_uses_curve_start_acceleration_without_changing_default(tmp_path, monkeypatch):
+    import path_processing_core.npz_exporter as exporter
+    from path_processing_core.polynomial_interpolator import InterpolatedPoint
+    from path_processing_core.types import GlobalCurveCommand, Position
+
+    captured = []
+
+    def fake_sample_global_curve_iter(curve, **kwargs):
+        captured.append((curve.raw, kwargs.get("t_acc")))
+        yield InterpolatedPoint(
+            t=0.0,
+            pos=curve.start_pos,
+            e=curve.e_val,
+            extrude_speed=0.0,
+            feedrate_mm_min=curve.feedrate,
+            cmd_type=curve.type,
+            line=curve.line,
+            raw=curve.raw,
+        )
+
+    monkeypatch.setattr(
+        exporter,
+        "sample_global_curve_iter",
+        fake_sample_global_curve_iter,
+    )
+    start = Position(0.0, 0.0, 0.5, 0.0, 0.0, 0.0)
+    end = Position(10.0, 0.0, 0.5, 0.0, 0.0, 0.0)
+    commands = [
+        GlobalCurveCommand(
+            type="PRINT",
+            cmd="POLYLINE",
+            start_pos=start,
+            control_points=[end],
+            e_val=1.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=1,
+            raw="default_curve",
+        ),
+        GlobalCurveCommand(
+            type="PRINT",
+            cmd="POLYLINE",
+            start_pos=start,
+            control_points=[end],
+            e_val=2.0,
+            delta_e=1.0,
+            feedrate=600.0,
+            line=2,
+            raw="fiber_curve",
+            time_acc_s=4.5,
+        ),
+    ]
+
+    exporter.export_npz(commands, str(tmp_path / "out.npz"), dt=0.004)
+
+    assert captured == [("default_curve", None), ("fiber_curve", 4.5)]
+
+
 def _decoded_src_lines(data):
     return [raw.decode("utf-8").rstrip("\x00") for raw in data["src_line"]]
 

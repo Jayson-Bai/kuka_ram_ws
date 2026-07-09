@@ -48,6 +48,7 @@ class FiberProcessParams:
     prime_speed_mm_s: float = 5.0
     retract_length_mm: float = 10.0
     retract_speed_mm_s: float = 5.0
+    start_accel_s: float = 2.0
 
     def e_per_mm(self) -> float:
         # Base 1.0 means fiber feed speed equals TCP movement speed.

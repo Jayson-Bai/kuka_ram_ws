@@ -88,6 +88,8 @@ class CurveCommand:
     feedrate: float
     line: int
     raw: Optional[str] = None
+    # Optional start acceleration time override for this curve only.
+    time_acc_s: Optional[float] = None
     target_v_in: Optional[float] = None
     target_v_out: Optional[float] = None
 

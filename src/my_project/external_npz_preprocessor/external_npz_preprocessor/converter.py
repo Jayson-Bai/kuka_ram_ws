@@ -137,6 +137,9 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 subtype=subtype,
             )
             curve = _validated_spline_or_polyline(print_moves, source_positions, params)
+            curve.time_acc_s = _time_acc_s_for_material(
+                material_path.material, params
+            )
             curve.layer = layer.index
             curve.subtype = subtype
             commands.append(curve)
@@ -677,6 +680,7 @@ def _append_midpoint_fillet_positions(
         t = step / max(2, blend_segments)
         _append_distinct_position(out, _cubic_position(entry, control1, control2, exit_pos, t))
 
+
 def _polyline_max_turn_angle_deg(points: list[Position], *, min_segment_mm: float) -> float:
     max_angle = 0.0
     for prev_pos, corner, next_pos in zip(points, points[1:], points[2:]):
@@ -911,6 +915,15 @@ def _subtype_for_material(material: str) -> str:
         return "RESIN_PRINT"
     if material == "F":
         return "FIBER_PRINT"
+    raise ValueError(f"unknown material: {material}")
+
+
+def _time_acc_s_for_material(material: str, params: ProcessParams) -> float | None:
+    if material == "F":
+        value = float(params.fiber.start_accel_s)
+        return value if value > 0.0 else None
+    if material == "R":
+        return None
     raise ValueError(f"unknown material: {material}")
 
 

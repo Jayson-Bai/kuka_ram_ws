@@ -488,11 +488,15 @@ def export_npz(
             src_lines = str(move_lines[0])
         sampled_rows: List[CsvRow] = []
         path_id = _path_id_for(layer, subtype, occ)
-        for pt in sample_global_curve_iter(
-                gc,
-                dt=dt,
-                target_velocity=target_velocity,
-                profile=sample_profile):
+        sample_kwargs = {
+            "dt": dt,
+            "target_velocity": target_velocity,
+            "profile": sample_profile,
+        }
+        time_acc_s = getattr(gc, "time_acc_s", None)
+        if time_acc_s is not None and float(time_acc_s) > 0.0:
+            sample_kwargs["t_acc"] = float(time_acc_s)
+        for pt in sample_global_curve_iter(gc, **sample_kwargs):
             has_any = True
             row = CsvRow(
                 seq=seq,

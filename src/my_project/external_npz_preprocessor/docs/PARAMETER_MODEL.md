@@ -17,6 +17,7 @@ The source NPZ provides geometry only. Extrusion is derived from material proces
 - Fiber layer height: `0.1 mm`
 - Fiber extrusion scale: `1.0`
 - Fiber print speed: `10 mm/s`
+- Fiber start acceleration time: `2.0 s`
 - Fiber temperature: `250 C`
 - Fiber prime: `12 mm @ 5 mm/s`
 - Fiber retract: `10 mm @ 5 mm/s`
@@ -54,6 +55,14 @@ fiber_e_per_mm = fiber_extrusion_scale
 ```
 
 With the default `fiber_extrusion_scale = 1.0`, a 10 mm path produces 10 mm of fiber feed. Fiber layer height remains in the process parameters as a process reference, but it does not change source Z or `E` in the current speed-matched fiber model.
+
+External NPZ fiber paths can override only the start acceleration time used by the seven-order time parameterization:
+
+```text
+fiber_start_accel_s = 2.0
+```
+
+This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level metadata. The global seven-order default remains unchanged for resin, travel, cut lift, and all curves that do not explicitly carry this metadata.
 
 ## Shared Parameters
 

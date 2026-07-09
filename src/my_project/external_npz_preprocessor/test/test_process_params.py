@@ -66,6 +66,7 @@ def test_default_process_params_match_current_material_setup():
     assert params.fiber.prime_speed_mm_s == 5.0
     assert params.fiber.retract_length_mm == 10.0
     assert params.fiber.retract_speed_mm_s == 5.0
+    assert params.fiber.start_accel_s == 2.0
     assert params.travel_feed_mm_s == 10.0
     assert params.start_x_mm == 0.0
     assert params.start_y_mm == 0.0

@@ -39,5 +39,6 @@ The package supports:
 - Formal-print compatible input supports both agreed source `.npz` and legacy `.gcode/.gc/.g` files; this package owns only the `.npz` branch.
 - Resin extrusion derived from fixed `2.0 mm` resin line width, resin layer height, resin extrusion scale, and fixed `1.75 mm` filament cross-section conversion.
 - Fiber extrusion matched to path length by default through fiber extrusion scale.
+- Fiber print curves may carry a curve-level seven-order start acceleration time; this is external-NPZ fiber-only metadata and does not change the global interpolator default.
 - A basic Qt UI and CLI.
 

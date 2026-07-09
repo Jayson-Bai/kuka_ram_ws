@@ -25,6 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fiber-layer-height-mm", type=float, default=0.1)
     parser.add_argument("--fiber-extrusion-scale", type=float, default=1.0)
     parser.add_argument("--fiber-feed-mm-s", type=float, default=10.0)
+    parser.add_argument("--fiber-start-accel-s", type=float, default=2.0)
     parser.add_argument("--fiber-temperature-c", type=float, default=250.0)
     parser.add_argument("--fiber-prime-length-mm", type=float, default=12.0)
     parser.add_argument("--fiber-prime-speed-mm-s", type=float, default=5.0)
@@ -59,6 +60,7 @@ def params_from_args(args) -> ProcessParams:
             layer_height_mm=args.fiber_layer_height_mm,
             extrusion_scale=args.fiber_extrusion_scale,
             feed_mm_s=args.fiber_feed_mm_s,
+            start_accel_s=args.fiber_start_accel_s,
             temperature_c=args.fiber_temperature_c,
             fan_enabled=args.fiber_fan,
             prime_length_mm=args.fiber_prime_length_mm,

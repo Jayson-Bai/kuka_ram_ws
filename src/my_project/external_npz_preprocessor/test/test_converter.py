@@ -99,6 +99,51 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert curves[1].layer == 0
 
 
+def test_marks_only_fiber_curves_with_custom_start_acceleration_time():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [[0.0, 0.0, 0.5, 0.0, 0.0, 0.0],
+                             [10.0, 0.0, 0.5, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[
+                    MaterialPath(
+                        material="F",
+                        order=1,
+                        points=np.array(
+                            [[10.0, 0.0, 0.6, 0.0, 0.0, 0.0],
+                             [20.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+            )
+        ],
+    )
+    params = ProcessParams(fiber=FiberProcessParams(start_accel_s=4.5))
+
+    curves = [
+        cmd
+        for cmd in source_job_to_parsed_commands(job, params)
+        if isinstance(cmd, GlobalCurveCommand)
+    ]
+
+    resin_curve = next(curve for curve in curves if curve.subtype == "RESIN_PRINT")
+    fiber_curve = next(curve for curve in curves if curve.subtype == "FIBER_PRINT")
+    assert resin_curve.time_acc_s is None
+    assert fiber_curve.time_acc_s == pytest.approx(4.5)
+
+
 def test_adds_retract_then_prime_around_resin_and_before_fiber_paths():
     job = SourceJob(
         meta={},

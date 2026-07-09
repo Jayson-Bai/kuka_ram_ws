@@ -19,3 +19,9 @@ def test_height_accumulation_switch_is_not_exposed_in_cli_help():
     help_text = build_parser().format_help()
 
     assert "--accumulate-fiber-height-for-resin-layers" not in help_text
+
+
+def test_fiber_start_acceleration_option_is_exposed_in_cli_help():
+    help_text = build_parser().format_help()
+
+    assert "--fiber-start-accel-s" in help_text

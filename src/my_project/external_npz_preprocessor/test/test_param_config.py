@@ -35,6 +35,7 @@ def test_save_and_load_print_params_round_trip(tmp_path):
             prime_speed_mm_s=6.0,
             retract_length_mm=9.0,
             retract_speed_mm_s=4.0,
+            start_accel_s=4.5,
         ),
         travel_feed_mm_s=12.0,
         default_a=1.0,
