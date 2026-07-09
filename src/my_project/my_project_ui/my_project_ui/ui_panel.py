@@ -1724,11 +1724,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(resin_z_subtitle)
 
         resin_z_desc = QtWidgets.QLabel(
-            "树脂 Z 是打印平面起点全局补偿；纤维 XYZ 是喷头切换直接偏置。"
-            "切到纤维头时，Z 向实际补偿=树脂Z+纤维Z偏置。"
+            "树脂 Z 是整体 TCP/打印空间补偿；纤维 XYZ 是纤维头相对树脂头的物理偏置。"
+            "切换到纤维头后，机械臂会按纤维偏置同号移动来补偿头间差异。"
         )
+        offset_help = (
+            "树脂 Z：整体 TCP/打印空间 Z 补偿，所有工具都会叠加。\n"
+            "纤维 X/Y/Z：纤维头相对树脂头的物理偏置。填入正值表示纤维头相对树脂头在该轴正方向偏移；填入负值表示在负方向偏移。\n"
+            "导出和切换到纤维头时，机械臂会按填入值同号移动补偿：例如纤维 Z=+6mm 表示纤维头物理上比树脂头低 6mm，切到纤维头后机械臂 Z 会上移 6mm，使纤维头末端回到同一打印空间高度。"
+        )
+        resin_z_subtitle.setToolTip(offset_help)
         resin_z_desc.setObjectName("fieldLabel")
         resin_z_desc.setWordWrap(True)
+        resin_z_desc.setToolTip(offset_help)
         export_layout.addWidget(resin_z_desc)
 
         offset_cfg = _load_offset_config()
@@ -1771,12 +1778,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
         resin_z_label = QtWidgets.QLabel("树脂 Z")
         resin_z_label.setObjectName("fieldLabel")
         resin_z_label.setAlignment(QtCore.Qt.AlignCenter)
+        resin_z_tip = (
+            "整体 TCP/打印空间 Z 补偿。\n"
+            "正值：整体打印空间向机器人 Z 正方向偏移；负值：整体打印空间向机器人 Z 负方向偏移。\n"
+            "该值会叠加到树脂头和纤维头的导出轨迹上。"
+        )
+        resin_z_label.setToolTip(resin_z_tip)
         self._resin_z_print_comp_spin = _NoWheelDoubleSpinBox()
         self._resin_z_print_comp_spin.setRange(-200.0, 200.0)
         self._resin_z_print_comp_spin.setDecimals(2)
         self._resin_z_print_comp_spin.setSingleStep(0.1)
         self._resin_z_print_comp_spin.setValue(resin_z_default)
         self._resin_z_print_comp_spin.setMinimumHeight(28)
+        self._resin_z_print_comp_spin.setToolTip(resin_z_tip)
         self._resin_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
         resin_z_lay.addWidget(resin_z_label)
         resin_z_lay.addWidget(self._resin_z_print_comp_spin)
@@ -1789,12 +1803,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_z_label = QtWidgets.QLabel("纤维 Z 偏置")
         fiber_z_label.setObjectName("fieldLabel")
         fiber_z_label.setAlignment(QtCore.Qt.AlignCenter)
+        fiber_z_tip = (
+            "纤维头相对树脂头的 Z 向物理偏置。\n"
+            "正值：纤维头相对树脂头在物理上更低/需要机械臂 Z 正向上移补偿；负值：纤维头相对树脂头更高/切换后机械臂 Z 会向下补偿。\n"
+            "导出时纤维轨迹 Z = 源路径 Z + 树脂整体 Z 补偿 + 纤维 Z 偏置。"
+        )
+        fiber_z_label.setToolTip(fiber_z_tip)
         self._fiber_z_print_comp_spin = _NoWheelDoubleSpinBox()
         self._fiber_z_print_comp_spin.setRange(-200.0, 200.0)
         self._fiber_z_print_comp_spin.setDecimals(2)
         self._fiber_z_print_comp_spin.setSingleStep(0.1)
         self._fiber_z_print_comp_spin.setValue(fiber_z_default)
         self._fiber_z_print_comp_spin.setMinimumHeight(28)
+        self._fiber_z_print_comp_spin.setToolTip(fiber_z_tip)
         self._fiber_z_print_comp_spin.valueChanged.connect(self._on_offset_changed)
         fiber_z_lay.addWidget(fiber_z_label)
         fiber_z_lay.addWidget(self._fiber_z_print_comp_spin)
@@ -1806,15 +1827,23 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_subtitle = QtWidgets.QLabel("纤维头 XY 偏置")
         offset_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
+        xy_offset_tip = (
+            "纤维头相对树脂头的 X/Y 物理偏置。\n"
+            "X 正值：纤维头相对树脂头在机器人 X 正方向偏移，切到纤维头后机械臂 X 同号移动补偿。\n"
+            "Y 正值：纤维头相对树脂头在机器人 Y 正方向偏移，切到纤维头后机械臂 Y 同号移动补偿。\n"
+            "负值表示对应轴负方向偏移，机械臂也按负方向补偿。"
+        )
+        offset_subtitle.setToolTip(xy_offset_tip)
         export_layout.addWidget(offset_subtitle)
 
         # Tool Offset Description & Input Fields (placed inside GCode Export)
         offset_desc = QtWidgets.QLabel(
-            "切换到工具 1（碳纤维）时的移动量，\n"
-            "相对于工具 2（树脂）基准位置。"
+            "纤维头相对树脂头的物理偏置；切换到纤维头后，"
+            "机械臂按填入值同号移动来补偿头间差异。"
         )
         offset_desc.setObjectName("fieldLabel")
         offset_desc.setWordWrap(True)
+        offset_desc.setToolTip(xy_offset_tip)
         export_layout.addWidget(offset_desc)
 
         offset_grid = QtWidgets.QHBoxLayout()
@@ -1829,12 +1858,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
             lbl = QtWidgets.QLabel(f"{axis} (mm)")
             lbl.setObjectName("fieldLabel")
             lbl.setAlignment(QtCore.Qt.AlignCenter)
+            axis_tip = (
+                f"纤维头相对树脂头的 {axis} 向物理偏置。\n"
+                f"正值表示纤维头相对树脂头在机器人 {axis} 正方向偏移；负值表示在 {axis} 负方向偏移。\n"
+                f"导出/切换纤维头时，机械臂 {axis} 会按该值同号移动补偿。"
+            )
+            lbl.setToolTip(axis_tip)
             spin = _NoWheelDoubleSpinBox()
             spin.setRange(-100.0, 100.0)
             spin.setDecimals(2)
             spin.setSingleStep(0.01)
             spin.setValue(default_val)
             spin.setMinimumHeight(28)
+            spin.setToolTip(axis_tip)
             axis_lay.addWidget(lbl)
             axis_lay.addWidget(spin)
             offset_grid.addWidget(axis_w)

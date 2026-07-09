@@ -8,6 +8,7 @@ import numpy as np
 
 from path_processing_core.bspline_approximation import GlobalSplinePlanner
 from path_processing_core.polynomial_interpolator import (
+    sample_global_curve_iter,
     _eval_bspline_point,
     _make_open_uniform_knots,
     _split_ctrl_components,
@@ -286,11 +287,31 @@ def _validated_spline_or_polyline(
         )
 
     smoothed_positions = _prepare_external_smoothing_positions(source_positions, params)
-    if not _positions_changed(source_positions, smoothed_positions):
+    raw = (
+        "external_npz_smoothed_polyline"
+        if _positions_changed(source_positions, smoothed_positions)
+        else "external_npz_polyline"
+    )
+    candidate_positions = smoothed_positions
+    candidate_max_angle = _sampled_polyline_max_turn_angle_deg(
+        candidate_positions, moves, params
+    )
+    angle_threshold = max(0.0, float(params.corner_angle_deg))
+    if candidate_max_angle > angle_threshold:
+        repaired_positions = _rdp_fillet_positions(source_positions, params)
+        if _positions_changed(source_positions, repaired_positions):
+            repaired_max_angle = _sampled_polyline_max_turn_angle_deg(
+                repaired_positions, moves, params
+            )
+            if repaired_max_angle <= candidate_max_angle:
+                candidate_positions = repaired_positions
+                raw = "external_npz_curvature_smoothed_polyline"
+
+    if not _positions_changed(source_positions, candidate_positions):
         return _make_polyline_curve(moves, raw="external_npz_polyline")
 
     smoothed_moves, _ = _print_moves_from_positions(
-        source_positions=smoothed_positions,
+        source_positions=candidate_positions,
         e_start=moves[0].e_val - moves[0].delta_e,
         e_per_mm=_e_per_mm_from_moves(moves),
         feedrate=moves[0].feedrate,
@@ -298,7 +319,71 @@ def _validated_spline_or_polyline(
         layer=moves[0].layer,
         subtype=moves[0].subtype,
     )
-    return _make_polyline_curve(smoothed_moves, raw="external_npz_smoothed_polyline")
+    return _make_polyline_curve(smoothed_moves, raw=raw)
+
+
+def _sampled_polyline_max_turn_angle_deg(
+    positions: list[Position],
+    moves: list[MoveCommand],
+    params: ProcessParams,
+) -> float:
+    if len(positions) < 3 or not moves:
+        return 0.0
+    probe_moves, _ = _print_moves_from_positions(
+        source_positions=positions,
+        e_start=moves[0].e_val - moves[0].delta_e,
+        e_per_mm=_e_per_mm_from_moves(moves),
+        feedrate=moves[0].feedrate,
+        line=moves[0].line,
+        layer=moves[0].layer,
+        subtype=moves[0].subtype,
+    )
+    curve = _make_polyline_curve(probe_moves, raw="external_npz_probe_polyline")
+    sampled_points = [
+        sample.pos
+        for sample in sample_global_curve_iter(
+            curve,
+            dt=max(_EPS, float(params.dt)),
+            target_velocity=max(_EPS, float(moves[0].feedrate) / 60.0),
+        )
+    ]
+    return _polyline_max_turn_angle_deg(sampled_points, min_segment_mm=0.02)
+
+
+def _rdp_fillet_positions(
+    positions: list[Position],
+    params: ProcessParams,
+) -> list[Position]:
+    if len(positions) < 3:
+        return positions
+    epsilon = max(0.03, min(0.2, float(params.corner_retreat_max_mm) * 0.375))
+    simplified = _rdp_simplify_positions(positions, epsilon)
+    if len(simplified) < 3:
+        return positions
+    return _blend_sharp_corners(
+        simplified,
+        angle_threshold_deg=max(0.0, float(params.corner_angle_deg)),
+        retreat_ratio=max(0.0, min(1.0, float(params.corner_retreat_ratio))),
+        retreat_max_mm=max(0.0, float(params.corner_retreat_max_mm)),
+        blend_segments=max(2, int(params.corner_blend_segments)),
+    )
+
+
+def _rdp_simplify_positions(points: list[Position], epsilon: float) -> list[Position]:
+    if len(points) <= 2 or epsilon <= _EPS:
+        return points
+    max_distance = -1.0
+    split_index = -1
+    for index, point in enumerate(points[1:-1], start=1):
+        distance = _point_to_segment_distance(point, points[0], points[-1])
+        if distance > max_distance:
+            max_distance = distance
+            split_index = index
+    if max_distance > epsilon and split_index > 0:
+        left = _rdp_simplify_positions(points[: split_index + 1], epsilon)
+        right = _rdp_simplify_positions(points[split_index:], epsilon)
+        return left[:-1] + right
+    return [points[0], points[-1]]
 
 
 def _fit_validated_spline(
@@ -390,14 +475,20 @@ def _prepare_external_smoothing_positions(
 ) -> list[Position]:
     if len(positions) < 3:
         return positions
+    angle_threshold = max(0.0, float(params.corner_angle_deg))
+    merge_distance = max(0.0, float(params.source_merge_distance_mm))
+    if _polyline_max_turn_angle_deg(
+        positions, min_segment_mm=max(_EPS, min(merge_distance, 0.02))
+    ) < angle_threshold:
+        return positions
     merged = _merge_short_source_segments(
-        positions, min_distance=max(0.0, float(params.source_merge_distance_mm))
+        positions, min_distance=merge_distance
     )
     if len(merged) < 3:
         return merged
     return _blend_sharp_corners(
         merged,
-        angle_threshold_deg=max(0.0, float(params.corner_angle_deg)),
+        angle_threshold_deg=angle_threshold,
         retreat_ratio=max(0.0, min(1.0, float(params.corner_retreat_ratio))),
         retreat_max_mm=max(0.0, float(params.corner_retreat_max_mm)),
         blend_segments=max(2, int(params.corner_blend_segments)),

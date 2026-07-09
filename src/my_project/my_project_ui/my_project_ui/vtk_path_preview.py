@@ -767,12 +767,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             if len(points) < 2:
                 continue
             path_z = max(point[2] for point in points)
-            if path_type == PathType.FIBER_PRINT:
-                bottom_z = path_z
-                path_top_z = path_z + height
-            else:
-                path_top_z = path_z
-                bottom_z = path_z - height
+            path_top_z = path_z
+            bottom_z = path_z - height
             left_top = []
             right_top = []
             left_bottom = []

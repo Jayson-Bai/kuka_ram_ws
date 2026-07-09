@@ -415,11 +415,10 @@ def test_vtk_bead_preview_uses_lightweight_closed_solids():
     assert "preview_z_lift" not in bead_block
     assert "half_width = width / 2.0" in bead_block
     assert "path_z = max(point[2] for point in points)" in bead_block
-    assert "if path_type == PathType.FIBER_PRINT:" in bead_block
-    assert "bottom_z = path_z" in bead_block
-    assert "path_top_z = path_z + height" in bead_block
     assert "path_top_z = path_z" in bead_block
     assert "bottom_z = path_z - height" in bead_block
+    assert "path_top_z = path_z + height" not in bead_block
+    assert "\n                bottom_z = path_z\n" not in bead_block
     assert "self._display_point_for_path(path, point)" in bead_block
     assert 'solid_cells = self._vtk["vtkCellArray"]()' in bead_block
     assert "add_quad((left_top[0], right_top[0], right_bottom[0], left_bottom[0]))" in bead_block
