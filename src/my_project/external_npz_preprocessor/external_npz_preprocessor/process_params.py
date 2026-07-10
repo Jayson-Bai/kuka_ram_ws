@@ -65,6 +65,9 @@ class ProcessParams:
     default_c: float = 0.0
     start_x_mm: float = 0.0
     start_y_mm: float = 0.0
+    primeline_x_mm: float = 0.0
+    primeline_y_mm: float = -10.0
+    primeline_length_mm: float = 100.0
     dt: float = 0.004
     corner_angle_deg: float = 45.0
     corner_retreat_ratio: float = 0.65

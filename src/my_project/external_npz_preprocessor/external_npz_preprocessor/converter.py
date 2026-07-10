@@ -31,8 +31,6 @@ from .source_npz import MaterialPath, SourceJob
 _RESIN_GCODE_TOOL = 1
 _FIBER_GCODE_TOOL = 0
 _EPS = 1e-9
-_PRIMELINE_LENGTH_MM = 100.0
-_PRIMELINE_Y_OFFSET_MM = 10.0
 _PRIMELINE_ORDER = -1000000
 
 
@@ -204,11 +202,13 @@ def _make_resin_primeline_path(
 ) -> MaterialPath:
     z = float(params.resin.layer_height_mm)
     a, b, c = params.default_abc
-    y = float(source_min_y) - _PRIMELINE_Y_OFFSET_MM
+    x = float(source_min_x) + float(params.primeline_x_mm)
+    y = float(source_min_y) + float(params.primeline_y_mm)
+    length = max(0.0, float(params.primeline_length_mm))
     points = np.array(
         [
-            [float(source_min_x), y, z, a, b, c],
-            [float(source_min_x) + _PRIMELINE_LENGTH_MM, y, z, a, b, c],
+            [x, y, z, a, b, c],
+            [x + length, y, z, a, b, c],
         ],
         dtype=np.float32,
     )

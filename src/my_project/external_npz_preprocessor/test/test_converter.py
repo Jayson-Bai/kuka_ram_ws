@@ -183,16 +183,60 @@ def test_inserts_resin_primeline_as_first_regular_path():
     assert primeline.subtype == "RESIN_PRINT"
     assert primeline.raw == "external_npz_primeline"
     assert primeline.start_pos.x == pytest.approx(params.start_x_mm)
-    assert primeline.start_pos.y == pytest.approx(params.start_y_mm - 10.0)
+    assert primeline.start_pos.y == pytest.approx(params.start_y_mm + params.primeline_y_mm)
     assert primeline.start_pos.z == pytest.approx(params.resin.layer_height_mm)
-    assert primeline.control_points[-1].x == pytest.approx(params.start_x_mm + 100.0)
-    assert primeline.control_points[-1].y == pytest.approx(params.start_y_mm - 10.0)
-    assert primeline.delta_e == pytest.approx(100.0 * params.resin.e_per_mm())
+    assert primeline.control_points[-1].x == pytest.approx(params.start_x_mm + params.primeline_x_mm + params.primeline_length_mm)
+    assert primeline.control_points[-1].y == pytest.approx(params.start_y_mm + params.primeline_y_mm)
+    assert primeline.delta_e == pytest.approx(params.primeline_length_mm * params.resin.e_per_mm())
     assert [(cmd.delta_e, cmd.subtype) for cmd in waits[:3]] == [
         (-15.0, "RESIN_PRINT"),
         (18.0, "RESIN_PRINT"),
         (-15.0, "RESIN_PRINT"),
     ]
+
+
+def test_resin_primeline_uses_configured_relative_position_and_length():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [[5.0, 20.0, 0.5, 0.0, 0.0, 0.0],
+                             [15.0, 20.0, 0.5, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[],
+            )
+        ],
+    )
+    params = ProcessParams(
+        start_x_mm=50.0,
+        start_y_mm=60.0,
+        primeline_x_mm=4.0,
+        primeline_y_mm=-15.0,
+        primeline_length_mm=80.0,
+    )
+
+    curves = [
+        cmd
+        for cmd in source_job_to_parsed_commands(job, params)
+        if isinstance(cmd, GlobalCurveCommand)
+    ]
+
+    primeline = curves[0]
+    assert primeline.raw == "external_npz_primeline"
+    assert primeline.start_pos.x == pytest.approx(54.0)
+    assert primeline.start_pos.y == pytest.approx(45.0)
+    assert primeline.control_points[-1].x == pytest.approx(134.0)
+    assert primeline.control_points[-1].y == pytest.approx(45.0)
+    assert primeline.delta_e == pytest.approx(80.0 * params.resin.e_per_mm())
 
 
 def test_adds_prime_before_paths_and_retract_after_resin_paths():

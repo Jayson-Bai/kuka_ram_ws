@@ -97,3 +97,10 @@ def test_fiber_geometry_fields_are_not_part_of_active_process_model():
     assert not hasattr(params.fiber, "diameter_mm")
     assert not hasattr(params.fiber, "line_width_mm")
     assert params.fiber.e_per_mm() == params.fiber.extrusion_scale
+
+
+def test_primeline_process_params_defaults_are_stable():
+    params = ProcessParams()
+    assert params.primeline_x_mm == 0.0
+    assert params.primeline_y_mm == -10.0
+    assert params.primeline_length_mm == 100.0

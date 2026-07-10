@@ -43,6 +43,9 @@ def test_save_and_load_print_params_round_trip(tmp_path):
         default_c=3.0,
         start_x_mm=50.0,
         start_y_mm=60.0,
+        primeline_x_mm=3.0,
+        primeline_y_mm=-12.0,
+        primeline_length_mm=80.0,
     )
 
     save_print_params(params, path)

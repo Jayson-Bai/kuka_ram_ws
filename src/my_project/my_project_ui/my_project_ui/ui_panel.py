@@ -2005,6 +2005,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "default_c": 0.0,
             "start_x_mm": 0.0,
             "start_y_mm": 0.0,
+            "primeline_x_mm": 0.0,
+            "primeline_y_mm": -10.0,
+            "primeline_length_mm": 100.0,
             "corner_angle_deg": 45.0,
             "corner_retreat_ratio": 0.65,
             "spline_max_error_mm": 0.1,
@@ -2048,6 +2051,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "default_c": saved_params.default_c,
                 "start_x_mm": saved_params.start_x_mm,
                 "start_y_mm": saved_params.start_y_mm,
+                "primeline_x_mm": saved_params.primeline_x_mm,
+                "primeline_y_mm": saved_params.primeline_y_mm,
+                "primeline_length_mm": saved_params.primeline_length_mm,
                 "corner_angle_deg": saved_params.corner_angle_deg,
                 "corner_retreat_ratio": saved_params.corner_retreat_ratio,
                 "spline_max_error_mm": saved_params.spline_max_error_mm,
@@ -2264,6 +2270,40 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ],
         )
 
+        primeline_group, primeline_grid = _external_param_group("起始擦料线")
+        _add_external_rows(
+            primeline_grid,
+            [
+                (
+                    "primeline_x_mm",
+                    "相对零件 X mm",
+                    _external_spin(
+                        external_defaults["primeline_x_mm"],
+                        minimum=-100000.0,
+                        maximum=100000.0,
+                    ),
+                    "primeline_y_mm",
+                    "相对零件 Y mm",
+                    _external_spin(
+                        external_defaults["primeline_y_mm"],
+                        minimum=-100000.0,
+                        maximum=100000.0,
+                    ),
+                ),
+                (
+                    "primeline_length_mm",
+                    "长度 mm",
+                    _external_spin(
+                        external_defaults["primeline_length_mm"],
+                        maximum=100000.0,
+                    ),
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
+            ],
+        )
+
         smoothing_group, smoothing_grid = _external_param_group("路径平滑")
         _add_external_rows(
             smoothing_grid,
@@ -2333,6 +2373,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         path_layout = QtWidgets.QHBoxLayout()
         path_layout.setSpacing(8)
         path_layout.addWidget(motion_group, 1)
+        path_layout.addWidget(primeline_group, 1)
         path_layout.addWidget(smoothing_group, 1)
         external_group_layout.addLayout(path_layout)
         external_group_layout.addWidget(cut_group)
@@ -4882,6 +4923,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             default_c=values["default_c"].value(),
             start_x_mm=values["start_x_mm"].value(),
             start_y_mm=values["start_y_mm"].value(),
+            primeline_x_mm=values["primeline_x_mm"].value(),
+            primeline_y_mm=values["primeline_y_mm"].value(),
+            primeline_length_mm=values["primeline_length_mm"].value(),
             corner_angle_deg=values["corner_angle_deg"].value(),
             corner_retreat_ratio=values["corner_retreat_ratio"].value(),
             spline_max_error_mm=values["spline_max_error_mm"].value(),

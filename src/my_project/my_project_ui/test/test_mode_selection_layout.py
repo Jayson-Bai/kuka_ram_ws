@@ -147,6 +147,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '_external_param_group("纤维材料")' in export_section
     assert '_external_param_group("运动与坐标")' in export_section
     assert '_external_param_group("路径平滑")' in export_section
+    assert '_external_param_group("起始擦料线")' in export_section
     assert "self._external_npz_inputs = {}" in export_section
     assert '"resin_layer_height_mm"' in export_section
     assert '"层高 mm"' in export_section
@@ -160,6 +161,12 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"左下角 X mm"' in export_section
     assert '"start_y_mm"' in export_section
     assert '"左下角 Y mm"' in export_section
+    assert '"primeline_x_mm"' in export_section
+    assert '"相对零件 X mm"' in export_section
+    assert '"primeline_y_mm"' in export_section
+    assert '"相对零件 Y mm"' in export_section
+    assert '"primeline_length_mm"' in export_section
+    assert '"长度 mm"' in export_section
     assert '"corner_angle_deg"' in export_section
     assert '"角点阈值 deg"' in export_section
     assert '"spline_max_error_mm"' in export_section
@@ -193,7 +200,11 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert "external_process_params =" in export_method
     assert "self._external_npz_process_params(params)" in export_method
     assert 'start_accel_s=values["fiber_start_accel_s"].value()' in src
+    assert 'primeline_x_mm=values["primeline_x_mm"].value()' in src
+    assert 'primeline_y_mm=values["primeline_y_mm"].value()' in src
+    assert 'primeline_length_mm=values["primeline_length_mm"].value()' in src
     assert '"fiber_start_accel_s": saved_params.fiber.start_accel_s' in src
+    assert '"primeline_x_mm": saved_params.primeline_x_mm' in src
     assert 'external_cut_lift_mm = params["cut_lift_mm"]' in src
     assert 'external_cut_wait_s = params["cut_wait_s"]' in src
     assert 'self._external_npz_inputs["external_cut_lift_mm"].value()' in src
