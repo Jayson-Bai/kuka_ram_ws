@@ -23,6 +23,14 @@ from path_processing_core.types import (
 )
 
 
+def _source_curves(commands):
+    return [
+        cmd
+        for cmd in commands
+        if isinstance(cmd, GlobalCurveCommand) and cmd.raw != "external_npz_primeline"
+    ]
+
+
 def _params():
     return ProcessParams(
         resin=ResinProcessParams(
@@ -71,9 +79,12 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
 
     tool_changes = [cmd for cmd in commands if isinstance(cmd, ToolChangeCommand)]
     resets = [cmd for cmd in commands if isinstance(cmd, ResetECommand)]
-    curves = [cmd for cmd in commands if isinstance(cmd, GlobalCurveCommand)]
+    curves = _source_curves(commands)
     moves = [cmd for cmd in commands if isinstance(cmd, MoveCommand)]
-    travel_moves = [cmd for cmd in moves if cmd.type == "TRAVEL"]
+    travel_moves = [
+        cmd for cmd in moves
+        if cmd.type == "TRAVEL" and cmd.raw == "external_npz_travel"
+    ]
     assert [cmd.tool for cmd in tool_changes] == [1, 0]
     assert len(resets) == 2
     assert [curve.subtype for curve in curves] == ["RESIN_PRINT", "FIBER_PRINT"]
@@ -93,8 +104,8 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert curves[0].control_points[-1].z == pytest.approx(2.6)
     assert curves[1].start_pos.z == pytest.approx(3.1)
     assert curves[1].control_points[-1].z == pytest.approx(3.3)
-    assert travel_moves[0].start_pos.z == pytest.approx(2.6)
-    assert travel_moves[0].pos.z == pytest.approx(3.1)
+    assert travel_moves[-1].start_pos.z == pytest.approx(2.6)
+    assert travel_moves[-1].pos.z == pytest.approx(3.1)
     assert curves[0].layer == 0
     assert curves[1].layer == 0
 
@@ -132,16 +143,56 @@ def test_marks_only_fiber_curves_with_custom_start_acceleration_time():
     )
     params = ProcessParams(fiber=FiberProcessParams(start_accel_s=4.5))
 
-    curves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(job, params)
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    curves = _source_curves(source_job_to_parsed_commands(job, params))
 
     resin_curve = next(curve for curve in curves if curve.subtype == "RESIN_PRINT")
     fiber_curve = next(curve for curve in curves if curve.subtype == "FIBER_PRINT")
     assert resin_curve.time_acc_s is None
     assert fiber_curve.time_acc_s == pytest.approx(4.5)
+
+
+def test_inserts_resin_primeline_as_first_regular_path():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [[5.0, 20.0, 0.5, 0.0, 0.0, 0.0],
+                             [15.0, 20.0, 0.5, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[],
+            )
+        ],
+    )
+    params = _params()
+
+    commands = source_job_to_parsed_commands(job, params)
+
+    curves = [cmd for cmd in commands if isinstance(cmd, GlobalCurveCommand)]
+    waits = [cmd for cmd in commands if isinstance(cmd, ExtrudeWait)]
+    assert len(curves) == 2
+    primeline = curves[0]
+    assert primeline.subtype == "RESIN_PRINT"
+    assert primeline.raw == "external_npz_primeline"
+    assert primeline.start_pos.x == pytest.approx(params.start_x_mm)
+    assert primeline.start_pos.y == pytest.approx(params.start_y_mm - 10.0)
+    assert primeline.start_pos.z == pytest.approx(params.resin.layer_height_mm)
+    assert primeline.control_points[-1].x == pytest.approx(params.start_x_mm + 100.0)
+    assert primeline.control_points[-1].y == pytest.approx(params.start_y_mm - 10.0)
+    assert primeline.delta_e == pytest.approx(100.0 * params.resin.e_per_mm())
+    assert [(cmd.delta_e, cmd.subtype) for cmd in waits[:3]] == [
+        (-15.0, "RESIN_PRINT"),
+        (18.0, "RESIN_PRINT"),
+        (-15.0, "RESIN_PRINT"),
+    ]
 
 
 def test_adds_prime_before_paths_and_retract_after_resin_paths():
@@ -182,9 +233,13 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
         (-15.0, 1800.0, "RESIN_PRINT"),
         (18.0, 900.0, "RESIN_PRINT"),
         (-15.0, 1800.0, "RESIN_PRINT"),
+        (18.0, 900.0, "RESIN_PRINT"),
+        (-15.0, 1800.0, "RESIN_PRINT"),
         (12.0, 300.0, "FIBER_PRINT"),
     ]
     assert [round(cmd.wait_sec, 6) for cmd in waits] == [
+        0.5,
+        1.2,
         0.5,
         1.2,
         0.5,
@@ -239,7 +294,12 @@ def test_inserts_cut_after_each_fiber_path_without_trailing_retract_prime():
     compact = [item for item in compact if item is not None]
 
     assert compact == [
-        ("wait", -10.0),
+        ("travel", None),
+        ("wait", -15.0),
+        ("wait", 18.0),
+        ("print", None),
+        ("wait", -15.0),
+        ("travel", None),
         ("wait", 12.0),
         ("print", None),
         ("cut", {"P": 1.0}),
@@ -329,11 +389,7 @@ def test_process_layer_heights_are_extrusion_references_only_not_z_generation():
         fiber=FiberProcessParams(layer_height_mm=99.0),
     )
 
-    moves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(job, params)
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    moves = _source_curves(source_job_to_parsed_commands(job, params))
 
     assert [(cmd.subtype, pytest.approx(cmd.start_pos.z), pytest.approx(cmd.control_points[-1].z)) for cmd in moves] == [
         ("RESIN_PRINT", pytest.approx(8.0), pytest.approx(8.2)),
@@ -378,19 +434,16 @@ def test_start_xy_offsets_source_paths_and_inserts_initial_travel_without_z_over
         if isinstance(cmd, MoveCommand)
     ]
     travel_moves = [cmd for cmd in moves if cmd.type == "TRAVEL"]
-    print_curves = [
-        cmd for cmd in source_job_to_parsed_commands(job, params)
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    print_curves = _source_curves(source_job_to_parsed_commands(job, params))
 
-    assert len(travel_moves) == 1
+    assert len(travel_moves) == 2
     assert travel_moves[0].raw == "external_npz_start_xy_travel"
     assert travel_moves[0].start_pos.x == pytest.approx(0.0)
     assert travel_moves[0].start_pos.y == pytest.approx(0.0)
-    assert travel_moves[0].start_pos.z == pytest.approx(2.5)
+    assert travel_moves[0].start_pos.z == pytest.approx(0.5)
     assert travel_moves[0].pos.x == pytest.approx(50.0)
-    assert travel_moves[0].pos.y == pytest.approx(60.0)
-    assert travel_moves[0].pos.z == pytest.approx(2.5)
+    assert travel_moves[0].pos.y == pytest.approx(50.0)
+    assert travel_moves[0].pos.z == pytest.approx(0.5)
     assert (
         travel_moves[0].start_pos.a,
         travel_moves[0].start_pos.b,
@@ -439,13 +492,11 @@ def test_external_npz_start_xy_places_part_lower_left_at_requested_position():
         ],
     )
 
-    curves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(
+    curves = _source_curves(
+        source_job_to_parsed_commands(
             job, ProcessParams(start_x_mm=50.0, start_y_mm=60.0)
         )
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    )
     points = []
     for curve in curves:
         points.append(curve.start_pos)
@@ -504,11 +555,9 @@ def test_external_npz_print_path_uses_polyline_fast_path_without_extra_bspline_f
         ],
     )
 
-    curves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(job, ProcessParams(spline_max_error_mm=0.05))
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    curves = _source_curves(
+        source_job_to_parsed_commands(job, ProcessParams(spline_max_error_mm=0.05))
+    )
 
     assert len(curves) == 1
     assert curves[0].cmd == "POLYLINE"
@@ -570,11 +619,9 @@ def test_external_npz_print_path_smooths_sharp_corners_before_polyline_fast_path
         ],
     )
 
-    curves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(job, ProcessParams(spline_max_error_mm=0.05))
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    curves = _source_curves(
+        source_job_to_parsed_commands(job, ProcessParams(spline_max_error_mm=0.05))
+    )
 
     assert len(curves) == 1
     assert curves[0].cmd == "POLYLINE"
@@ -615,11 +662,7 @@ def test_external_npz_resin_hairpin_smoothing_enforces_turn_angle_limit():
         source_merge_distance_mm=0.04,
     )
 
-    curves = [
-        cmd
-        for cmd in source_job_to_parsed_commands(job, params)
-        if isinstance(cmd, GlobalCurveCommand)
-    ]
+    curves = _source_curves(source_job_to_parsed_commands(job, params))
     sampled_points = [
         sample.pos
         for sample in sample_global_curve_iter(
@@ -720,16 +763,21 @@ def test_external_npz_polyline_fast_path_does_not_cross_separate_source_paths(mo
     )
 
     commands = source_job_to_parsed_commands(job, ProcessParams())
-    curves = [cmd for cmd in commands if isinstance(cmd, GlobalCurveCommand)]
-    travels = [cmd for cmd in commands if isinstance(cmd, MoveCommand) and cmd.type == "TRAVEL"]
+    curves = _source_curves(commands)
+    travels = [
+        cmd for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.type == "TRAVEL"
+        and cmd.raw == "external_npz_travel"
+    ]
 
     assert len(curves) == 2
     assert [curve.cmd for curve in curves] == ["POLYLINE", "POLYLINE"]
     assert fit_starts == []
     assert curves[1].start_pos.x == pytest.approx(10.0)
     assert curves[1].start_pos.y == pytest.approx(0.0)
-    assert len(travels) == 1
-    assert travels[0].start_pos.x == pytest.approx(1.0)
-    assert travels[0].start_pos.y == pytest.approx(1.0)
-    assert travels[0].pos.x == pytest.approx(10.0)
-    assert travels[0].pos.y == pytest.approx(0.0)
+    assert len(travels) == 2
+    assert travels[-1].start_pos.x == pytest.approx(1.0)
+    assert travels[-1].start_pos.y == pytest.approx(1.0)
+    assert travels[-1].pos.x == pytest.approx(10.0)
+    assert travels[-1].pos.y == pytest.approx(0.0)

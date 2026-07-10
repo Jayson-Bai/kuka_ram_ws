@@ -4997,11 +4997,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 elif source_ext in (".gcode", ".gc", ".g"):
                     self.export_progress.emit("读取 GCode...")
                     from gcode_planner.gcode_parser import load_gcode_lines, parse_gcode_lines
+                    from gcode_planner.primeline import insert_resin_primeline
                     from path_processing_core.npz_exporter import export_npz
 
                     lines = load_gcode_lines(source_path)
                     self.export_progress.emit("解析 GCode...")
-                    parsed = parse_gcode_lines(lines)
+                    parsed = insert_resin_primeline(parse_gcode_lines(lines))
                     self.export_progress.emit(f"导出 NPZ（{len(parsed)} 条指令）...")
                     stats = export_npz(
                         parsed,

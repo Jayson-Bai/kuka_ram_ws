@@ -31,6 +31,9 @@ from .source_npz import MaterialPath, SourceJob
 _RESIN_GCODE_TOOL = 1
 _FIBER_GCODE_TOOL = 0
 _EPS = 1e-9
+_PRIMELINE_LENGTH_MM = 100.0
+_PRIMELINE_Y_OFFSET_MM = 10.0
+_PRIMELINE_ORDER = -1000000
 
 
 def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> ParsedCommandList:
@@ -46,10 +49,22 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     initial_travel_added = False
     initial_print_prepare_done = False
 
+    primeline_inserted = False
+
     for layer in job.layers:
         ordered_paths: list[MaterialPath] = []
         ordered_paths.extend(layer.resin_paths)
         ordered_paths.extend(layer.fiber_paths)
+        if ordered_paths and not primeline_inserted:
+            ordered_paths.insert(
+                0,
+                _make_resin_primeline_path(
+                    source_min_x=source_min_x,
+                    source_min_y=source_min_y,
+                    params=params,
+                ),
+            )
+            primeline_inserted = True
         for material_path in ordered_paths:
             tool = _tool_for_material(material_path.material)
             subtype = _subtype_for_material(material_path.material)
@@ -145,6 +160,8 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 subtype=subtype,
             )
             curve = _validated_spline_or_polyline(print_moves, source_positions, params)
+            if _is_primeline_path(material_path):
+                curve.raw = "external_npz_primeline"
             curve.time_acc_s = _time_acc_s_for_material(
                 material_path.material, params
             )
@@ -177,6 +194,29 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             current_pose = previous_pose
 
     return commands
+
+
+def _make_resin_primeline_path(
+    *,
+    source_min_x: float,
+    source_min_y: float,
+    params: ProcessParams,
+) -> MaterialPath:
+    z = float(params.resin.layer_height_mm)
+    a, b, c = params.default_abc
+    y = float(source_min_y) - _PRIMELINE_Y_OFFSET_MM
+    points = np.array(
+        [
+            [float(source_min_x), y, z, a, b, c],
+            [float(source_min_x) + _PRIMELINE_LENGTH_MM, y, z, a, b, c],
+        ],
+        dtype=np.float32,
+    )
+    return MaterialPath(material="R", order=_PRIMELINE_ORDER, points=points)
+
+
+def _is_primeline_path(material_path: MaterialPath) -> bool:
+    return material_path.material == "R" and int(material_path.order) == _PRIMELINE_ORDER
 
 
 def _process_params_for_material(material: str, params: ProcessParams):

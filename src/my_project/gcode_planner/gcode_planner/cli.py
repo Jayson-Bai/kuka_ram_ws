@@ -14,6 +14,7 @@ from .gcode_parser import (
     default_data_root,
 )
 from path_processing_core.npz_exporter import export_npz
+from .primeline import insert_resin_primeline
 
 
 def _default_output_path(gcode_path: str, output_dir: str) -> str:
@@ -90,7 +91,7 @@ def main(argv=None):
     t0 = time.perf_counter()
     lines = load_gcode_lines(gcode_path)
     t1 = time.perf_counter()
-    parsed = parse_gcode_lines(lines)
+    parsed = insert_resin_primeline(parse_gcode_lines(lines))
     t2 = time.perf_counter()
     stats = export_npz(
         parsed,
