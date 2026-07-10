@@ -8,6 +8,7 @@ import math
 from path_processing_core.types import (
     CurveCommand,
     GlobalCurveCommand,
+    ExtrudeWait,
     MoveCommand,
     ParsedCommandList,
     Position,
@@ -72,12 +73,15 @@ def insert_resin_primeline(
         subtype="RESIN_PRINT",
         raw="gcode_primeline",
     )
+    prime_waits = _preprint_prime_waits(commands, first_index)
+    retract_waits = _postprint_retract_waits(commands, first_index)
+    travel_e = e_start + added_e + sum(wait.delta_e for wait in retract_waits)
     return_travel = MoveCommand(
         type="TRAVEL",
         cmd="G0",
         start_pos=line_end,
         pos=copy.deepcopy(first_print.start_pos),
-        e_val=e_start + added_e,
+        e_val=travel_e,
         delta_e=0.0,
         feedrate=float(first_print.feedrate),
         line=int(first_print.line),
@@ -87,8 +91,11 @@ def insert_resin_primeline(
     )
 
     out: ParsedCommandList = list(commands[:first_index])
-    out.extend([primeline, return_travel])
-    e_offset = added_e
+    out.append(primeline)
+    out.extend(copy.deepcopy(wait) for wait in retract_waits)
+    out.append(return_travel)
+    out.extend(copy.deepcopy(wait) for wait in prime_waits)
+    e_offset = added_e + sum(wait.delta_e for wait in retract_waits + prime_waits)
     for cmd in commands[first_index:]:
         cloned = copy.deepcopy(cmd)
         if isinstance(cloned, ResetECommand):
@@ -97,6 +104,34 @@ def insert_resin_primeline(
             cloned.e_val = float(cloned.e_val) + e_offset
         out.append(cloned)
     return out
+
+
+def _preprint_prime_waits(commands: ParsedCommandList, first_index: int) -> list[ExtrudeWait]:
+    waits: list[ExtrudeWait] = []
+    index = first_index - 1
+    while index >= 0 and isinstance(commands[index], ExtrudeWait):
+        wait = commands[index]
+        if wait.delta_e > _EPS:
+            waits.append(wait)
+        index -= 1
+    waits.reverse()
+    return waits
+
+
+def _postprint_retract_waits(commands: ParsedCommandList, first_index: int) -> list[ExtrudeWait]:
+    waits: list[ExtrudeWait] = []
+    for cmd in commands[first_index + 1:]:
+        if isinstance(cmd, (MoveCommand, CurveCommand, GlobalCurveCommand)) and cmd.type == "PRINT":
+            break
+        if isinstance(cmd, ExtrudeWait):
+            if cmd.delta_e < -_EPS:
+                waits.append(cmd)
+                continue
+            if waits:
+                break
+        elif waits:
+            break
+    return waits
 
 
 def _first_print_command(commands: ParsedCommandList):

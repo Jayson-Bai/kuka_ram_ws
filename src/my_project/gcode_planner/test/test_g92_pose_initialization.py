@@ -32,6 +32,7 @@ def test_insert_resin_primeline_before_first_gcode_print_path():
         "G1 X10 Y20 Z0.5 F600",
         "G1 E18 F900",
         "G1 X30 Y20 E20 F600",
+        "G1 E5 F1800",
     ])
 
     out = insert_resin_primeline(parsed, length_mm=100.0, y_offset_mm=10.0)
@@ -48,7 +49,9 @@ def test_insert_resin_primeline_before_first_gcode_print_path():
     assert primeline.pos.y == 10.0
     assert primeline.delta_e == 10.0
     assert primeline.e_val == 28.0
-    assert waits[0].delta_e == 18.0
+    assert [wait.delta_e for wait in waits] == [18.0, -15.0, 18.0, -15.0]
+    travels = [cmd for cmd in out if isinstance(cmd, MoveCommand) and cmd.type == "TRAVEL"]
+    assert any(cmd.raw == "gcode_primeline_return_travel" for cmd in travels)
     assert prints[1].start_pos.x == 10.0
     assert prints[1].start_pos.y == 20.0
-    assert prints[1].e_val == 30.0
+    assert prints[1].e_val == 33.0
