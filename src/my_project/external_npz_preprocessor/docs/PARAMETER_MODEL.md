@@ -74,7 +74,7 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 
 ## Prime and Retract
 
-Prime/retract defaults come from the existing test-mode UI values. Resin paths get `retract -> prime` before and after printing. Fiber paths get `retract -> prime` before printing only; after a fiber path the converter emits `CUT` and lets the exporter perform cut lift with matched E increase, wait completion, and an equal cut safety retract before any travel to the next fiber path. The next fiber path then runs its own normal `retract -> prime`; this preparation is independent from the cut safety retract. The first path is not exempt from the pre-path preparation.
+Prime/retract defaults come from the existing test-mode UI values. Resin and fiber paths get `prime` immediately before printing. Resin paths get `retract` immediately after printing. Fiber paths emit `CUT` after printing and let the exporter perform cut lift with matched E increase, wait completion, and an equal cut safety retract before any travel to the next fiber path. The next path then travels to its start pose first and runs its own `prime`; travel segments do not carry prime/retract waits. The first path is not exempt from the pre-path prime.
 
 The converter represents these as `ExtrudeWait` commands so `npz_exporter` remains the only system NPZ writer. `G92 E0` / `ResetECommand` is inserted after tool changes, matching the existing GCode tool-change placement, while E continues accumulating across consecutive paths using the same tool.
 

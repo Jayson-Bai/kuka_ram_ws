@@ -122,7 +122,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             ]
             previous_pose = source_positions[-1]
 
-            for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
+            for wait in _path_prime_waits(material_path.material, params, line, layer.index, subtype):
                 commands.append(wait)
                 current_e += wait.delta_e
                 line += 1
@@ -161,7 +161,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 line += 1
 
             if material_path.material != "F":
-                for wait in _path_retract_prime_waits(material_path.material, params, line, layer.index, subtype):
+                for wait in _path_retract_waits(material_path.material, params, line, layer.index, subtype):
                     commands.append(wait)
                     current_e += wait.delta_e
                     line += 1
@@ -171,33 +171,22 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     return commands
 
 
-def _path_retract_prime_waits(
+def _process_params_for_material(material: str, params: ProcessParams):
+    if material == "R":
+        return params.resin
+    if material == "F":
+        return params.fiber
+    raise ValueError(f"unknown material: {material}")
+
+
+def _path_prime_waits(
     material: str,
     params: ProcessParams,
     line: int,
     layer: int,
     subtype: str,
 ) -> list[ExtrudeWait]:
-    if material == "R":
-        process = params.resin
-    elif material == "F":
-        process = params.fiber
-    else:
-        raise ValueError(f"unknown material: {material}")
-
-    waits: list[ExtrudeWait] = []
-    retract = _make_extrude_wait(
-        delta_e=-float(process.retract_length_mm),
-        speed_mm_s=float(process.retract_speed_mm_s),
-        line=line,
-        layer=layer,
-        subtype=subtype,
-        raw="external_npz_retract",
-    )
-    if retract is not None:
-        waits.append(retract)
-        line += 1
-
+    process = _process_params_for_material(material, params)
     prime = _make_extrude_wait(
         delta_e=float(process.prime_length_mm),
         speed_mm_s=float(process.prime_speed_mm_s),
@@ -206,9 +195,26 @@ def _path_retract_prime_waits(
         subtype=subtype,
         raw="external_npz_prime",
     )
-    if prime is not None:
-        waits.append(prime)
-    return waits
+    return [prime] if prime is not None else []
+
+
+def _path_retract_waits(
+    material: str,
+    params: ProcessParams,
+    line: int,
+    layer: int,
+    subtype: str,
+) -> list[ExtrudeWait]:
+    process = _process_params_for_material(material, params)
+    retract = _make_extrude_wait(
+        delta_e=-float(process.retract_length_mm),
+        speed_mm_s=float(process.retract_speed_mm_s),
+        line=line,
+        layer=layer,
+        subtype=subtype,
+        raw="external_npz_retract",
+    )
+    return [retract] if retract is not None else []
 
 
 def _make_extrude_wait(

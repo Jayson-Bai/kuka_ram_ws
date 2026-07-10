@@ -231,11 +231,8 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.isclose(data["z"][travel_idx[0]], cut_z + 20.0)
     assert np.isclose(data["z"][travel_idx[-1]], cut_z)
 
-    next_retract_idx = travel_idx[-1] + 1
-    next_prime_idx = next_retract_idx + 1
-    assert np.isclose(data["e"][next_retract_idx], cut_e - 4.0)
-    assert np.isclose(data["e"][next_prime_idx], cut_e + 2.0)
-    assert np.isclose(data["z"][next_retract_idx], cut_z)
+    next_prime_idx = travel_idx[-1] + 1
+    assert np.isclose(data["e"][next_prime_idx], cut_e + 6.0)
     assert np.isclose(data["z"][next_prime_idx], cut_z)
 
 

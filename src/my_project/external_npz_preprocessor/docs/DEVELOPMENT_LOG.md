@@ -44,8 +44,14 @@
 
 - Source NPZ conversion now starts with both-head fan and heat events.
 - ResetE is inserted immediately after tool changes, matching the established GCode placement.
-- Every resin/fiber print path now receives `retract -> prime` before and after the path, including the first path.
+- This update temporarily used paired retract/prime waits around print paths; the current rule is documented in the 2026-07-10 update below.
 - Shared head-offset behavior was left unchanged.
+
+## 2026-07-10 Prime/Retract Ordering Update
+
+- External NPZ paths now insert only prime immediately before each resin/fiber print path.
+- Resin paths insert only retract after printing; fiber paths emit `CUT`, and the exporter performs the cut lift feed plus equal safety retract.
+- Travel segments do not carry prime or retract waits; preparation waits run after travel reaches the next print start pose.
 
 Verification:
 
