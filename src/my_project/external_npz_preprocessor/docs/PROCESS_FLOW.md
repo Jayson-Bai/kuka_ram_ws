@@ -130,15 +130,20 @@ enable_extrude_wait=True
 
 ### 路径准备规则
 
-等待段不并入 travel，也不在空走前后成组插入。每条树脂/纤维路径打印前只执行预挤出；树脂路径打印完成后只执行回抽。纤维路径打印完成后触发 `CUT`，exporter 先执行剪切抬升并按抬升空间距离同步增加 E，再执行等量剪切安全回抽，随后 travel 到下一条路径起点，最后再执行下一条路径自己的预挤出。剪切抬升挤出和剪切安全回抽独立于下一条路径前的预挤出。第一条路径也执行同样的前置预挤出：
+等待段不并入 travel，也不在空走前后成组插入。整件第一条打印路径前先执行一次初始回抽，再执行预挤出；后续树脂/纤维路径打印前只执行预挤出。树脂路径打印完成后只执行回抽。纤维路径打印完成后触发 `CUT`，exporter 先执行剪切抬升并按抬升空间距离同步增加 E，再执行等量剪切安全回抽，随后 travel 到下一条路径起点，最后再执行下一条路径自己的预挤出。剪切抬升挤出和剪切安全回抽独立于下一条路径前的预挤出。
 
 ```text
+# Whole part first print path only:
+ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
 ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
 PRINT path
-# Resin only:
+# Resin only after each path:
 ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
-# Fiber only:
+# Fiber only after each path:
 CUT
+# Later paths after travel:
+ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
+PRINT path
 ```
 
 当前默认值：

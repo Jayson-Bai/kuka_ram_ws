@@ -44,6 +44,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     source_min_x, source_min_y = _job_source_xy_min(job)
 
     initial_travel_added = False
+    initial_print_prepare_done = False
 
     for layer in job.layers:
         ordered_paths: list[MaterialPath] = []
@@ -121,6 +122,13 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 for row in material_path.points
             ]
             previous_pose = source_positions[-1]
+
+            if not initial_print_prepare_done:
+                for wait in _path_retract_waits(material_path.material, params, line, layer.index, subtype):
+                    commands.append(wait)
+                    current_e += wait.delta_e
+                    line += 1
+                initial_print_prepare_done = True
 
             for wait in _path_prime_waits(material_path.material, params, line, layer.index, subtype):
                 commands.append(wait)

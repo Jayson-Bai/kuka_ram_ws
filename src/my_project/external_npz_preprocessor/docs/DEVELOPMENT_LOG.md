@@ -49,8 +49,9 @@
 
 ## 2026-07-10 Prime/Retract Ordering Update
 
-- External NPZ paths now insert only prime immediately before each resin/fiber print path.
-- Resin paths insert only retract after printing; fiber paths emit `CUT`, and the exporter performs the cut lift feed plus equal safety retract.
+- External NPZ conversion inserts one initial retract before the whole part's first print path, then primes before printing.
+- Later resin/fiber paths insert only prime immediately before printing; resin paths insert only retract after printing.
+- Fiber paths emit `CUT`, and the exporter performs the cut lift feed plus equal safety retract.
 - Travel segments do not carry prime or retract waits; preparation waits run after travel reaches the next print start pose.
 
 Verification:

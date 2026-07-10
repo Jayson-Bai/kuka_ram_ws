@@ -179,11 +179,13 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
     waits = [cmd for cmd in source_job_to_parsed_commands(job, ProcessParams()) if isinstance(cmd, ExtrudeWait)]
 
     assert [(cmd.delta_e, cmd.feedrate, cmd.subtype) for cmd in waits] == [
+        (-15.0, 1800.0, "RESIN_PRINT"),
         (18.0, 900.0, "RESIN_PRINT"),
         (-15.0, 1800.0, "RESIN_PRINT"),
         (12.0, 300.0, "FIBER_PRINT"),
     ]
     assert [round(cmd.wait_sec, 6) for cmd in waits] == [
+        0.5,
         1.2,
         0.5,
         2.4,
@@ -237,6 +239,7 @@ def test_inserts_cut_after_each_fiber_path_without_trailing_retract_prime():
     compact = [item for item in compact if item is not None]
 
     assert compact == [
+        ("wait", -10.0),
         ("wait", 12.0),
         ("print", None),
         ("cut", {"P": 1.0}),
