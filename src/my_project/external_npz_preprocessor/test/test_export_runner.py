@@ -294,3 +294,52 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
 
     cut_row_idx = events.index("cut")
     assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1"
+
+
+def test_convert_skips_fiber_startup_events_when_source_has_no_fiber_paths(tmp_path):
+    import json
+    import numpy as np
+
+    from external_npz_preprocessor.export_runner import convert_external_npz
+    from external_npz_preprocessor.process_params import ProcessParams
+
+    source = tmp_path / "resin_only_source.npz"
+    resin_paths = np.array(
+        [[[0.0, 0.0, 0.5], [10.0, 0.0, 0.5]]],
+        dtype=np.float32,
+    )
+    np.savez(
+        source,
+        meta=np.array(json.dumps({"format": "external_layer_paths_v1"})),
+        layer_0000_R=resin_paths,
+    )
+    calibration_path = tmp_path / "head_offsets.json"
+    calibration_path.write_text(
+        json.dumps(
+            {
+                "resin": {"z_print_compensation_mm": 0.0},
+                "fiber": {
+                    "x_print_compensation_mm": 0.0,
+                    "y_print_compensation_mm": 0.0,
+                    "z_offset_mm": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    out = tmp_path / "out.npz"
+
+    convert_external_npz(source, out, ProcessParams(), calibration_path=calibration_path)
+
+    data = np.load(out)
+    event_vocab = {
+        int(value): key.decode("utf-8").rstrip("\x00")
+        for key, value in zip(data["event_type_vocab_keys"], data["event_type_vocab_vals"])
+    }
+    events = [event_vocab[int(value)] for value in data["event_type"]]
+    non_empty_events = [event for event in events if event]
+
+    assert "fan_resin" in non_empty_events
+    assert "heat_resin" in non_empty_events
+    assert "fan_cf" not in non_empty_events
+    assert "heat_cf" not in non_empty_events

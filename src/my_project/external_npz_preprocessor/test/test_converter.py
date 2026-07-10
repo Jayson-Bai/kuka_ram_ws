@@ -417,6 +417,37 @@ def test_initializes_both_heads_before_first_path_and_resets_after_tool_change()
     assert isinstance(commands[fiber_tool_idx + 1], ResetECommand)
 
 
+def test_skips_fiber_startup_events_when_job_has_no_fiber_paths():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        material="R",
+                        order=0,
+                        points=np.array(
+                            [[0.0, 0.0, 0.5, 0.0, 0.0, 0.0],
+                             [10.0, 0.0, 0.5, 0.0, 0.0, 0.0]],
+                            dtype=np.float32,
+                        ),
+                    )
+                ],
+                fiber_paths=[],
+            )
+        ],
+    )
+
+    commands = source_job_to_parsed_commands(job, ProcessParams())
+
+    startup_events = [cmd for cmd in commands if isinstance(cmd, MCommand)]
+    assert [(cmd.code, cmd.tool, cmd.params) for cmd in startup_events] == [
+        ("M106", 1, {"T": 1.0}),
+        ("M104", 1, {"S": 250.0, "T": 1.0}),
+    ]
+
+
 def test_process_layer_heights_are_extrusion_references_only_not_z_generation():
     job = SourceJob(
         meta={},

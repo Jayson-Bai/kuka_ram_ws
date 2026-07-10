@@ -41,7 +41,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     current_e = 0.0
     line = 0
 
-    line = _append_startup_head_events(commands, params, line)
+    line = _append_startup_head_events(commands, params, line, job)
     source_min_x, source_min_y = _job_source_xy_min(job)
 
     initial_travel_added = False
@@ -997,8 +997,26 @@ def _feed_mm_s_for_material(material: str, params: ProcessParams) -> float:
     raise ValueError(f"unknown material: {material}")
 
 
-def _append_startup_head_events(commands: ParsedCommandList, params: ProcessParams, line: int) -> int:
+def _job_materials(job: SourceJob) -> set[str]:
+    materials: set[str] = set()
+    for layer in job.layers:
+        if layer.resin_paths:
+            materials.add("R")
+        if layer.fiber_paths:
+            materials.add("F")
+    return materials
+
+
+def _append_startup_head_events(
+    commands: ParsedCommandList,
+    params: ProcessParams,
+    line: int,
+    job: SourceJob,
+) -> int:
+    active_materials = _job_materials(job)
     for material, code in (("R", "M106"), ("F", "M106"), ("R", "M104"), ("F", "M104")):
+        if material not in active_materials:
+            continue
         process = params.resin if material == "R" else params.fiber
         gcode_tool = _tool_for_material(material)
         subtype = _subtype_for_material(material)
