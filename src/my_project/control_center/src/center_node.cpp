@@ -18,6 +18,7 @@
 #include <my_project_interfaces/msg/trajectory_point.hpp>
 
 #include <chrono>
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <sstream>
@@ -50,6 +51,7 @@ private:
 
   rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
   rclcpp::Publisher<PlannedEvent>::SharedPtr event_pub_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr cmd_pub_;
   std::mutex cache_mutex_;
   std::optional<PrintHeadStatus> last_printhead_status_;
 
@@ -62,9 +64,12 @@ private:
   int queue_high_{2000};
   std::optional<uint32_t> last_published_traj_seq_;
   std::optional<uint32_t> last_seq_used_;
+  std::optional<uint32_t> final_traj_seq_;
+  uint32_t final_seq_heartbeat_count_{0};
 
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
+  std::atomic<bool> auto_abort_sent_{false};
 
   std::unique_ptr<control_center::NpzLoader> npz_loader_;
   std::unique_ptr<control_center::QueueManager> queue_manager_;
@@ -138,6 +143,7 @@ public:
           std::lock_guard<std::mutex> lk(cache_mutex_);
           last_seq_used_ = msg->seq_used;
         }
+        check_print_complete(*msg);
         publish_from_queue();
       }
     );
@@ -177,6 +183,7 @@ public:
     //发布
     traj_pub_ = create_publisher<TrajectoryPoint>("/planned_trajectory", plan_qos);
     event_pub_ = create_publisher<PlannedEvent>("/planned_events", event_qos);
+    cmd_pub_ = create_publisher<std_msgs::msg::String>("/system/command", 10);
 
     //订阅系统命令
     cmd_sub_ = create_subscription<std_msgs::msg::String>(
@@ -222,6 +229,9 @@ private:
         queue_manager_.reset();
         last_published_traj_seq_.reset();
         last_seq_used_.reset();
+        final_traj_seq_.reset();
+        final_seq_heartbeat_count_ = 0;
+        auto_abort_sent_.store(false);
       }
       paused_.store(false);
       RCLCPP_INFO(get_logger(), "测试模式RESET：清空中心节点旧NPZ轨迹源");
@@ -243,6 +253,7 @@ private:
       while (trajs.size() < static_cast<size_t>(traj_prefill_) &&
         queue_manager_->pop_next_traj(tp))
       {
+        remember_if_final_traj_locked(tp.seq);
         trajs.push_back(tp);
       }
     }
@@ -283,6 +294,9 @@ private:
         static_cast<size_t>(queue_low_), static_cast<size_t>(queue_high_));
       queue_manager_->fill(*npz_loader_);
       last_published_traj_seq_.reset();
+      final_traj_seq_.reset();
+      final_seq_heartbeat_count_ = 0;
+      auto_abort_sent_.store(false);
     }
     paused_.store(false);
     RCLCPP_INFO(get_logger(), "测试模式动态加载 NPZ：%s", path.c_str());
@@ -325,6 +339,7 @@ private:
         TrajectoryPoint tp;
         if (queue_manager_->pop_next_traj(tp)) {
           tp_to_pub = tp;
+          remember_if_final_traj_locked(tp.seq);
         }
       }
     }
@@ -358,6 +373,52 @@ private:
       last_published_traj_seq_ = tp_to_pub->seq;
       RCLCPP_DEBUG(get_logger(), "发布轨迹 序号=%u 工具=%d", tp_to_pub->seq, tp_to_pub->tool_id);
     }
+  }
+
+
+  void remember_if_final_traj_locked(uint32_t seq)
+  {
+    uint32_t ignored = 0;
+    const bool has_more_queued_traj = queue_manager_ && queue_manager_->peek_next_traj_seq(ignored);
+    const bool has_more_loader_rows = npz_loader_ && npz_loader_->has_next();
+    if (!has_more_queued_traj && !has_more_loader_rows) {
+      final_traj_seq_ = seq;
+      final_seq_heartbeat_count_ = 0;
+      auto_abort_sent_.store(false);
+      RCLCPP_INFO(get_logger(), "已发布最终轨迹序号=%u，等待RSI执行完成后自动停止", seq);
+    }
+  }
+
+  void check_print_complete(const RsiHeartBeat & msg)
+  {
+    std::optional<uint32_t> final_seq;
+    {
+      std::lock_guard<std::mutex> lk(queue_mutex_);
+      final_seq = final_traj_seq_;
+      if (!final_seq || msg.seq_used != *final_seq || auto_abort_sent_.load()) {
+        if (final_seq && msg.seq_used != *final_seq) {
+          final_seq_heartbeat_count_ = 0;
+        }
+        return;
+      }
+      ++final_seq_heartbeat_count_;
+      if (final_seq_heartbeat_count_ < 2) {
+        return;
+      }
+      auto_abort_sent_.store(true);
+    }
+    publish_system_command("ABORT");
+    RCLCPP_WARN(get_logger(), "RSI已确认最终轨迹序号=%u，自动触发ABORT收尾", msg.seq_used);
+  }
+
+  void publish_system_command(const std::string & cmd)
+  {
+    if (!cmd_pub_) {
+      return;
+    }
+    std_msgs::msg::String msg;
+    msg.data = cmd;
+    cmd_pub_->publish(msg);
   }
 
   void apply_precision(TrajectoryPoint & tp)
@@ -428,6 +489,9 @@ private:
           queue_manager_->clear();
         }
         last_published_traj_seq_.reset();
+        final_traj_seq_.reset();
+        final_seq_heartbeat_count_ = 0;
+        auto_abort_sent_.store(false);
       }
       RCLCPP_WARN(get_logger(), "center_node收到ABORT命令，清空队列并停止发布");
     }
