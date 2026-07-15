@@ -48,6 +48,15 @@ def _ensure_default_data_dirs():
         path.mkdir(parents=True, exist_ok=True)
 
 
+def _format_print_duration(seconds):
+    if seconds is None or not math.isfinite(float(seconds)) or seconds < 0.0:
+        return "--"
+    total = int(round(float(seconds)))
+    hours, remainder = divmod(total, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
     ("center_start_delay_s", "1.0", "中心节点启动延迟（秒）", "中心节点"),
@@ -79,6 +88,7 @@ LAUNCH_PARAMS = [
     ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
+    ("print_time_update_period_ms", "500", "预计时间更新周期（ms）", "系统管理器"),
     ("latency_publish_period_ms", "200", "延迟状态发布周期（ms）", "延迟监控"),
     ("latency_history_limit", "5000", "RSI 心跳缓存数量", "延迟监控"),
     ("latency_stats_window_limit", "5000", "延迟统计窗口样本数", "延迟监控"),
@@ -1072,8 +1082,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_progress_bar.setTextVisible(False)
         self._print_progress_bar.setFixedWidth(160)
         self._print_progress_bar.setFixedHeight(14)
+        self._print_time_label = QtWidgets.QLabel("时间估计 --")
+        self._print_time_label.setObjectName("printTimeLabel")
+        self._print_time_label.setAlignment(
+            QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
+        self._print_time_label.setMinimumWidth(250)
         progress_layout.addWidget(self._print_progress_label)
         progress_layout.addWidget(self._print_progress_bar)
+        progress_layout.addWidget(self._print_time_label)
         self._print_progress_widget.setVisible(False)
 
         header.addWidget(self._title_label, 1)
@@ -3592,7 +3608,18 @@ class _UiStatusWidget(QtWidgets.QWidget):
             warn_color,
         )
 
+    def _update_print_time(self, msg: UiStatus):
+        if not msg.print_time_valid:
+            self._print_time_label.setText("时间估计 --")
+            return
+        self._print_time_label.setText(
+            "总 " + _format_print_duration(msg.planned_total_time_s) +
+            " | 已用 " + _format_print_duration(msg.planned_elapsed_time_s) +
+            " | 剩余约 " + _format_print_duration(msg.planned_remaining_time_s)
+        )
+
     def _update_print_progress(self, msg: UiStatus):
+        self._update_print_time(msg)
         if not msg.current_traj_valid:
             self._print_progress_bar.setValue(0)
             self._print_progress_label.setText("层进度 -- / --")

@@ -29,3 +29,8 @@ bool current_traj_valid
 bool next_traj_valid
 bool current_event_valid
 bool next_event_valid
+
+float32 planned_total_time_s
+float32 planned_elapsed_time_s
+float32 planned_remaining_time_s
+bool print_time_valid

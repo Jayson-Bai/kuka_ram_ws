@@ -28,6 +28,7 @@ from .types import (
 )
 from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
+from .rsi_timing import RsiTimingAccumulator
 
 
 @dataclass
@@ -52,6 +53,7 @@ class CsvRow:
     preview_layer_index: int = 0
     path_id: int = 0
     path_end_flag: int = 0
+    planned_time_s: float = 0.0
 
 
 @dataclass
@@ -97,6 +99,7 @@ def export_npz(
     返回耗时统计字典（秒），用于 CLI 打印。
     """
     t_total_start = time.perf_counter()
+    timing = RsiTimingAccumulator(dt)
     timings = {
         "total_s": 0.0,
         "fit_s": 0.0,
@@ -197,6 +200,10 @@ def export_npz(
         base_root = base_dir
     else:
         base_root = os.path.join(base_dir, base_name) if base_dir else base_name
+    timing_sidecar_path = (
+        os.path.join(base_root, f"{base_name}_timing.json")
+        if split_by_layer_type else f"{base_no_ext}.timing.json"
+    )
 
     class _Writer:
         def __init__(self, base_path: str):
@@ -250,6 +257,8 @@ def export_npz(
             )
             path_id = np.array([r.path_id for r in chunk], dtype=np.uint32)
             path_end_flag = np.array([r.path_end_flag for r in chunk], dtype=np.uint8)
+            planned_time_s = np.array(
+                [r.planned_time_s for r in chunk], dtype=np.float32)
 
             np.savez_compressed(
                 out_path,
@@ -273,6 +282,7 @@ def export_npz(
                 preview_layer_index=preview_layer_index,
                 path_id=path_id,
                 path_end_flag=path_end_flag,
+                planned_time_s=planned_time_s,
                 move_type_vocab_keys=move_type_keys,
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
@@ -496,8 +506,12 @@ def export_npz(
         time_acc_s = getattr(gc, "time_acc_s", None)
         if time_acc_s is not None and float(time_acc_s) > 0.0:
             sample_kwargs["t_acc"] = float(time_acc_s)
+        t_acc_value = float(time_acc_s) if time_acc_s is not None and float(time_acc_s) > 0.0 else 2.0
         for pt in sample_global_curve_iter(gc, **sample_kwargs):
+            if not has_any:
+                timing.start_segment(path_id=path_id, move_type=gc.type, start_seq=seq)
             has_any = True
+            planned_time_s = timing.append_trajectory_time()
             row = CsvRow(
                 seq=seq,
                 x=pt.pos.x,
@@ -515,11 +529,18 @@ def export_npz(
                 payload="",
                 trigger_seq=None,
                 path_id=path_id,
+                planned_time_s=planned_time_s,
             )
             sampled_rows.append(_with_layer_progress(row, layer))
             seq += 1
 
         if sampled_rows:
+            timing.finish_segment(
+                t_acc_s=t_acc_value,
+                t_flat_s=max(0.0, float(pt.t) - t_acc_value - 2.0),
+                t_dec_s=2.0,
+                end_seq=sampled_rows[-1].seq,
+            )
             writer = _writer_for(layer, subtype, occ)
             for row in sampled_rows:
                 writer.add(row)
@@ -1162,8 +1183,14 @@ def export_npz(
         start_e = hold_row.e
         steps = max(1, int(math.ceil(max(float(cmd.wait_sec), dt) / dt)))
         writer = _writer_for(layer, subtype, occ)
+        timing.start_segment(
+            path_id=_path_id_for(layer, subtype, occ),
+            move_type="PRINT",
+            start_seq=seq,
+        )
         for i in range(1, steps + 1):
             ratio = i / steps
+            planned_time_s = timing.append_trajectory_time()
             row = CsvRow(
                 seq=seq,
                 x=hold_row.x,
@@ -1181,6 +1208,7 @@ def export_npz(
                 payload="",
                 trigger_seq=None,
                 path_id=_path_id_for(layer, subtype, occ),
+                planned_time_s=planned_time_s,
             )
             row = _with_layer_progress(row, layer)
             writer.add(row)
@@ -1188,6 +1216,12 @@ def export_npz(
             _maybe_yield()
             seq += 1
             last_pose = row
+        timing.finish_segment(
+            t_acc_s=0.0,
+            t_flat_s=steps * dt,
+            t_dec_s=0.0,
+            end_seq=seq - 1,
+        )
         if mark_path_end:
             _mark_path_end(layer, subtype, occ)
         if cmd.feedrate > 0:
@@ -1316,6 +1350,7 @@ def export_npz(
             trigger_seq=None,
             path_id=_path_id_for(layer, subtype, occ),
         )
+        planned_time_s = timing.append_event_time()
         row = CsvRow(
             seq=seq,
             x=hold_row.x,
@@ -1333,6 +1368,7 @@ def export_npz(
             payload=ev.payload,
             trigger_seq=seq,
             path_id=_path_id_for(layer, subtype, occ),
+            planned_time_s=planned_time_s,
         )
         _writer_for(layer, subtype, occ).add(_with_layer_progress(row, layer))
         processed_rows += 1
@@ -1622,6 +1658,17 @@ def export_npz(
     except Exception as exc:
         print(f"[Warning] Failed to write offset sidecar json: {exc}")
 
+    try:
+        timing_parent = os.path.dirname(timing_sidecar_path)
+        if timing_parent:
+            os.makedirs(timing_parent, exist_ok=True)
+        with open(timing_sidecar_path, "w", encoding="utf-8") as f:
+            json.dump(timing.summary(), f, ensure_ascii=False, indent=2)
+    except Exception as exc:
+        print(f"[Warning] Failed to write timing sidecar json: {exc}")
+
+    timings["timing_sidecar"] = timing_sidecar_path
+    timings["planned_total_time_s"] = timing.trajectory_time()
     timings["rows"] = processed_rows
     timings["total_s"] = time.perf_counter() - t_total_start
     return timings

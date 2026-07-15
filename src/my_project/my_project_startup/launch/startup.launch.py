@@ -24,6 +24,7 @@ def generate_launch_description():
     heartbeat_timeout_s = LaunchConfiguration("heartbeat_timeout_s")
     traj_queue_limit = LaunchConfiguration("traj_queue_limit")
     event_queue_limit = LaunchConfiguration("event_queue_limit")
+    print_time_update_period_ms = LaunchConfiguration("print_time_update_period_ms")
     latency_publish_period_ms = LaunchConfiguration("latency_publish_period_ms")
     latency_history_limit = LaunchConfiguration("latency_history_limit")
     latency_stats_window_limit = LaunchConfiguration("latency_stats_window_limit")
@@ -120,6 +121,7 @@ def generate_launch_description():
             "heartbeat_timeout_s": heartbeat_timeout_s,
             "traj_queue_limit": traj_queue_limit,
             "event_queue_limit": event_queue_limit,
+            "print_time_update_period_ms": print_time_update_period_ms,
         }],
     )
 
@@ -236,6 +238,11 @@ def generate_launch_description():
             "event_queue_limit",
             default_value="2000",
             description="UI 侧事件队列上限。",
+        ),
+        DeclareLaunchArgument(
+            "print_time_update_period_ms",
+            default_value="500",
+            description="预计打印时间 UI 更新周期（毫秒）。",
         ),
         DeclareLaunchArgument(
             "latency_publish_period_ms",

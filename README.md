@@ -90,8 +90,10 @@ my_project_ui RQT panel
 - `gcode_parser.py`：解析 `G0/G1`、`G90/G91`、`M82/M83`、`G92 E...`、`Tn` 和常见 `M` 指令。
 - `bspline_approximation.py`：执行角点回退、点密度加密和全局 B 样条最小二乘拟合。
 - `polynomial_interpolator.py`：按时间步采样轨迹，并按路径比例分配挤出量。
-- `npz_exporter.py`：导出 `seq/x/y/z/a/b/c/e/tool_id` 以及事件字段；支持单文件 `npz` 或按层/类型拆分的 manifest。
+- `npz_exporter.py`：导出 `seq/x/y/z/a/b/c/e/tool_id` 以及事件字段；支持单文件 `npz` 或按层/类型拆分的 manifest。默认同时写入 `planned_time_s` RSI 时间轴和 `<base>.timing.json`（拆分输出为 `<base>_timing.json`），时间轴包含每段的加速、匀速、减速参数化元数据。
 - `cli.py`：提供 `ros2 run gcode_planner gcode_planner_npz ...` 命令入口。
+
+预计打印时间只针对 RSI 轨迹时钟：空走、打印采样点和离线展开的 RSI 侧挤出等待都会计入；事件行不推进时间，打印头事件等待和 ABORT 不计入。`NpzLoader` 将可选时间字段安全传入 `TrajectoryPoint`，缺少或损坏 timing 数组/sidecar 时仍可正常打印，但 UI 会显示“时间估计 --”。
 
 `e` 字段在系统中始终表示绝对挤出量。`G92 E...` 会导出 `extrude_reset` 事件，供 UART 侧和固件状态同步。
 
@@ -100,7 +102,7 @@ my_project_ui RQT panel
 `control_center` 提供三个核心节点：
 
 - `center_node`：加载 `npz` 或 manifest，使用 `NpzLoader` 和 `QueueManager` 维护轨迹/事件队列，发布 `/planned_trajectory` 和 `/planned_events`。它订阅 `/rsi/heartbeat`，根据实际使用的 `seq_used` 继续补发轨迹，避免下游队列过低或过高。
-- `system_manager_node`：聚合 KUKA 状态、RSI 心跳、打印头状态、计划轨迹和事件，周期发布 `/ui/status`，供 UI 展示。
+- `system_manager_node`：聚合 KUKA 状态、RSI 心跳、打印头状态、计划轨迹和事件，周期发布 `/ui/status`，供 UI 展示。预计时间在该节点的非 RSI 线程中按 `seq_used` 做 O(1) 低频更新，默认周期为 `print_time_update_period_ms=500` ms。
 - `extruder_latency_monitor_node`：订阅 `/rsi/heartbeat`、`/uart/raw`、`/printhead/status`、`/planned_trajectory`、`/kuka/status`，输出 `/extruder/latency_status` 和 `/extruder/latency_text`，用于估计 Linux-MCU、Linux-Robot、MCU-Robot 等延迟。
 
 `rsi_server:rsi_node` 是 KUKA RSI UDP 服务端。它订阅中心节点的轨迹和事件、打印头 ready 状态与系统命令，在每个 KUKA IPOC 心跳内选择轨迹点并构造 RSI XML 回包，同时发布：
@@ -153,7 +155,7 @@ MCU 返回的 `STAT`、`EVACK`、`EVDONE` 等行会被解析为 `/printhead/stat
 
 | 话题 | 类型 | 发布者 | 订阅者 | 说明 |
 | --- | --- | --- | --- | --- |
-| `/planned_trajectory` | `TrajectoryPoint` | `center_node` | `rsi_node`, `system_manager_node`, `extruder_latency_monitor_node` | 规划轨迹点，包含 `XYZABC`、绝对 `E`、`tool_id`、`seq` |
+| `/planned_trajectory` | `TrajectoryPoint` | `center_node` | `rsi_node`, `system_manager_node`, `extruder_latency_monitor_node` | 规划轨迹点，包含 `XYZABC`、绝对 `E`、`tool_id`、`seq` 和可选 RSI 计划时间 |
 | `/planned_events` | `PlannedEvent` | `center_node` | `rsi_node`, `system_manager_node` | 计划事件，如换刀、加热、风扇、挤出复位 |
 | `/rsi/heartbeat` | `RsiHeartBeat` | `rsi_node` | `center_node`, `uart_node`, `system_manager_node`, `extruder_latency_monitor_node` | RSI 主时钟，携带当前执行序号与绝对挤出量 |
 | `/rsi/triggered_event` | `PlannedEvent` | `rsi_node` | `uart_node`, `system_manager_node` | 到达触发序号的事件 |
@@ -209,6 +211,7 @@ ros2 launch my_project_startup startup.launch.py --show-args
 | `abort_lift_mm` | `100.0` | `ABORT` 时 Z 轴抬升距离 |
 | `abort_lift_speed_mm_s` | `10.0` | `ABORT` 时 Z 轴抬升速度 |
 | `latency_publish_period_ms` | `200` | 延迟状态发布周期 |
+| `print_time_update_period_ms` | `500` | UI 预计打印时间更新周期；不运行在 RSI 实时线程 |
 | `latency_stats_window_limit` | `5000` | P95/P99 延迟统计窗口 |
 | `robot_match_max_error_mm` | `1.0` | 机器人实际位置匹配允许的最大空间误差 |
 

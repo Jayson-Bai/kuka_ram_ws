@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 
 import path_processing_core.npz_exporter as npz_exporter
@@ -1131,3 +1133,58 @@ def test_nested_flat_export_uses_parent_directory_for_previews(tmp_path, monkeyp
     assert out.exists()
     assert (out.parent / "sample.offset.json").exists()
     assert captured["base_root"] == str(out.parent)
+
+
+
+def _commands_with_travel_print_and_event():
+    return [
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            pos=Position(1.0, 0.0, 0.0, 0.0, 0.0, 0.0),
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=1,
+            layer=0,
+            subtype="TRAVEL",
+            raw="G0 X1 F600",
+            is_pure_state_change=False,
+        ),
+        _move((1.0, 0.0, 0.0), (2.0, 0.0, 0.0), 0.0, 1.0, 2),
+        ResetECommand(
+            type="RESET_E",
+            val=0.0,
+            line=3,
+            layer=0,
+            subtype="Perimeter",
+            raw="G92 E0",
+        ),
+    ]
+
+
+def test_export_npz_writes_rsi_timing_array_and_sidecar(tmp_path):
+    out = tmp_path / "timed.npz"
+    stats = export_npz(_commands_with_travel_print_and_event(), str(out), dt=0.1)
+
+    with np.load(out) as data:
+        assert "planned_time_s" in data
+        assert len(data["planned_time_s"]) == len(data["seq"])
+        assert np.all(np.isfinite(data["planned_time_s"]))
+        event_rows = data["event_flag"] == 1
+        assert np.any(event_rows)
+        assert all(
+            data["planned_time_s"][i] == data["planned_time_s"][i - 1]
+            for i in np.flatnonzero(event_rows)
+        )
+
+    metadata = json.loads(
+        (tmp_path / "timed.timing.json").read_text(encoding="utf-8"))
+    assert metadata["format"] == "rsi_print_timing"
+    assert metadata["total_planned_time_s"] >= 0.0
+    assert metadata["event_rows_ignored"] >= 1
+    assert metadata["segments"]
+    assert {"t_acc_s", "t_flat_s", "t_dec_s"}.issubset(
+        metadata["segments"][0])
+    assert stats["timing_sidecar"] == str(tmp_path / "timed.timing.json")

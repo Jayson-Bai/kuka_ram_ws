@@ -16,7 +16,10 @@
 
 #include <std_msgs/msg/string.hpp>
 
+#include <algorithm>
+#include <cmath>
 #include <deque>
+#include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -38,6 +41,7 @@ public:
     heartbeat_timeout_s_ = declare_parameter<double>("heartbeat_timeout_s", 1.0);
     traj_queue_limit_ = declare_parameter<int>("traj_queue_limit", 5000);
     event_queue_limit_ = declare_parameter<int>("event_queue_limit", 2000);
+    print_time_update_period_ms_ = declare_parameter<int>("print_time_update_period_ms", 500);
 
     ui_pub_ = create_publisher<UiStatus>("/ui/status", 10);
 
@@ -249,11 +253,53 @@ private:
     }
     out.event_pending = static_cast<uint32_t>(event_queue_.size());
 
+    update_print_time_status(out, now_t);
+
     // 警告/错误占位（后续可接入）
     out.last_warn = "";
     out.last_error = "";
 
     ui_pub_->publish(out);
+  }
+
+  void update_print_time_status(UiStatus & out, const rclcpp::Time & now_t)
+  {
+    out.planned_total_time_s = 0.0F;
+    out.planned_elapsed_time_s = 0.0F;
+    out.planned_remaining_time_s = 0.0F;
+    out.print_time_valid = false;
+
+    if (out.current_traj_valid && out.current_traj.planned_time_valid) {
+      const float total = std::max(0.0F, out.current_traj.planned_total_time_s);
+      const bool new_run = print_time_cache_valid_ &&
+        (out.current_traj.seq < print_time_last_seq_ ||
+        std::abs(total - print_time_total_s_) > 1e-3F);
+      if (new_run) {
+        print_time_cache_valid_ = false;
+      }
+
+      const double elapsed_since_update = print_time_last_update_.nanoseconds() == 0 ?
+        std::numeric_limits<double>::infinity() :
+        (now_t - print_time_last_update_).seconds();
+      const bool update_due = !print_time_cache_valid_ ||
+        elapsed_since_update * 1000.0 >= static_cast<double>(print_time_update_period_ms_);
+      if (update_due) {
+        const float elapsed = std::clamp(out.current_traj.planned_time_s, 0.0F, total);
+        print_time_total_s_ = total;
+        print_time_elapsed_s_ = elapsed;
+        print_time_remaining_s_ = std::clamp(total - elapsed, 0.0F, total);
+        print_time_last_seq_ = out.current_traj.seq;
+        print_time_last_update_ = now_t;
+        print_time_cache_valid_ = true;
+      }
+    }
+
+    if (print_time_cache_valid_) {
+      out.planned_total_time_s = print_time_total_s_;
+      out.planned_elapsed_time_s = print_time_elapsed_s_;
+      out.planned_remaining_time_s = print_time_remaining_s_;
+      out.print_time_valid = true;
+    }
   }
 
 private:
@@ -287,6 +333,13 @@ private:
   double heartbeat_timeout_s_{1.0};
   int traj_queue_limit_{5000};
   int event_queue_limit_{2000};
+  int print_time_update_period_ms_{500};
+  bool print_time_cache_valid_{false};
+  uint32_t print_time_last_seq_{0};
+  float print_time_total_s_{0.0F};
+  float print_time_elapsed_s_{0.0F};
+  float print_time_remaining_s_{0.0F};
+  rclcpp::Time print_time_last_update_;
   std::string system_command_;   // 当前系统命令状态: "PAUSED" / "ABORTING" / "ABORTED" / ""
 };
 

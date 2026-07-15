@@ -31,6 +31,9 @@ struct NpzRow
   uint32_t total_layers{};
   uint32_t path_id{};
   bool path_end_flag{};
+  float planned_time_s{};
+  float planned_total_time_s{};
+  bool planned_time_valid{};
 };
 
 struct NpzChunk
@@ -54,6 +57,7 @@ struct NpzChunk
   std::vector<uint32_t> total_layers;
   std::vector<uint32_t> path_id;
   std::vector<uint8_t> path_end_flag;
+  std::vector<float> planned_time_s;
   size_t size{0};
 };
 
@@ -64,6 +68,9 @@ public:
 
   bool ok() const {return ok_;}
   const std::string & error() const {return error_;}
+
+  bool timing_valid() const {return timing_valid_;}
+  double total_planned_time_s() const {return total_planned_time_s_;}
 
   bool has_next() const;
   bool next_row(NpzRow & out);
@@ -87,6 +94,7 @@ private:
   std::vector<std::string> resolve_from_manifest(const std::string & path) const;
   std::vector<std::string> resolve_from_base(const std::string & path) const;
   NpzChunk load_chunk(const std::string & file);
+  void load_timing_metadata(const std::string & path);
 
   std::unordered_map<uint8_t, std::string> move_type_vocab_;
   std::unordered_map<uint8_t, std::string> event_type_vocab_;
@@ -96,6 +104,10 @@ private:
   size_t preload_chunks_{2};
   bool ok_{false};
   std::string error_;
+  bool timing_valid_{false};
+  bool timing_rows_valid_{true};
+  bool timing_metadata_valid_{false};
+  double total_planned_time_s_{0.0};
 
   std::deque<NpzChunk> cache_;
   size_t chunk_row_idx_{0};

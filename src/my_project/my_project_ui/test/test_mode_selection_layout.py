@@ -1,4 +1,5 @@
 import ast
+import math
 from pathlib import Path
 
 
@@ -11,6 +12,7 @@ QUEUE_MANAGER = PROJECT_SRC / "control_center" / "src" / "queue_manager.cpp"
 NPZ_LOADER_HPP = PROJECT_SRC / "control_center" / "include" / "control_center" / "npz_loader.hpp"
 NPZ_LOADER_CPP = PROJECT_SRC / "control_center" / "src" / "npz_loader.cpp"
 TRAJECTORY_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
+UI_STATUS_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "UiStatus.msg"
 NPZ_EXPORTER = PROJECT_SRC / "path_processing_core" / "path_processing_core" / "npz_exporter.py"
 
 
@@ -316,6 +318,44 @@ def test_formal_print_layer_progress_uses_low_priority_ui_status_path():
     assert "msg.current_traj.layer_index" in ui_src
     assert "msg.current_traj.total_layers" in ui_src
     assert "self._print_progress_widget.setVisible(mode == _MODE_PAGE_PRINT)" in ui_src
+
+
+def test_formal_print_remaining_time_is_low_frequency_and_formatted_in_ui():
+    ui_src = _source()
+    ui_status = UI_STATUS_MSG.read_text(encoding="utf-8")
+    startup_src = STARTUP_LAUNCH.read_text(encoding="utf-8")
+    system_src = SYSTEM_MANAGER.read_text(encoding="utf-8")
+
+    for field in (
+        "planned_total_time_s",
+        "planned_elapsed_time_s",
+        "planned_remaining_time_s",
+        "bool print_time_valid",
+    ):
+        assert field in ui_status
+    assert '"print_time_update_period_ms"' in startup_src
+    assert "print_time_update_period_ms_" in system_src
+    assert "planned_remaining_time_s" in ui_src
+    assert "时间估计" in ui_src
+    assert "def _format_print_duration(seconds):" in ui_src
+    assert 'return "--"' in ui_src
+    assert "时间估计 --" in ui_src
+
+
+def test_print_duration_formatter_handles_hours_and_invalid_values():
+    tree = ast.parse(_source())
+    formatter_node = next(
+        node for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "_format_print_duration"
+    )
+    namespace = {"math": math}
+    exec(compile(ast.Module(body=[formatter_node], type_ignores=[]), "ui_panel.py", "exec"), namespace)
+    formatter = namespace["_format_print_duration"]
+
+    assert formatter(3661.4) == "01:01:01"
+    assert formatter(0.0) == "00:00:00"
+    assert formatter(None) == "--"
+    assert formatter(float("nan")) == "--"
 
 
 def test_offset_and_resin_z_spinboxes_ignore_mouse_wheel():

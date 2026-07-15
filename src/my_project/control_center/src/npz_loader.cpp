@@ -1,9 +1,13 @@
 #include "control_center/npz_loader.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
+#include <utility>
 
 #include "cnpy.h"
 
@@ -59,6 +63,58 @@ void load_vocab(
   }
 }
 
+fs::path timing_sidecar_for(const std::string & path)
+{
+  fs::path p(path);
+  std::string stem = p.stem().string();
+  const std::string filename = p.filename().string();
+  if (p.extension() == ".json" || filename.find("_manifest.json") != std::string::npos) {
+    const std::string suffix = "_manifest";
+    if (stem.size() >= suffix.size() &&
+      stem.compare(stem.size() - suffix.size(), suffix.size(), suffix) == 0)
+    {
+      stem.erase(stem.size() - suffix.size());
+    }
+    return p.parent_path() / (stem + "_timing.json");
+  }
+
+  const std::string part_marker = "_part";
+  const auto part_pos = stem.rfind(part_marker);
+  if (part_pos != std::string::npos && part_pos + part_marker.size() < stem.size()) {
+    bool numeric_suffix = true;
+    for (size_t i = part_pos + part_marker.size(); i < stem.size(); ++i) {
+      numeric_suffix = numeric_suffix && std::isdigit(
+        static_cast<unsigned char>(stem[i]));
+    }
+    if (numeric_suffix) {
+      stem.erase(part_pos);
+    }
+  }
+  return p.parent_path() / (stem + ".timing.json");
+}
+
+bool read_json_number(
+  const std::string & content, const std::string & key, double & value)
+{
+  const std::string token = "\"" + key + "\"";
+  const auto key_pos = content.find(token);
+  if (key_pos == std::string::npos) {
+    return false;
+  }
+  const auto colon_pos = content.find(':', key_pos + token.size());
+  if (colon_pos == std::string::npos) {
+    return false;
+  }
+  const auto number_pos = content.find_first_not_of(" \t\r\n", colon_pos + 1);
+  if (number_pos == std::string::npos) {
+    return false;
+  }
+  const char * begin = content.c_str() + number_pos;
+  char * end = nullptr;
+  value = std::strtod(begin, &end);
+  return end != begin && std::isfinite(value);
+}
+
 }  // namespace
 
 NpzLoader::NpzLoader(const std::string & path, size_t preload_chunks)
@@ -71,12 +127,35 @@ NpzLoader::NpzLoader(const std::string & path, size_t preload_chunks)
     return;
   }
   try {
+    load_timing_metadata(path);
     load_initial();
     ok_ = true;
   } catch (const std::exception & e) {
     error_ = e.what();
     ok_ = false;
   }
+}
+
+void NpzLoader::load_timing_metadata(const std::string & path)
+{
+  timing_metadata_valid_ = false;
+  timing_valid_ = false;
+  total_planned_time_s_ = 0.0;
+
+  const fs::path sidecar = timing_sidecar_for(path);
+  std::ifstream in(sidecar);
+  if (!in) {
+    return;
+  }
+  const std::string content(
+    (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  double total = 0.0;
+  if (!read_json_number(content, "total_planned_time_s", total) || total < 0.0) {
+    return;
+  }
+  total_planned_time_s_ = total;
+  timing_metadata_valid_ = true;
+  timing_valid_ = timing_rows_valid_ && timing_metadata_valid_;
 }
 
 bool NpzLoader::has_next() const
@@ -118,6 +197,15 @@ bool NpzLoader::next_row(NpzRow & out)
   out.total_layers = c.total_layers[i];
   out.path_id = c.path_id[i];
   out.path_end_flag = c.path_end_flag[i] != 0;
+  out.planned_time_s = 0.0F;
+  out.planned_total_time_s = static_cast<float>(total_planned_time_s_);
+  out.planned_time_valid = false;
+  if (timing_valid_ && i < c.planned_time_s.size() &&
+    std::isfinite(c.planned_time_s[i]))
+  {
+    out.planned_time_s = c.planned_time_s[i];
+    out.planned_time_valid = true;
+  }
 
   if (chunk_row_idx_ >= c.size) {
     cache_.pop_front();
@@ -337,6 +425,27 @@ NpzChunk NpzLoader::load_chunk(const std::string & file)
   c.payload = decode_fixed_strings(npz.at("payload"));
   c.trigger_seq = to_vec<int32_t>(npz.at("trigger_seq"));
   c.size = c.seq.size();
+  bool chunk_timing_valid = false;
+  if (npz.count("planned_time_s")) {
+    auto planned_time = to_vec<float>(npz.at("planned_time_s"));
+    chunk_timing_valid = planned_time.size() == c.size;
+    if (chunk_timing_valid) {
+      for (const auto value : planned_time) {
+        if (!std::isfinite(value)) {
+          chunk_timing_valid = false;
+          break;
+        }
+      }
+    }
+    if (chunk_timing_valid) {
+      c.planned_time_s = std::move(planned_time);
+    }
+  }
+  if (!chunk_timing_valid) {
+    c.planned_time_s.assign(c.size, 0.0F);
+    timing_rows_valid_ = false;
+  }
+  timing_valid_ = timing_rows_valid_ && timing_metadata_valid_;
   if (npz.count("layer_index")) {
     c.layer_index = to_vec<uint32_t>(npz.at("layer_index"));
   } else {
