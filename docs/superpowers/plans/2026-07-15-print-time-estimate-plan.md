@@ -424,4 +424,3 @@ Expected: zero failures.
 - [ ] **Step 5: Commit any verified fixes if needed**
 
 If verification exposes a defect, add only the exact affected paths from Tasks 1–4 and commit the verified fix with a focused message. If no defect is found, leave the implementation commits unchanged.
-
