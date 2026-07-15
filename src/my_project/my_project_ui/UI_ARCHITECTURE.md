@@ -1,7 +1,7 @@
 # my_project_ui 架构文档
 
-> **版本**: v1.0  
-> **最后更新**: 2026-06-21  
+> **版本**: v1.1
+> **最后更新**: 2026-07-15
 > **用途**: 本文档作为 UI 代码的版本管理指导，每次对 UI 界面进行功能添加或修改时，都应同步更新本文档。
 
 ---
@@ -226,7 +226,7 @@ flowchart LR
     T5 --> SM
     T6 --> SM
 
-    SM -- "200ms 周期聚合" --> T7
+    SM -- "100ms 状态发布；500ms 时间估计更新" --> T7
     T7 -- "订阅 QoS=10" --> Plugin
     Plugin -- "pyqtSignal" --> Widget
 
@@ -256,7 +256,27 @@ flowchart LR
 - 轨迹队列基于心跳 `seq_used` 自动对齐清理
 - 事件队列基于触发序号自动推进
 
-### 5.3 反向控制：挤出倍率调节
+### 5.3 正式打印预计时间
+
+预计时间链路由离线导出阶段建立，在线阶段只做轻量读取和显示：
+
+```text
+npz_exporter
+  ├─ planned_time_s（每个 NPZ 行的 RSI 累计时间）
+  └─ <base>.timing.json（总时长、段信息、加速/匀速/减速参数）
+        ↓
+NpzLoader → QueueManager → TrajectoryPoint
+        ↓
+system_manager_node（按 seq_used、默认 500 ms 更新）
+        ↓
+UiStatus → 正式打印页：总 / 已用 / 剩余约
+```
+
+时间范围明确限定为 RSI 侧：空走、打印采样行和离线展开的 RSI 侧挤出等待计入；事件行不推进时间，打印头事件等待与 ABORT 不计入。`planned_time_s` 或 timing sidecar 缺失、长度不匹配、非有限或总时长非法时，轨迹仍按旧逻辑加载，`UiStatus.print_time_valid=false`，UI 显示“时间估计 --”。
+
+`print_time_update_period_ms` 是 `system_manager_node` 的参数，默认 `500` ms。该估计不会进入 `rsi_node` 的 UDP/RSI 控制循环；暂停或队列暂时未对齐时复用最后一个有效快照，避免界面倒计时脱离实际 `seq_used`。
+
+### 5.4 反向控制：挤出倍率调节
 
 ```mermaid
 sequenceDiagram
@@ -277,7 +297,7 @@ sequenceDiagram
     Plugin ->> Widget: set_extrude_scale() 更新显示
 ```
 
-### 5.4 测试模式、标定与正式打印导出约束
+### 5.5 测试模式、标定与正式打印导出约束
 
 测试模式以 `/print_test/rsi_command` 和 `/print_test/load_npz` 作为临时测试动作的下发通道。UI 根据当前 RSI correction、喷头状态和标定输入生成临时 GCode/NPZ，再让测试模式节点加载执行。
 
@@ -649,6 +669,11 @@ bool current_traj_valid
 bool next_traj_valid
 bool current_event_valid
 bool next_event_valid
+
+float32 planned_total_time_s         # RSI 计划总时长
+float32 planned_elapsed_time_s       # 按 seq_used 的已用时长
+float32 planned_remaining_time_s     # 估计剩余时长
+bool print_time_valid                # timing sidecar/行数据均有效
 ```
 
 ### 9.2 子消息类型
