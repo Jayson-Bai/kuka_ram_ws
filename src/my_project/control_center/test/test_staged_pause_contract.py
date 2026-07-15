@@ -8,6 +8,7 @@ TRAJ = ROOT / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
 UI = ROOT / "my_project_ui" / "my_project_ui" / "ui_panel.py"
 LAUNCH = ROOT / "my_project_startup" / "launch" / "startup.launch.py"
 NPZ_HEADER = ROOT / "control_center" / "include" / "control_center" / "npz_loader.hpp"
+NPZ_LOADER_CPP = ROOT / "control_center" / "src" / "npz_loader.cpp"
 QUEUE = ROOT / "control_center" / "src" / "queue_manager.cpp"
 
 
@@ -83,3 +84,25 @@ def test_pause_safety_parameters_are_launch_configurable():
         assert f'LaunchConfiguration("{name}")' in launch
         assert f'"{name}": {name}' in launch
         assert 'DeclareLaunchArgument(\n            "' + name + '"' in launch
+
+
+
+def test_runtime_trajectory_contract_carries_optional_timing():
+    msg = _read(TRAJ)
+    assert "planned_time_s" in msg
+    assert "planned_total_time_s" in msg
+    assert "bool planned_time_valid" in msg
+    header = _read(NPZ_HEADER)
+    assert "planned_time_s" in header
+    assert "planned_total_time_s" in header
+    queue = _read(QUEUE)
+    assert "planned_time_valid" in queue
+
+
+def test_npz_loader_exposes_optional_timing_metadata():
+    header = _read(NPZ_HEADER)
+    loader_cpp = _read(NPZ_LOADER_CPP)
+    assert "bool timing_valid() const" in header
+    assert "double total_planned_time_s() const" in header
+    assert 'npz.count("planned_time_s")' in loader_cpp
+    assert "timing.json" in loader_cpp
