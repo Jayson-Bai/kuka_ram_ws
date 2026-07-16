@@ -108,17 +108,22 @@ heat_cf
 
 ## 6. 挤出量重置
 
-preprocessor 参照既有 GCode 工具切换位置，在每次 `ToolChangeCommand` 后立即插入：
+工具切换后的既有重置保持不变。preprocessor 在每次 `ToolChangeCommand` 后立即插入：
 
 ```text
 ResetECommand(type="RESET_E", val=0.0, raw="G92 E0")
 ```
 
-这会让每个工具切换后的挤出从 `E=0` 开始累计；同一工具连续打印多条路径时，E 会沿该工具继续累计，不在路径之间无事件回零。`npz_exporter` 会把它写成系统 NPZ 事件：
+此外，每条可打印路径完成自己的树脂回抽或纤维 `CUT` 展开后，都会追加一组独立路径边界：
 
 ```text
-extrude_reset
+ResetECommand(val=0.0, raw="external_npz_path_reset", pose=path_endpoint)
+ExtrudeWait(wait_sec=dt, delta_e=0.0, raw="external_npz_reset_anchor")
 ```
+
+该规则覆盖 converter 生成的 primeline、所有源路径和最终路径；最终路径即使没有后续 travel，也仍然以 reset + anchor 结束。路径 reset 与工具切换 reset 是叠加关系，不替换工具切换逻辑。
+
+`npz_exporter` 仍把每个 `ResetECommand` 写成 `extrude_reset` 事件，事件行保留 reset 前的旧 E。随后只有精确内部标记 `external_npz_reset_anchor` 会让一个 `dt` 周期的等待行从 `E=0` 导出；普通 `ExtrudeWait` 和 GCode reset 行为不变。converter 同时把 `current_e` 置零，所以后续 travel 保持 `E=0`，下一条路径的 prime 从零重新计算。
 
 ## 7. 预挤出和回抽
 
@@ -128,23 +133,39 @@ extrude_reset
 enable_extrude_wait=True
 ```
 
+`prime_settle_s` 是全局 external-NPZ 参数，默认 `0.5 s`。它保存到 `print_params.json`，并由 CLI、独立 UI 和正式打印 UI 暴露。旧 JSON 缺字段时使用 `0.5 s`；`0` 只关闭 settle，负数、`NaN` 和无穷值会被拒绝。prime 长度为零时不生成 prime，也不生成 settle。
+
 ### 路径准备规则
 
-等待段不并入 travel，也不在空走前后成组插入。整件第一条打印路径前先执行一次初始回抽，再执行预挤出；后续树脂/纤维路径打印前只执行预挤出。树脂路径打印完成后只执行回抽。纤维路径打印完成后触发 `CUT`，exporter 先执行剪切抬升并按抬升空间距离同步增加 E，再执行等量剪切安全回抽，随后 travel 到下一条路径起点，最后再执行下一条路径自己的预挤出。剪切抬升挤出和剪切安全回抽独立于下一条路径前的预挤出。
+等待段不并入 travel。整件第一条可打印路径在自己的 prime 前保留一次既有初始回抽。每条路径都在到达起点后执行 `prime -> 可选 prime_settle -> PRINT`。路径结束后先完成本材料的卸压动作，再立即 reset + anchor，之后才允许 travel：
 
 ```text
 # Whole part first print path only:
 ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
-ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
+
+# Every printable path, at its start pose:
+ExtrudeWait(delta_e=+material.prime_length_mm, feedrate=material.prime_speed_mm_s * 60)
+ExtrudeWait(wait_sec=prime_settle_s, delta_e=0, raw="external_npz_prime_settle")
 PRINT path
-# Resin only after each path:
+
+# Resin path end:
 ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
-# Fiber only after each path:
+ResetECommand(raw="external_npz_path_reset")
+ExtrudeWait(wait_sec=dt, delta_e=0, raw="external_npz_reset_anchor")
+
+# Fiber path end:
 CUT
-# Later paths after travel:
-ExtrudeWait(delta_e=+material.prime_length_mm,   feedrate=material.prime_speed_mm_s * 60)
-PRINT path
+# exporter expands CUT as event -> lift(+same E) -> remaining wait -> equal safety retract
+ResetECommand(raw="external_npz_path_reset")
+ExtrudeWait(wait_sec=dt, delta_e=0, raw="external_npz_reset_anchor")
+
+# If another path follows:
+TRAVEL(E=0) -> next path start -> prime -> optional prime_settle -> PRINT
 ```
+
+树脂 normal retract 和纤维剪切安全回抽都发生在 path reset 之前。reset 之后不再保留任何尚未执行的正/负 E 累计；anchor 提供一个明确的 `E=0` 导出周期。travel 本身不携带 prime/retract，系统 NPZ 中的 travel 行保持 `E=0`。下一条路径到达起点后才执行自己的 prime 和 settle。
+
+`prime_settle_s=0.5` 且 `dt=0.004` 时，settle 导出为恰好 125 个固定 XYZ、固定 E 的采样行。
 
 当前默认值：
 
@@ -153,6 +174,7 @@ PRINT path
 树脂预挤出: 18 mm @ 15 mm/s
 纤维回抽:   10 mm @ 5 mm/s
 纤维预挤出: 12 mm @ 5 mm/s
+全局稳定等待: 0.5 s
 ```
 
 ## 8. 打印路径和挤出量计算
@@ -207,7 +229,7 @@ MoveCommand(type="TRAVEL", cmd="G0")
 travel_feed_mm_s
 ```
 
-默认是 `10 mm/s`。空走不产生挤出：
+默认是 `10 mm/s`；external-NPZ 转换入口要求该值有限且大于 `0`。每条路径 reset + anchor 后，空走不产生挤出并保持零基线：
 
 ```text
 delta_e = 0

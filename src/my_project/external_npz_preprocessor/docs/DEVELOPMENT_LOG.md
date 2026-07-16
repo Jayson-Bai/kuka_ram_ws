@@ -61,3 +61,22 @@ python3 -m pytest src/my_project/external_npz_preprocessor/test -q
 python3 -m py_compile src/my_project/external_npz_preprocessor/external_npz_preprocessor/*.py
 colcon build --packages-select external_npz_preprocessor
 ```
+
+## 2026-07-16 Per-Path Extrusion Boundary and Prime Settle
+
+- Added global `prime_settle_s`, default `0.5 s`, to JSON persistence, CLI, standalone UI, and formal-print UI. Legacy JSON defaults to `0.5 s`; zero disables settle, and invalid non-finite/negative values are rejected.
+- Every external-NPZ printable path now ends with `external_npz_path_reset` plus one-`dt` `external_npz_reset_anchor`, including primeline and the final path.
+- Resin ordering is print, normal retract, path reset, E=0 anchor, then optional E=0 travel.
+- Fiber ordering is print, CUT lift/wait/safety retract, path reset, E=0 anchor, then optional E=0 travel.
+- The next path primes only after travel reaches its start pose, then waits `prime_settle_s` before printing.
+- Existing tool-change reset placement remains unchanged. Only the exact internal reset-anchor marker changes exporter E baselining; ordinary `ExtrudeWait`, GCode, RSI, and UART protocol syntax remain unchanged.
+- Added converter, exporter, formal UI, JSON/CLI, fiber end-to-end, ordinary-hold isolation, and GCode reset regression coverage.
+
+Verification targets:
+
+```bash
+python3 -m pytest -q src/my_project/external_npz_preprocessor/test
+python3 -m pytest -q src/my_project/gcode_planner/test/test_extrude_reset_payload.py
+colcon build --packages-up-to path_processing_core external_npz_preprocessor gcode_planner uart_bridge control_center
+colcon test --packages-select path_processing_core external_npz_preprocessor gcode_planner uart_bridge control_center
+```

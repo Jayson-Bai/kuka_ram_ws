@@ -43,6 +43,8 @@ data/external_npz_preprocessor/print_params.json
 
 启动 UI 时会自动读取该文件。所有路径都基于项目共享 data 根目录推导，不在代码中写死工作区绝对路径。
 
+`prime_settle_s` 是一项全局 external-NPZ 参数，默认 `0.5 s`。它会持久化到上述 `print_params.json`，并由 CLI、独立 UI 和正式打印 UI 暴露；旧 JSON 缺少该字段时使用 `0.5 s`。设置为 `0` 只关闭预挤出后的稳定等待，负数、`NaN` 和无穷值会被拒绝。`travel_feed_mm_s` 在 external-NPZ 转换入口必须是有限且大于 `0` 的值。
+
 主要默认值：
 
 - 树脂固定线宽：`2.0 mm`，不允许用户输入
@@ -51,6 +53,7 @@ data/external_npz_preprocessor/print_params.json
 - 纤维层高：`0.1 mm`，作为工艺参考
 - 树脂/纤维打印速度：`10 mm/s`
 - 空走速度：`10 mm/s`
+- 全局预挤出稳定等待：`0.5 s`
 - 树脂/纤维温度：`250 C`
 - 树脂/纤维风扇：默认常开
 - 纤维默认挤出倍率：`1.0`，表示纤维进给速度与 TCP 移动速度一致
@@ -74,7 +77,16 @@ source NPZ
 -> system NPZ
 ```
 
-preprocessor 会在转换开始处插入双喷头风扇/加热事件，在工具切换后插入挤出量重置。整件第一条打印路径前先插入一次初始回抽，再执行预挤出；后续树脂/纤维路径打印前只插入预挤出等待。树脂路径打印完成后只插入回抽等待。纤维路径末端只插入语义级 `CUT` 命令，`CUT` 展开后先做 Z 向安全抬升并同步增加同距离 E，再执行等量剪切安全回抽，然后 travel 到下一条路径起点，最后执行下一条路径自己的预挤出。travel 段本身不插入回抽或预挤出。剪切事件、等待补足、安全回抽、短线段折线连续采样、偏置补偿和 NPZ 字段写入都由 `path_processing_core.npz_exporter` 统一完成。
+preprocessor 会在转换开始处插入双喷头风扇/加热事件，并保留工具切换后的既有挤出量重置。到达每条可打印路径起点后，统一执行 `prime -> 可选 prime_settle -> PRINT`；整件第一条可打印路径还会在 prime 前执行一次既有初始回抽。每条路径的结束边界为：
+
+```text
+树脂: PRINT -> normal retract -> path reset -> one-cycle E=0 anchor -> optional travel(E=0)
+纤维: PRINT -> CUT/lift/wait/safety retract -> path reset -> one-cycle E=0 anchor -> optional travel(E=0)
+```
+
+这套规则覆盖转换器生成的 primeline、所有源路径和没有后续 travel 的最终路径。每个路径边界后 converter-side `current_e` 都设为 `0`，下一条路径在到达起点后从零计算自己的 prime。travel 命令不携带 prime/retract，导出的 travel 行保持 `E=0`。剪切展开、事件编码、短线段折线连续采样、偏置补偿和 NPZ 字段写入仍由 `path_processing_core.npz_exporter` 统一完成。
+
+该更新只改变 external-NPZ adapter/exporter 的命令与导出边界；外部源 NPZ schema、GCode 行为以及 RSI/UART 协议语法均未改变。
 
 ## 模板与测试
 

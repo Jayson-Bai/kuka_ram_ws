@@ -23,6 +23,7 @@ The source NPZ provides geometry only. Extrusion is derived from material proces
 - Fiber retract: `10 mm @ 5 mm/s`
 - Resin and fiber fans: always on by default
 - Travel speed: `10 mm/s`
+- Global prime settle: `0.5 s`
 - Default ABC: `0, 0, 0`
 
 ## Z Handling
@@ -66,7 +67,8 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 
 ## Shared Parameters
 
-- `travel_feed_mm_s`: feed speed for non-print travel moves.
+- `travel_feed_mm_s`: feed speed for non-print travel moves; external-NPZ conversion requires a finite value greater than zero.
+- `prime_settle_s`: global stationary wait after every non-zero prime; default `0.5 s`, and `0` disables only the settle.
 - `default_a/default_b/default_c`: pose values appended to Nx3 source paths.
 - `dt`: sample period forwarded to `npz_exporter`.
 - `cut_lift_mm`: Z lift distance after a fiber `CUT`; default `20.0`.
@@ -74,9 +76,16 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 
 ## Prime and Retract
 
-Prime/retract defaults come from the existing test-mode UI values. The first print path in the whole part gets an initial `retract` before its `prime`. Later resin and fiber paths get `prime` immediately before printing; they rely on the previous path's post-print retract or fiber cut safety retract. Resin paths get `retract` immediately after printing. Fiber paths emit `CUT` after printing and let the exporter perform cut lift with matched E increase, wait completion, and an equal cut safety retract before any travel to the next fiber path. The next path then travels to its start pose first and runs its own `prime`; travel segments do not carry prime/retract waits.
+Prime/retract defaults come from the existing test-mode UI values. The whole part's first printable path keeps the one-time initial `retract`. Before every printable path, after travel has reached the start pose, the order is `prime -> optional prime_settle -> PRINT`. A zero prime length emits neither prime nor settle.
 
-The converter represents these as `ExtrudeWait` commands so `npz_exporter` remains the only system NPZ writer. `G92 E0` / `ResetECommand` is inserted after tool changes, matching the existing GCode tool-change placement, while E continues accumulating across consecutive paths using the same tool.
+`prime_settle_s` is persisted in `print_params.json` and exposed through the CLI, standalone UI, and formal-print UI. Legacy JSON without the field uses `0.5 s`; `0` disables only the settle, while negative, `NaN`, and infinite values are rejected. With `dt=0.004 s`, the default `0.5 s` settle becomes exactly 125 stationary rows with unchanged XYZ and E.
+
+Every printable path, including the generated primeline and final path, ends at an explicit E boundary:
+
+- Resin: `PRINT -> retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
+- Fiber: `PRINT -> CUT/lift/wait/safety retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
+
+The existing tool-change `G92 E0` / `ResetECommand` remains unchanged and is additive to the per-path reset. The reset event is exported at the old E value; only the exact internal `external_npz_reset_anchor` marker makes the following one-`dt` row start at `E=0`. Converter-side `current_e` is then zero, travel remains at `E=0`, and the next destination prime is computed from zero. Ordinary `ExtrudeWait` and GCode behavior are unchanged.
 
 ## Persistent Parameter JSON
 

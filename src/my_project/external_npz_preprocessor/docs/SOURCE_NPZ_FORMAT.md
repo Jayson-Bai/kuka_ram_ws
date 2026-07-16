@@ -192,7 +192,13 @@ SourceJob
 | `R` | 树脂 | `T1` | 系统树脂工具 |
 | `F` | 纤维 | `T0` | 系统纤维工具 |
 
-每条路径会转成打印段。整件第一条打印路径前先插入一次初始回抽，再执行预挤出；后续树脂/纤维路径打印前只插入预挤出等待。树脂路径打印完成后只插入回抽等待；纤维路径打印完成后转换器只插入语义级 `CUT` 命令。travel 段本身不插入回抽或预挤出；最终的 `cut` 事件、剪切抬升、等待补足和安全回抽由 `path_processing_core.npz_exporter.export_npz()` 统一生成。
+每条源路径会转成独立打印段。整件第一条可打印路径在 prime 前保留一次初始回抽；每条路径到达起点后执行 `prime -> 可选 prime_settle -> PRINT`。
+
+树脂路径结束顺序为 `PRINT -> retract -> path reset -> one-cycle E=0 anchor`。纤维路径先插入语义级 `CUT`；`path_processing_core.npz_exporter.export_npz()` 展开 cut 事件、剪切抬升、等待补足和等量安全回抽后，再执行 `path reset -> one-cycle E=0 anchor`。如果还有下一条路径，travel 在 anchor 之后执行并保持 `E=0`，到达目的点后才执行下一条 prime 和 settle。
+
+该边界覆盖 converter 生成的 primeline、所有源路径和最终路径。路径 reset 与工具切换 reset 同时保留；reset 事件行仍是旧 E，只有精确内部 `external_npz_reset_anchor` 行从 `E=0` 导出。
+
+这些规则属于加载后的命令生成和系统 NPZ 导出行为，不改变本文定义的外部源 NPZ schema。源文件生成方不需要增加 E、reset、anchor 或 settle 字段；`layer_xxxx_R/F` 的 key、shape、列和单位约束保持不变。
 
 ## Validation Failures
 
