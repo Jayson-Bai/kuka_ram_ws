@@ -143,7 +143,14 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                     line += 1
                 initial_print_prepare_done = True
 
-            for wait in _path_prime_waits(material_path.material, params, line, layer.index, subtype):
+            for wait in _path_prime_waits(
+                material_path.material,
+                params,
+                line,
+                layer.index,
+                subtype,
+                first_pose,
+            ):
                 commands.append(wait)
                 current_e += wait.delta_e
                 line += 1
@@ -190,6 +197,16 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                     line += 1
 
             current_pose = previous_pose
+            for boundary in _path_reset_commands(
+                params,
+                line,
+                layer.index,
+                subtype,
+                current_pose,
+            ):
+                commands.append(boundary)
+                line += 1
+            current_e = 0.0
 
     return commands
 
@@ -233,6 +250,7 @@ def _path_prime_waits(
     line: int,
     layer: int,
     subtype: str,
+    pose: Position,
 ) -> list[ExtrudeWait]:
     process = _process_params_for_material(material, params)
     prime = _make_extrude_wait(
@@ -242,8 +260,67 @@ def _path_prime_waits(
         layer=layer,
         subtype=subtype,
         raw="external_npz_prime",
+        pose=pose,
     )
-    return [prime] if prime is not None else []
+    if prime is None:
+        return []
+
+    waits = [prime]
+    settle_s = float(params.prime_settle_s)
+    if settle_s > 0.0:
+        waits.append(
+            _wait_at_pose(
+                ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=settle_s,
+                    delta_e=0.0,
+                    feedrate=prime.feedrate,
+                    line=line + 1,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="external_npz_prime_settle",
+                ),
+                pose,
+            )
+        )
+    return waits
+
+
+def _path_reset_commands(
+    params: ProcessParams,
+    line: int,
+    layer: int,
+    subtype: str,
+    pose: Position,
+) -> list[ResetECommand | ExtrudeWait]:
+    reset = ResetECommand(
+        type="RESET_E",
+        val=0.0,
+        line=line,
+        layer=layer,
+        subtype=subtype,
+        raw="external_npz_path_reset",
+        pose=pose,
+    )
+    anchor = _wait_at_pose(
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=float(params.dt),
+            delta_e=0.0,
+            feedrate=float(params.travel_feed_mm_s) * 60.0,
+            line=line + 1,
+            layer=layer,
+            subtype=subtype,
+            raw="external_npz_reset_anchor",
+        ),
+        pose,
+    )
+    return [reset, anchor]
+
+
+def _wait_at_pose(wait: ExtrudeWait, pose: Position) -> ExtrudeWait:
+    setattr(wait, "pose", pose)
+    return wait
 
 
 def _path_retract_waits(
@@ -273,12 +350,13 @@ def _make_extrude_wait(
     layer: int,
     subtype: str,
     raw: str,
+    pose: Position | None = None,
 ) -> ExtrudeWait | None:
     if abs(delta_e) <= _EPS:
         return None
     if speed_mm_s <= 0.0:
         raise ValueError("extrude wait speed must be > 0")
-    return ExtrudeWait(
+    wait = ExtrudeWait(
         type="EXTRUDE_WAIT",
         wait_sec=abs(delta_e) / speed_mm_s,
         delta_e=delta_e,
@@ -288,6 +366,7 @@ def _make_extrude_wait(
         subtype=subtype,
         raw=raw,
     )
+    return _wait_at_pose(wait, pose) if pose is not None else wait
 
 
 def _print_moves_from_positions(
