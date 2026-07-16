@@ -71,7 +71,7 @@ def test_cut_event_uses_trigger_seq_and_is_nonblocking():
     assert "current_event_.reset()" in after_write
 
     completion = src.split("void check_event_completion()", 1)[1].split(
-        "void send_extrude_command", 1
+        "bool write_line", 1
     )[0]
     assert 'else if (ev.event_type == "cut")' not in completion
     assert "current_event_ack_received_ && current_event_done_received_" not in completion
@@ -88,14 +88,23 @@ def test_heartbeat_does_not_forward_e_while_event_is_pending():
     assert "bool has_pending_event() const" in src
 
 
-def test_heartbeat_skips_unchanged_extrusion_values():
+def test_heartbeat_prepares_writes_commits_and_resets_forwarder_state():
     src = _source()
 
     heartbeat = src.split("void on_heartbeat(const RsiHeartBeat & hb)", 1)[1].split(
         "void read_loop", 1
     )[0]
-    assert "should_forward_extrude" in heartbeat
-    assert "send_extrude_command" in heartbeat
-    assert heartbeat.index("should_forward_extrude") < heartbeat.index("send_extrude_command")
-    assert "last_sent_e_valid_" in src
-    assert "last_sent_e_abs_" in src
+    assert "extrusion_forwarder_->prepare" in heartbeat
+    assert "write_line(candidate.line)" in heartbeat
+    assert "extrusion_forwarder_->commit(candidate)" in heartbeat
+    assert heartbeat.index("extrusion_forwarder_->prepare") < heartbeat.index(
+        "write_line(candidate.line)"
+    )
+    assert heartbeat.index("write_line(candidate.line)") < heartbeat.index(
+        "extrusion_forwarder_->commit(candidate)"
+    )
+
+    reset = src.split("void reset_extrude_forward_state()", 1)[1].split(
+        "void on_heartbeat", 1
+    )[0]
+    assert "extrusion_forwarder_->reset()" in reset

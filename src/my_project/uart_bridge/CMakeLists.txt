@@ -41,6 +41,10 @@ if(BUILD_TESTING)
     test/test_extrude_reset_handshake.py
   )
   ament_add_pytest_test(
+    test_uart_extrusion_boundary_contract
+    test/test_uart_extrusion_boundary_contract.py
+  )
+  ament_add_pytest_test(
     test_temperature_ready_threshold
     test/test_temperature_ready_threshold.py
   )

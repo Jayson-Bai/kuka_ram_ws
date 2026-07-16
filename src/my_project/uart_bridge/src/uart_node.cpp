@@ -5,7 +5,9 @@
 // 发布接收到的打印头各模块状态消息，发布READY消息
 // =============================================================
 
+#include "uart_bridge/extrusion_wire.hpp"
 #include <rclcpp/rclcpp.hpp>
+#include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
 
 #include <std_msgs/msg/string.hpp>
@@ -18,11 +20,11 @@
 #include <array>
 #include <thread>
 #include <atomic>
+#include <memory>
 #include <optional>
 #include <mutex>
 #include <sstream>
 #include <cmath>
-#include <limits>
 
 using boost::asio::io_context;
 using boost::asio::serial_port;
@@ -78,9 +80,7 @@ private:
   std::string recv_buf_;
   std::mutex serial_write_mutex_;
   std::mutex extrude_forward_mutex_;
-  bool last_sent_e_valid_{false};
-  int32_t last_sent_e_tool_id_{0};
-  double last_sent_e_abs_{0.0};
+  std::unique_ptr<uart_bridge::ExtrusionForwarder> extrusion_forwarder_;
   std::atomic<double> extrude_scale_{1.0};
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
@@ -94,6 +94,16 @@ public:
     port_ = declare_parameter<std::string>("port", "/dev/ttyUSB0");
     baudrate_ = declare_parameter<int>("baudrate", 115200);
     extrude_scale_.store(declare_parameter<double>("extrude_scale", 1.0));
+    rcl_interfaces::msg::ParameterDescriptor extrusion_wire_mode_descriptor;
+    extrusion_wire_mode_descriptor.read_only = true;
+    const auto extrusion_wire_mode = declare_parameter<std::string>(
+      "extrusion_wire_mode", "canonical_v1", extrusion_wire_mode_descriptor);
+    const auto extrusion_mode =
+      uart_bridge::parse_extrusion_wire_mode(extrusion_wire_mode);
+    extrusion_forwarder_ = std::make_unique<uart_bridge::ExtrusionForwarder>(extrusion_mode);
+    RCLCPP_INFO(
+      get_logger(), "UART extrusion wire mode: %s",
+      uart_bridge::extrusion_wire_mode_name(extrusion_mode));
     param_cb_ = add_on_set_parameters_callback(
       [this](const std::vector<rclcpp::Parameter> & params) {
         for (const auto & p : params) {
@@ -296,31 +306,10 @@ private:
     return current_event_.has_value();
   }
 
-  bool should_forward_extrude(int32_t tool_id, double extrude_abs)
-  {
-    constexpr double E_EPS = 1e-9;
-    std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
-    if (!last_sent_e_valid_ && std::abs(extrude_abs) <= E_EPS) {
-      return false;
-    }
-    if (last_sent_e_valid_ &&
-      last_sent_e_tool_id_ == tool_id &&
-      std::abs(last_sent_e_abs_ - extrude_abs) <= E_EPS)
-    {
-      return false;
-    }
-    last_sent_e_valid_ = true;
-    last_sent_e_tool_id_ = tool_id;
-    last_sent_e_abs_ = extrude_abs;
-    return true;
-  }
-
   void reset_extrude_forward_state()
   {
     std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
-    last_sent_e_valid_ = false;
-    last_sent_e_tool_id_ = 0;
-    last_sent_e_abs_ = 0.0;
+    extrusion_forwarder_->reset();
   }
 
   void on_heartbeat(const RsiHeartBeat & hb) //心跳触发挤出
@@ -332,10 +321,29 @@ private:
     }
     const double scale = extrude_scale_.load();
     const double scaled = hb.extrude_abs * scale;
-    if (!should_forward_extrude(hb.tool_id, scaled)) {
+    std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
+    const auto prepared = extrusion_forwarder_->prepare(hb.seq_used, hb.tool_id, scaled);
+    if (
+      prepared.decision == uart_bridge::ExtrusionDecision::RejectNonFinite ||
+      prepared.decision == uart_bridge::ExtrusionDecision::RejectOutOfRange)
+    {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(),
+        *get_clock(),
+        2000,
+        "拒绝挤出值：seq=%u tool=%d value=%.17g",
+        hb.seq_used,
+        hb.tool_id,
+        scaled);
       return;
     }
-    send_extrude_command(hb.seq_used, hb.tool_id, static_cast<float>(scaled));
+    if (prepared.decision != uart_bridge::ExtrusionDecision::Send) {
+      return;
+    }
+    const auto candidate = prepared.candidate.value();
+    if (write_line(candidate.line)) {
+      extrusion_forwarder_->commit(candidate);
+    }
   }
 
   void read_loop()  //阻塞读取MCU状态包
@@ -520,27 +528,24 @@ private:
     }
   }
 
-  void send_extrude_command(uint32_t seq_used, int tool_id, float extrude_abs)
-  {
-    std::ostringstream oss;
-    oss << "E " << seq_used << " " << tool_id << " " << extrude_abs << "\n";     //  mm
-    write_line(oss.str());
-  }
-
-  void write_line(const std::string & line)
+  bool write_line(const std::string & line)
   {
     publish_uart_log("TX", line);
     std::lock_guard<std::mutex> lk(serial_write_mutex_);
     boost::system::error_code ec;
-    boost::asio::write(serial_, boost::asio::buffer(line), ec);
-    if (ec) {
+    const std::size_t written = boost::asio::write(serial_, boost::asio::buffer(line), ec);
+    if (ec || written != line.size()) {
       RCLCPP_WARN_THROTTLE(
         get_logger(),
         *get_clock(),
         2000,
-        "写入失败：%s",
-        ec.message().c_str());
+        "写入失败：%s (written=%zu expected=%zu)",
+        ec ? ec.message().c_str() : "incomplete write",
+        written,
+        line.size());
+      return false;
     }
+    return true;
   }
 
   void on_print_test_command(const std::string & cmd)
