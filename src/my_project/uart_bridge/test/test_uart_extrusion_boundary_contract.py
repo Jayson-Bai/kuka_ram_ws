@@ -3,10 +3,20 @@ from pathlib import Path
 
 
 UART_NODE = Path(__file__).resolve().parents[1] / "src" / "uart_node.cpp"
+STARTUP_LAUNCH = (
+    Path(__file__).resolve().parents[2]
+    / "my_project_startup"
+    / "launch"
+    / "startup.launch.py"
+)
 
 
 def _source():
     return UART_NODE.read_text(encoding="utf-8")
+
+
+def _startup_source():
+    return STARTUP_LAUNCH.read_text(encoding="utf-8")
 
 
 def _between(source, start, end):
@@ -103,6 +113,41 @@ def test_extrusion_wire_mode_is_a_read_only_startup_parameter():
         r'\s*"canonical_v1",\s*extrusion_wire_mode_descriptor\s*\)',
         mode_setup,
     )
+
+
+def test_startup_launch_passes_extrusion_wire_mode_only_to_uart_node():
+    source = _startup_source()
+    launch_configuration = (
+        'extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")'
+    )
+    uart_parameter = '"extrusion_wire_mode": extrusion_wire_mode,'
+    launch_argument_name = '"extrusion_wire_mode",'
+
+    assert source.count(launch_configuration) == 1
+
+    rsi_node = _between(source, "    rsi_node = Node(", "\n    uart_node = Node(")
+    uart_node = _between(source, "    uart_node = Node(", "\n    center_node = Node(")
+    assert "extrusion_wire_mode" not in rsi_node
+    assert uart_node.count(uart_parameter) == 1
+
+    extrude_to_abort_arguments = _between(
+        source,
+        '        DeclareLaunchArgument(\n            "extrude_scale",',
+        '        DeclareLaunchArgument(\n            "abort_lift_mm",',
+    )
+    assert extrude_to_abort_arguments.count("DeclareLaunchArgument(") == 1
+    assert re.search(
+        r'DeclareLaunchArgument\(\s*"extrusion_wire_mode",\s*'
+        r'default_value="canonical_v1",\s*'
+        r'description="[^"]*canonical_v1/legacy_v1[^"]*",\s*\)',
+        extrude_to_abort_arguments,
+    )
+
+    remainder = source
+    for expected in (launch_configuration, uart_parameter, launch_argument_name):
+        assert remainder.count(expected) == 1
+        remainder = remainder.replace(expected, "", 1)
+    assert "extrusion_wire_mode" not in remainder
 
 
 def test_reset_path_delegates_to_pure_forwarder():

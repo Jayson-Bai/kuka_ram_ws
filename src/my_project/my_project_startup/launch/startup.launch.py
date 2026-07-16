@@ -57,6 +57,7 @@ def generate_launch_description():
     port = LaunchConfiguration("port")
     baudrate = LaunchConfiguration("baudrate")
     extrude_scale = LaunchConfiguration("extrude_scale")
+    extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")
 
     rsi_node = Node(
         package="rsi_server",
@@ -87,6 +88,7 @@ def generate_launch_description():
             "port": port,
             "baudrate": baudrate,
             "extrude_scale": extrude_scale,
+            "extrusion_wire_mode": extrusion_wire_mode,
         }],
     )
 
@@ -343,6 +345,11 @@ def generate_launch_description():
             "extrude_scale",
             default_value="1.0",
             description="UART 挤出倍率（仅影响串口发送的挤出量）。",
+        ),
+        DeclareLaunchArgument(
+            "extrusion_wire_mode",
+            default_value="canonical_v1",
+            description="UART 挤出协议模式（canonical_v1/legacy_v1）。",
         ),
         DeclareLaunchArgument(
             "abort_lift_mm",
