@@ -143,6 +143,172 @@ def _decoded_event_types(data):
     return [vocab[int(value)] for value in data["event_type"]]
 
 
+def _next_src_line_group(src_lines, after_index):
+    start = next(
+        idx
+        for idx in range(after_index + 1, len(src_lines))
+        if src_lines[idx] != src_lines[after_index]
+    )
+    source = src_lines[start]
+    end = next(
+        (
+            idx
+            for idx in range(start + 1, len(src_lines))
+            if src_lines[idx] != source
+        ),
+        len(src_lines),
+    )
+    return list(range(start, end))
+
+
+def test_external_npz_reset_anchor_starts_at_zero_without_changing_ordinary_holds(
+    tmp_path,
+):
+    import numpy as np
+
+    from path_processing_core.npz_exporter import export_npz
+    from path_processing_core.types import (
+        ExtrudeWait,
+        MoveCommand,
+        Position,
+        ResetECommand,
+    )
+
+    dt = 0.004
+    hold_position = Position(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+
+    def export_after_reset(raw, filename):
+        commands = [
+            MoveCommand(
+                type="TRAVEL",
+                cmd="G0",
+                start_pos=hold_position,
+                pos=hold_position,
+                e_val=0.0,
+                delta_e=0.0,
+                feedrate=600.0,
+                line=1,
+                layer=0,
+                subtype="TRAVEL",
+                raw="establish_hold_position",
+                is_pure_state_change=False,
+            ),
+            ExtrudeWait(
+                type="EXTRUDE_WAIT",
+                wait_sec=dt,
+                delta_e=5.0,
+                feedrate=600.0,
+                line=2,
+                layer=0,
+                subtype="TRAVEL",
+                raw="accumulate_e",
+            ),
+            ResetECommand(
+                type="RESET_E",
+                val=0.0,
+                line=3,
+                layer=0,
+                subtype="TRAVEL",
+                raw="external_npz_path_reset",
+            ),
+            ExtrudeWait(
+                type="EXTRUDE_WAIT",
+                wait_sec=dt,
+                delta_e=0.0,
+                feedrate=600.0,
+                line=4,
+                layer=0,
+                subtype="TRAVEL",
+                raw=raw,
+            ),
+        ]
+        output = tmp_path / filename
+        export_npz(commands, str(output), dt=dt, enable_extrude_wait=True)
+        return np.load(output)
+
+    anchor_data = export_after_reset("external_npz_reset_anchor", "anchor.npz")
+    anchor_src_lines = _decoded_src_lines(anchor_data)
+    anchor_event_types = _decoded_event_types(anchor_data)
+    reset_idx = anchor_event_types.index("extrude_reset")
+    anchor_idx = [idx for idx, source in enumerate(anchor_src_lines) if source == "4"]
+
+    assert np.isclose(anchor_data["e"][reset_idx], 5.0)
+    assert len(anchor_idx) == 1
+    assert np.isclose(anchor_data["e"][anchor_idx[0]], 0.0)
+    for field in ("x", "y", "z", "a", "b", "c"):
+        assert np.isclose(anchor_data[field][anchor_idx[0]], anchor_data[field][reset_idx])
+
+    ordinary_data = export_after_reset("ordinary_zero_delta_hold", "ordinary.npz")
+    ordinary_src_lines = _decoded_src_lines(ordinary_data)
+    ordinary_idx = [
+        idx for idx, source in enumerate(ordinary_src_lines) if source == "4"
+    ]
+
+    assert len(ordinary_idx) == 1
+    assert np.isclose(ordinary_data["e"][ordinary_idx[0]], 5.0)
+
+
+def test_external_npz_prime_settle_exports_125_stationary_rows(tmp_path):
+    import numpy as np
+
+    from path_processing_core.npz_exporter import export_npz
+    from path_processing_core.types import ExtrudeWait, MoveCommand, Position
+
+    dt = 0.004
+    hold_position = Position(1.0, 2.0, 3.0, 4.0, 5.0, 6.0)
+    commands = [
+        MoveCommand(
+            type="TRAVEL",
+            cmd="G0",
+            start_pos=hold_position,
+            pos=hold_position,
+            e_val=0.0,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=10,
+            layer=0,
+            subtype="TRAVEL",
+            raw="establish_hold_position",
+            is_pure_state_change=False,
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=dt,
+            delta_e=2.0,
+            feedrate=600.0,
+            line=11,
+            layer=0,
+            subtype="TRAVEL",
+            raw="external_npz_prime",
+        ),
+        ExtrudeWait(
+            type="EXTRUDE_WAIT",
+            wait_sec=0.5,
+            delta_e=0.0,
+            feedrate=600.0,
+            line=12,
+            layer=0,
+            subtype="TRAVEL",
+            raw="external_npz_prime_settle",
+        ),
+    ]
+    output = tmp_path / "prime_settle.npz"
+
+    export_npz(commands, str(output), dt=dt, enable_extrude_wait=True)
+
+    with np.load(output) as data:
+        settle_idx = [
+            idx for idx, source in enumerate(_decoded_src_lines(data)) if source == "12"
+        ]
+        assert len(settle_idx) == 125
+        for field, expected in zip(
+            ("x", "y", "z"),
+            (hold_position.x, hold_position.y, hold_position.z),
+        ):
+            assert np.allclose(data[field][settle_idx], expected)
+        assert np.allclose(data["e"][settle_idx], 2.0)
+
+
 def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_travel(tmp_path):
     import json
     import numpy as np
@@ -208,11 +374,11 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     cut_e = float(data["e"][cut_idx])
     cut_z = float(data["z"][cut_idx])
 
-    first_after_cut_src = next(
-        idx for idx in range(cut_idx + 1, len(src_lines)) if src_lines[idx] != cut_src
-    )
+    reset_group = _next_src_line_group(src_lines, cut_idx)
+    assert len(reset_group) == 1
+    reset_idx = reset_group[0]
     cut_motion_idx = [
-        idx for idx in range(cut_idx + 1, first_after_cut_src) if src_lines[idx] == cut_src
+        idx for idx in range(cut_idx + 1, reset_idx) if src_lines[idx] == cut_src
     ]
 
     assert cut_motion_idx
@@ -221,19 +387,35 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.isclose(data["z"][cut_motion_idx[-1]], cut_z + 20.0)
     assert np.isclose(data["e"][cut_motion_idx[-1]], cut_e)
 
-    travel_src = src_lines[first_after_cut_src]
-    travel_idx = [
-        idx for idx in range(first_after_cut_src, len(src_lines)) if src_lines[idx] == travel_src
-    ]
+    assert event_types[reset_idx] == "extrude_reset"
+    assert np.isclose(data["e"][reset_idx], cut_e)
+    assert np.isclose(data["z"][reset_idx], cut_z + 20.0)
+
+    anchor_idx = _next_src_line_group(src_lines, reset_idx)
+    assert len(anchor_idx) == 1
+    anchor_row = anchor_idx[0]
+    assert np.isclose(data["e"][anchor_row], 0.0)
+    for field in ("x", "y", "z", "a", "b", "c"):
+        assert np.isclose(data[field][anchor_row], data[field][reset_idx])
+
+    travel_idx = _next_src_line_group(src_lines, anchor_row)
     assert travel_idx
-    assert np.isclose(data["e"][travel_idx[0]], cut_e)
-    assert np.isclose(data["e"][travel_idx[-1]], cut_e)
+    assert np.allclose(data["e"][travel_idx], 0.0)
     assert np.isclose(data["z"][travel_idx[0]], cut_z + 20.0)
     assert np.isclose(data["z"][travel_idx[-1]], cut_z)
 
-    next_prime_idx = travel_idx[-1] + 1
-    assert np.isclose(data["e"][next_prime_idx], cut_e + 6.0)
-    assert np.isclose(data["z"][next_prime_idx], cut_z)
+    prime_idx = _next_src_line_group(src_lines, travel_idx[-1])
+    assert len(prime_idx) == 1
+    assert np.isclose(data["e"][prime_idx[0]], 6.0)
+    assert np.isclose(data["z"][prime_idx[0]], cut_z)
+
+    settle_idx = _next_src_line_group(src_lines, prime_idx[-1])
+    assert np.allclose(data["e"][settle_idx], 6.0)
+    assert np.allclose(data["z"][settle_idx], cut_z)
+
+    print_idx = _next_src_line_group(src_lines, settle_idx[-1])
+    assert np.isclose(data["e"][print_idx[0]], 6.0)
+    assert np.isclose(data["z"][print_idx[0]], cut_z)
 
 
 def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
@@ -279,13 +461,17 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
     events = [event_vocab[int(value)] for value in data["event_type"]]
     non_empty_events = [event for event in events if event]
 
-    assert non_empty_events[:7] == [
+    assert non_empty_events == [
         "fan_resin",
         "fan_cf",
         "heat_resin",
         "heat_cf",
         "extrude_reset",
+        "extrude_reset",
+        "extrude_reset",
         "tool_change_cf",
+        "extrude_reset",
+        "cut",
         "extrude_reset",
     ]
     fiber_switch_idx = non_empty_events.index("tool_change_cf")

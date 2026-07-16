@@ -1180,7 +1180,7 @@ def export_npz(
             payload="",
             trigger_seq=None,
         )
-        start_e = hold_row.e
+        start_e = 0.0 if (cmd.raw or "") == "external_npz_reset_anchor" else hold_row.e
         steps = max(1, int(math.ceil(max(float(cmd.wait_sec), dt) / dt)))
         writer = _writer_for(layer, subtype, occ)
         timing.start_segment(
