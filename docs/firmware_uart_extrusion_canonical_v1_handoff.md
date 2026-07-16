@@ -98,19 +98,19 @@ ros2 launch my_project_startup startup.launch.py extrusion_wire_mode:=legacy_v1
 /bin/bash -lc 'source /opt/ros/humble/setup.bash && colcon test --packages-select uart_bridge my_project_startup --event-handlers console_direct+'
 ```
 
-结果：退出码 0，2 个包完成测试；`uart_bridge` 的 CTest 为 10/10 通过，其中 extrusion wire gtest 为 17/17 通过。`my_project_startup` 为 2 passed、1 skipped，并出现 2 条 `SelectableGroups` 弃用 warning；没有测试失败。
+结果：退出码 0，2 个包完成测试；`uart_bridge` 的 CTest 为 10/10 通过，其中 extrusion wire gtest 为 19/19 通过。`my_project_startup` 为 2 passed、1 skipped，并出现 2 条 `SelectableGroups` 弃用 warning；没有测试失败。
 
 ```bash
 /bin/bash -lc 'source /opt/ros/humble/setup.bash && colcon test-result --verbose'
 ```
 
-结果：退出码 0，`Summary: 57 tests, 0 errors, 0 failures, 5 skipped`。
+结果：退出码 0，`Summary: 59 tests, 0 errors, 0 failures, 5 skipped`。
 
 ```bash
 python3 -m pytest -q src/my_project/uart_bridge/test src/my_project/control_center/test/test_staged_pause_contract.py
 ```
 
-结果：退出码 0，`22 passed in 0.03s`。读取 `control_center` 契约测试不代表修改该包。
+结果：退出码 0，`22 passed in 0.02s`。读取 `control_center` 契约测试不代表修改该包。
 
 ```bash
 python3 -m py_compile src/my_project/my_project_startup/launch/startup.launch.py
