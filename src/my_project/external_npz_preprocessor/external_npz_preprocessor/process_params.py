@@ -68,7 +68,7 @@ class ProcessParams:
     primeline_x_mm: float = 0.0
     primeline_y_mm: float = -10.0
     primeline_length_mm: float = 100.0
-    prime_settle_s: float = 0.5
+    prime_settle_s: float = field(default=0.5, kw_only=True)
     dt: float = 0.004
     corner_angle_deg: float = 45.0
     corner_retreat_ratio: float = 0.65

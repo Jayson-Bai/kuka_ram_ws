@@ -116,3 +116,23 @@ def test_prime_settle_s_accepts_zero():
 def test_prime_settle_s_rejects_negative_values():
     with pytest.raises(ValueError, match=r"^prime_settle_s must be >= 0$"):
         ProcessParams(prime_settle_s=-0.001)
+
+
+def test_process_params_preserves_pre_prime_settle_positional_dt_slot():
+    params = ProcessParams(
+        ResinProcessParams(),
+        FiberProcessParams(),
+        11.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        -7.0,
+        80.0,
+        0.125,
+    )
+
+    assert params.dt == pytest.approx(0.125)
+    assert params.prime_settle_s == pytest.approx(0.5)

@@ -2016,6 +2016,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "external_cut_lift_mm": 20.0,
             "external_cut_wait_s": 15.0,
             "travel_feed_mm_s": 10.0,
+            "prime_settle_s": 0.5,
             "default_a": 0.0,
             "default_b": 0.0,
             "default_c": 0.0,
@@ -2062,6 +2063,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "fiber_retract_speed_mm_s": saved_params.fiber.retract_speed_mm_s,
                 "fiber_fan_enabled": saved_params.fiber.fan_enabled,
                 "travel_feed_mm_s": saved_params.travel_feed_mm_s,
+                "prime_settle_s": saved_params.prime_settle_s,
                 "default_a": saved_params.default_a,
                 "default_b": saved_params.default_b,
                 "default_c": saved_params.default_c,
@@ -2245,6 +2247,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         _add_external_rows(
             motion_grid,
             [
+                (
+                    "prime_settle_s",
+                    "预挤出稳定等待 s",
+                    _external_spin(external_defaults["prime_settle_s"]),
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
                 (
                     "travel_feed_mm_s",
                     "空走速度 mm/s",
@@ -4945,6 +4955,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 retract_speed_mm_s=values["fiber_retract_speed_mm_s"].value(),
             ),
             travel_feed_mm_s=values["travel_feed_mm_s"].value(),
+            prime_settle_s=values["prime_settle_s"].value(),
             default_a=values["default_a"].value(),
             default_b=values["default_b"].value(),
             default_c=values["default_c"].value(),

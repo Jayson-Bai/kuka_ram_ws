@@ -163,6 +163,11 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"左下角 X mm"' in export_section
     assert '"start_y_mm"' in export_section
     assert '"左下角 Y mm"' in export_section
+    assert '"prime_settle_s": 0.5,' in export_section
+    assert '"prime_settle_s"' in export_section
+    assert '"预挤出稳定等待 s"' in export_section
+    assert '_external_spin(external_defaults["prime_settle_s"])' in export_section
+    assert "def _external_spin(value, minimum=0.0, maximum=100000.0):" in export_section
     assert '"primeline_x_mm"' in export_section
     assert '"相对零件 X mm"' in export_section
     assert '"primeline_y_mm"' in export_section
@@ -191,6 +196,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )
     assert "def _external_npz_process_params(self, planner_params=None):" in src
     assert "def _on_save_external_npz_params(self):" in src
+    assert "path = save_print_params(self._external_npz_process_params())" in src
 
     export_method = src.split("    def _on_export_npz", 1)[1].split(
         "    def _on_export_progress", 1
@@ -205,8 +211,10 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert 'primeline_x_mm=values["primeline_x_mm"].value()' in src
     assert 'primeline_y_mm=values["primeline_y_mm"].value()' in src
     assert 'primeline_length_mm=values["primeline_length_mm"].value()' in src
+    assert 'prime_settle_s=values["prime_settle_s"].value()' in src
     assert '"fiber_start_accel_s": saved_params.fiber.start_accel_s' in src
     assert '"primeline_x_mm": saved_params.primeline_x_mm' in src
+    assert '"prime_settle_s": saved_params.prime_settle_s' in src
     assert 'external_cut_lift_mm = params["cut_lift_mm"]' in src
     assert 'external_cut_wait_s = params["cut_wait_s"]' in src
     assert 'self._external_npz_inputs["external_cut_lift_mm"].value()' in src
