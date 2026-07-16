@@ -82,7 +82,8 @@ class ProcessParams:
     max_fit_points_per_segment: int = 20000
 
     def __post_init__(self) -> None:
-        if float(self.prime_settle_s) < 0.0:
+        prime_settle_s = float(self.prime_settle_s)
+        if not math.isfinite(prime_settle_s) or prime_settle_s < 0.0:
             raise ValueError("prime_settle_s must be >= 0")
 
     @property

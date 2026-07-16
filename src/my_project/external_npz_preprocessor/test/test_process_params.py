@@ -136,3 +136,16 @@ def test_process_params_preserves_pre_prime_settle_positional_dt_slot():
 
     assert params.dt == pytest.approx(0.125)
     assert params.prime_settle_s == pytest.approx(0.5)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        pytest.param(math.nan, id="nan"),
+        pytest.param(math.inf, id="positive-infinity"),
+        pytest.param(-math.inf, id="negative-infinity"),
+    ],
+)
+def test_prime_settle_s_rejects_non_finite_values(value):
+    with pytest.raises(ValueError, match=r"^prime_settle_s must be >= 0$"):
+        ProcessParams(prime_settle_s=value)
