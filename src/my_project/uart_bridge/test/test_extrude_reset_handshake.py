@@ -31,7 +31,9 @@ def test_print_test_reset_does_not_fake_event_completion():
     assert '"/print_test/rsi_command"' in src
     assert 'on_print_test_command(msg->data)' in src
     assert 'void on_print_test_command(const std::string & cmd)' in src
-    reset_block = src.split('void on_print_test_command(const std::string & cmd)', 1)[1].split('void on_system_command', 1)[0]
+    reset_block = src.split(
+        'void on_print_test_command(const std::string & cmd)', 1
+    )[1].split('void on_system_command', 1)[0]
     assert 'cmd == "RESET"' in reset_block
     assert 'current_event_ack_received_ = false' in reset_block
     assert 'current_event_done_received_ = false' in reset_block
@@ -84,7 +86,6 @@ def test_heartbeat_does_not_forward_e_while_event_is_pending():
     assert "has_pending_event()" in heartbeat
     assert "return;" in heartbeat.split("has_pending_event()", 1)[1].split("}", 1)[0]
     assert "bool has_pending_event() const" in src
-
 
 
 def test_heartbeat_skips_unchanged_extrusion_values():
