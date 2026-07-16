@@ -70,6 +70,26 @@ def _job_with_paths(*, resin_paths=(), fiber_paths=()):
     )
 
 
+@pytest.mark.parametrize(
+    "travel_feed_mm_s",
+    [0.0, -1.0, float("nan"), float("inf"), float("-inf")],
+    ids=["zero", "negative", "nan", "positive-infinity", "negative-infinity"],
+)
+def test_rejects_non_finite_or_non_positive_travel_feed(travel_feed_mm_s):
+    job = _job_with_paths(
+        resin_paths=[_straight_path("R", 0, 0.0, 10.0)]
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=r"^travel_feed_mm_s must be finite and > 0$",
+    ):
+        source_job_to_parsed_commands(
+            job,
+            ProcessParams(travel_feed_mm_s=travel_feed_mm_s),
+        )
+
+
 def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_overriding_source_z():
     job = SourceJob(
         meta={},
@@ -355,7 +375,6 @@ def test_resin_path_end_resets_then_anchors_before_travel_with_zero_e():
     assert anchor.wait_sec == pytest.approx(0.004)
     assert anchor.delta_e == pytest.approx(0.0)
     assert anchor.feedrate == pytest.approx(600.0)
-    assert anchor.pose == curve.control_points[-1]
     assert isinstance(travel, MoveCommand)
     assert travel.raw == "external_npz_travel"
     assert travel.e_val == pytest.approx(0.0)
@@ -386,18 +405,17 @@ def test_next_path_primes_from_zero_at_destination_then_settles_before_print():
     assert isinstance(prime, ExtrudeWait)
     assert prime.raw == "external_npz_prime"
     assert prime.delta_e == pytest.approx(params.resin.prime_length_mm)
-    assert prime.pose == travel.pos == curve.start_pos
+    assert travel.pos == curve.start_pos
     assert isinstance(settle, ExtrudeWait)
     assert settle.raw == "external_npz_prime_settle"
     assert settle.wait_sec == pytest.approx(0.75)
     assert settle.delta_e == pytest.approx(0.0)
     assert settle.feedrate == pytest.approx(prime.feedrate)
-    assert settle.pose == prime.pose
     assert settle.line == prime.line + 1
     assert curve.e_val == pytest.approx(prime.delta_e + curve.delta_e)
 
 
-def test_path_reset_pair_count_includes_primeline_and_final_printable_path():
+def test_each_printable_path_has_reset_pair_including_primeline_and_final_path():
     job = _job_with_paths(
         resin_paths=[
             _straight_path("R", 0, 0.0, 10.0),
@@ -412,27 +430,53 @@ def test_path_reset_pair_count_includes_primeline_and_final_printable_path():
         for cmd in commands
         if isinstance(cmd, GlobalCurveCommand) and cmd.type == "PRINT"
     ]
-    path_resets = [
-        cmd
-        for cmd in commands
-        if isinstance(cmd, ResetECommand)
-        and cmd.raw == "external_npz_path_reset"
-    ]
-    reset_anchors = [
-        cmd
-        for cmd in commands
-        if isinstance(cmd, ExtrudeWait)
-        and cmd.raw == "external_npz_reset_anchor"
-    ]
-
     assert len(printable_paths) == 4
-    assert len(path_resets) == len(printable_paths)
-    assert len(reset_anchors) == len(printable_paths)
-    assert all(
-        commands[commands.index(reset) + 1] is anchor
-        for reset, anchor in zip(path_resets, reset_anchors)
-    )
-    assert commands[-2:] == [path_resets[-1], reset_anchors[-1]]
+    boundary_pairs = []
+    boundary_table = []
+    for path_number, curve in enumerate(printable_paths):
+        path_index = commands.index(curve)
+        next_path_index = (
+            commands.index(printable_paths[path_number + 1])
+            if path_number + 1 < len(printable_paths)
+            else len(commands)
+        )
+        path_tail = commands[path_index + 1:next_path_index]
+        resets = [
+            cmd
+            for cmd in path_tail
+            if isinstance(cmd, ResetECommand)
+            and cmd.raw == "external_npz_path_reset"
+        ]
+        anchors = [
+            cmd
+            for cmd in path_tail
+            if isinstance(cmd, ExtrudeWait)
+            and cmd.raw == "external_npz_reset_anchor"
+        ]
+
+        assert len(resets) == len(anchors) == 1
+        reset, anchor = resets[0], anchors[0]
+        assert path_tail.index(anchor) == path_tail.index(reset) + 1
+        assert reset.pose == curve.control_points[-1]
+        boundary_pairs.append((reset, anchor))
+        boundary_table.append(
+            (
+                "primeline"
+                if curve.raw == "external_npz_primeline"
+                else curve.subtype,
+                reset.raw,
+                anchor.raw,
+            )
+        )
+
+    assert boundary_table == [
+        ("primeline", "external_npz_path_reset", "external_npz_reset_anchor"),
+        ("RESIN_PRINT", "external_npz_path_reset", "external_npz_reset_anchor"),
+        ("RESIN_PRINT", "external_npz_path_reset", "external_npz_reset_anchor"),
+        ("FIBER_PRINT", "external_npz_path_reset", "external_npz_reset_anchor"),
+    ]
+    assert commands[-2:] == list(boundary_pairs[-1])
+    assert [cmd.line for cmd in commands] == list(range(len(commands)))
 
 
 def test_zero_prime_settle_s_keeps_prime_without_settle():
@@ -477,7 +521,7 @@ def test_zero_prime_length_suppresses_prime_and_settle():
     )
 
 
-def test_fiber_cut_sequence_is_followed_by_path_boundary_before_travel():
+def test_each_fiber_path_primes_then_cuts_and_resets():
     job = SourceJob(
         meta={},
         layers=[
@@ -508,13 +552,33 @@ def test_fiber_cut_sequence_is_followed_by_path_boundary_before_travel():
         ],
     )
 
-    commands = source_job_to_parsed_commands(job, ProcessParams())
+    params = ProcessParams()
+    commands = source_job_to_parsed_commands(job, params)
     fiber_paths = [
         cmd
         for cmd in commands
         if isinstance(cmd, GlobalCurveCommand)
         and cmd.subtype == "FIBER_PRINT"
     ]
+    fiber_prepare_table = []
+    for path_number, fiber_path in enumerate(fiber_paths):
+        path_index = commands.index(fiber_path)
+        prime, settle = commands[path_index - 2:path_index]
+
+        assert isinstance(prime, ExtrudeWait)
+        assert isinstance(settle, ExtrudeWait)
+        assert prime.delta_e == pytest.approx(params.fiber.prime_length_mm)
+        assert settle.wait_sec == pytest.approx(params.prime_settle_s)
+        assert [prime.line, settle.line, fiber_path.line] == list(
+            range(prime.line, prime.line + 3)
+        )
+        fiber_prepare_table.append((path_number, prime.raw, settle.raw))
+
+    assert fiber_prepare_table == [
+        (0, "external_npz_prime", "external_npz_prime_settle"),
+        (1, "external_npz_prime", "external_npz_prime_settle"),
+    ]
+
     first_fiber_index = commands.index(fiber_paths[0])
     curve, cut, reset, anchor, travel = commands[
         first_fiber_index:first_fiber_index + 5
@@ -529,7 +593,6 @@ def test_fiber_cut_sequence_is_followed_by_path_boundary_before_travel():
     assert reset.pose == curve.control_points[-1]
     assert isinstance(anchor, ExtrudeWait)
     assert anchor.raw == "external_npz_reset_anchor"
-    assert anchor.pose == reset.pose
     assert isinstance(travel, MoveCommand)
     assert travel.raw == "external_npz_travel"
     assert travel.e_val == pytest.approx(0.0)
