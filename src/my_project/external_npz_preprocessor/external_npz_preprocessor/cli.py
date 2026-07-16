@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--default-a", type=float, default=0.0)
     parser.add_argument("--default-b", type=float, default=0.0)
     parser.add_argument("--default-c", type=float, default=0.0)
+    parser.add_argument("--prime-settle-s", type=float, default=0.5)
     parser.add_argument("--dt", type=float, default=0.004)
     parser.add_argument("--cut-lift-mm", type=float, default=20.0)
     parser.add_argument("--cut-wait-s", type=float, default=15.0)
@@ -72,6 +73,7 @@ def params_from_args(args) -> ProcessParams:
         default_a=args.default_a,
         default_b=args.default_b,
         default_c=args.default_c,
+        prime_settle_s=args.prime_settle_s,
         dt=args.dt,
     )
 

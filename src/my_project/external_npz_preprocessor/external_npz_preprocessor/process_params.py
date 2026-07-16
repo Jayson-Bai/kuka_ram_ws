@@ -68,6 +68,7 @@ class ProcessParams:
     primeline_x_mm: float = 0.0
     primeline_y_mm: float = -10.0
     primeline_length_mm: float = 100.0
+    prime_settle_s: float = 0.5
     dt: float = 0.004
     corner_angle_deg: float = 45.0
     corner_retreat_ratio: float = 0.65
@@ -79,6 +80,10 @@ class ProcessParams:
     density: int = 0
     degree: int = 3
     max_fit_points_per_segment: int = 20000
+
+    def __post_init__(self) -> None:
+        if float(self.prime_settle_s) < 0.0:
+            raise ValueError("prime_settle_s must be >= 0")
 
     @property
     def default_abc(self) -> tuple[float, float, float]:

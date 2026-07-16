@@ -77,6 +77,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_fan = QtWidgets.QCheckBox()
         self.fiber_fan.setChecked(True)
         self.travel_feed = self._spin(10.0)
+        self.prime_settle_s = self._spin(0.5)
         self.default_a = self._spin(0.0, minimum=-360.0, maximum=360.0)
         self.default_b = self._spin(0.0, minimum=-360.0, maximum=360.0)
         self.default_c = self._spin(0.0, minimum=-360.0, maximum=360.0)
@@ -100,8 +101,9 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             ("树脂回抽长度 mm", self.resin_retract_length, "纤维回抽长度 mm", self.fiber_retract_length),
             ("树脂回抽速度 mm/s", self.resin_retract_speed, "纤维回抽速度 mm/s", self.fiber_retract_speed),
             ("树脂风扇", self.resin_fan, "纤维风扇", self.fiber_fan),
-            ("空走速度 mm/s", self.travel_feed, "默认 A", self.default_a),
+            ("预挤出稳定等待 s", self.prime_settle_s, "空走速度 mm/s", self.travel_feed),
             ("左下角 X mm", self.start_x, "左下角 Y mm", self.start_y),
+            ("", QtWidgets.QLabel(""), "默认 A", self.default_a),
             ("", QtWidgets.QLabel(""), "默认 B", self.default_b),
             ("", QtWidgets.QLabel(""), "默认 C", self.default_c),
         ]
@@ -224,6 +226,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_retract_speed.setValue(params.fiber.retract_speed_mm_s)
         self.fiber_fan.setChecked(params.fiber.fan_enabled)
         self.travel_feed.setValue(params.travel_feed_mm_s)
+        self.prime_settle_s.setValue(params.prime_settle_s)
         self.default_a.setValue(params.default_a)
         self.default_b.setValue(params.default_b)
         self.default_c.setValue(params.default_c)
@@ -256,6 +259,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
                 retract_speed_mm_s=self.fiber_retract_speed.value(),
             ),
             travel_feed_mm_s=self.travel_feed.value(),
+            prime_settle_s=self.prime_settle_s.value(),
             default_a=self.default_a.value(),
             default_b=self.default_b.value(),
             default_c=self.default_c.value(),

@@ -78,6 +78,9 @@ def process_params_from_dict(data: dict[str, Any]) -> ProcessParams:
         primeline_length_mm=float(
             merged.get("primeline_length_mm", defaults["primeline_length_mm"])
         ),
+        prime_settle_s=float(
+            merged.get("prime_settle_s", defaults["prime_settle_s"])
+        ),
         dt=float(merged.get("dt", defaults["dt"])),
         corner_angle_deg=float(merged.get("corner_angle_deg", defaults["corner_angle_deg"])),
         corner_retreat_ratio=float(merged.get("corner_retreat_ratio", defaults["corner_retreat_ratio"])),

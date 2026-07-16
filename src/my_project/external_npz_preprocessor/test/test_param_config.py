@@ -46,6 +46,7 @@ def test_save_and_load_print_params_round_trip(tmp_path):
         primeline_x_mm=3.0,
         primeline_y_mm=-12.0,
         primeline_length_mm=80.0,
+        prime_settle_s=0.75,
     )
 
     save_print_params(params, path)
@@ -124,3 +125,31 @@ def test_previous_external_npz_corner_retreat_default_is_migrated(tmp_path):
     assert params.corner_retreat_ratio == 0.65
     assert params.spline_max_error_mm == 0.1
     assert params.corner_blend_segments == 8
+
+
+def test_legacy_print_params_without_prime_settle_s_uses_default(tmp_path):
+    path = tmp_path / "legacy_prime_settle.json"
+    path.write_text(
+        '{"params":{"fiber":{"prime_length_mm":8.0},"travel_feed_mm_s":12.5,'
+        '"start_x_mm":30.0,"start_y_mm":40.0}}',
+        encoding="utf-8",
+    )
+
+    params = load_print_params(path)
+
+    assert params.fiber.prime_length_mm == pytest.approx(8.0)
+    assert params.travel_feed_mm_s == pytest.approx(12.5)
+    assert params.start_x_mm == pytest.approx(30.0)
+    assert params.start_y_mm == pytest.approx(40.0)
+    assert params.prime_settle_s == pytest.approx(0.5)
+
+
+def test_negative_prime_settle_s_in_json_is_rejected(tmp_path):
+    path = tmp_path / "negative_prime_settle.json"
+    path.write_text(
+        '{"params":{"prime_settle_s":-0.001}}',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"^prime_settle_s must be >= 0$"):
+        load_print_params(path)

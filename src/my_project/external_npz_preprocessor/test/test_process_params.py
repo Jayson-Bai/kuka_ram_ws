@@ -68,6 +68,7 @@ def test_default_process_params_match_current_material_setup():
     assert params.fiber.retract_speed_mm_s == 5.0
     assert params.fiber.start_accel_s == 2.0
     assert params.travel_feed_mm_s == 10.0
+    assert params.prime_settle_s == pytest.approx(0.5)
     assert params.start_x_mm == 0.0
     assert params.start_y_mm == 0.0
     assert params.corner_angle_deg == 45.0
@@ -104,3 +105,14 @@ def test_primeline_process_params_defaults_are_stable():
     assert params.primeline_x_mm == 0.0
     assert params.primeline_y_mm == -10.0
     assert params.primeline_length_mm == 100.0
+
+
+def test_prime_settle_s_accepts_zero():
+    params = ProcessParams(prime_settle_s=0.0)
+
+    assert params.prime_settle_s == pytest.approx(0.0)
+
+
+def test_prime_settle_s_rejects_negative_values():
+    with pytest.raises(ValueError, match=r"^prime_settle_s must be >= 0$"):
+        ProcessParams(prime_settle_s=-0.001)
