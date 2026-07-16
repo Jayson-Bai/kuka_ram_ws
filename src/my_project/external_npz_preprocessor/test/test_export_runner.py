@@ -224,28 +224,38 @@ def test_external_npz_reset_anchor_starts_at_zero_without_changing_ordinary_hold
         ]
         output = tmp_path / filename
         export_npz(commands, str(output), dt=dt, enable_extrude_wait=True)
-        return np.load(output)
+        return output
 
-    anchor_data = export_after_reset("external_npz_reset_anchor", "anchor.npz")
-    anchor_src_lines = _decoded_src_lines(anchor_data)
-    anchor_event_types = _decoded_event_types(anchor_data)
-    reset_idx = anchor_event_types.index("extrude_reset")
-    anchor_idx = [idx for idx, source in enumerate(anchor_src_lines) if source == "4"]
+    anchor_output = export_after_reset("external_npz_reset_anchor", "anchor.npz")
+    with np.load(anchor_output) as anchor_data:
+        anchor_src_lines = _decoded_src_lines(anchor_data)
+        anchor_event_types = _decoded_event_types(anchor_data)
+        reset_idx = anchor_event_types.index("extrude_reset")
+        anchor_idx = [
+            idx for idx, source in enumerate(anchor_src_lines) if source == "4"
+        ]
 
-    assert np.isclose(anchor_data["e"][reset_idx], 5.0)
-    assert len(anchor_idx) == 1
-    assert np.isclose(anchor_data["e"][anchor_idx[0]], 0.0)
-    for field in ("x", "y", "z", "a", "b", "c"):
-        assert np.isclose(anchor_data[field][anchor_idx[0]], anchor_data[field][reset_idx])
+        assert np.isclose(anchor_data["e"][reset_idx], 5.0)
+        assert len(anchor_idx) == 1
+        assert np.isclose(anchor_data["e"][anchor_idx[0]], 0.0)
+        for field in ("x", "y", "z", "a", "b", "c"):
+            assert np.isclose(
+                anchor_data[field][anchor_idx[0]],
+                anchor_data[field][reset_idx],
+            )
 
-    ordinary_data = export_after_reset("ordinary_zero_delta_hold", "ordinary.npz")
-    ordinary_src_lines = _decoded_src_lines(ordinary_data)
-    ordinary_idx = [
-        idx for idx, source in enumerate(ordinary_src_lines) if source == "4"
-    ]
+    near_match_output = export_after_reset(
+        "external_npz_reset_anchor_suffix",
+        "near_match.npz",
+    )
+    with np.load(near_match_output) as near_match_data:
+        near_match_src_lines = _decoded_src_lines(near_match_data)
+        near_match_idx = [
+            idx for idx, source in enumerate(near_match_src_lines) if source == "4"
+        ]
 
-    assert len(ordinary_idx) == 1
-    assert np.isclose(ordinary_data["e"][ordinary_idx[0]], 5.0)
+        assert len(near_match_idx) == 1
+        assert np.isclose(near_match_data["e"][near_match_idx[0]], 5.0)
 
 
 def test_external_npz_prime_settle_exports_125_stationary_rows(tmp_path):
@@ -462,33 +472,26 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
 
     convert_external_npz(source, out, ProcessParams(), calibration_path=calibration_path)
 
-    data = np.load(out)
-    event_vocab = {
-        int(value): key.decode("utf-8").rstrip("\x00")
-        for key, value in zip(data["event_type_vocab_keys"], data["event_type_vocab_vals"])
-    }
-    events = [event_vocab[int(value)] for value in data["event_type"]]
-    non_empty_events = [event for event in events if event]
+    with np.load(out) as data:
+        events = _decoded_event_types(data)
+        non_empty_events = [event for event in events if event]
 
-    assert non_empty_events == [
-        "fan_resin",
-        "fan_cf",
-        "heat_resin",
-        "heat_cf",
-        "extrude_reset",
-        "extrude_reset",
-        "extrude_reset",
-        "tool_change_cf",
-        "extrude_reset",
-        "cut",
-        "extrude_reset",
-    ]
-    fiber_switch_idx = non_empty_events.index("tool_change_cf")
-    assert non_empty_events[fiber_switch_idx + 1] == "extrude_reset"
-    assert "cut" in non_empty_events
+        assert non_empty_events == [
+            "fan_resin",
+            "fan_cf",
+            "heat_resin",
+            "heat_cf",
+            "extrude_reset",
+            "extrude_reset",
+            "extrude_reset",
+            "tool_change_cf",
+            "extrude_reset",
+            "cut",
+            "extrude_reset",
+        ]
 
-    cut_row_idx = events.index("cut")
-    assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1"
+        cut_row_idx = events.index("cut")
+        assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1"
 
 
 def test_convert_skips_fiber_startup_events_when_source_has_no_fiber_paths(tmp_path):
