@@ -96,6 +96,11 @@ raw = "external_npz_reset_anchor"
 该行不增加新的用户参数，不发送变化 E，只为事件完成后提供明确的下一轨迹点。
 普通路径随后进入 travel；最终路径则以该同步点作为最后轨迹点。
 
+现有 exporter 的普通零位移轨迹会进入七阶时间规划，实测会被扩展为约 4 秒，
+不能作为单周期同步点；而普通零增量 `ExtrudeWait` 默认会继承 reset 前的绝对 E。
+因此 exporter 只对 `raw="external_npz_reset_anchor"` 这一内部标记把等待起始 E
+设为 `0.0`。其他 `ExtrudeWait`、普通 GCode reset 和共享导出行为保持原样。
+
 ## prime_settle_s
 
 在 `ProcessParams` 增加一个全局字段：
@@ -129,6 +134,8 @@ NPZ exporter 继续使用现有 `ExtrudeWait` 展开逻辑，生成
   prime settle 命令顺序；
 - `external_npz_preprocessor/param_config.py`、CLI 和正式导出 UI：参数持久化与入口；
 - `data/external_npz_preprocessor/print_params.json`：保存默认值；
+- `path_processing_core/npz_exporter.py`：仅识别
+  `external_npz_reset_anchor`，将该单周期内部同步行导出为 `E=0`；
 - 外部 NPZ 转换/导出相关测试与文档。
 
 禁止修改 `uart_bridge`、`rsi_server`、`control_center`、消息接口和固件协议实现。
@@ -146,7 +153,8 @@ NPZ exporter 继续使用现有 `ExtrudeWait` 展开逻辑，生成
 6. `prime_settle_s=0.5`、`dt=0.004` 时生成 125 个固定 XYZ/E 行；
 7. `prime_settle_s=0` 时不生成 settle 行，负值被拒绝；
 8. 最终路径 reset 后存在 E=0 同步点，事件位于最终轨迹点之前；
-9. 现有 external NPZ、path processing、GCode reset、UART、RSI 和控制中心相关回归
+9. 普通 `ExtrudeWait` 和普通 GCode reset 不使用该内部标记，导出值保持不变；
+10. 现有 external NPZ、path processing、GCode reset、UART、RSI 和控制中心相关回归
    测试保持通过。
 
 ## Git 管理
