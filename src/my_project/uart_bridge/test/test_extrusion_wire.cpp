@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <locale>
 #include <stdexcept>
 #include <limits>
@@ -124,6 +125,26 @@ TEST(CanonicalExtrusionWire, SuppressesInitialNegativeQuantizedZero)
   EXPECT_FALSE(preparation.candidate.has_value());
 }
 
+TEST(CanonicalExtrusionWire, ForwardsNegativeQuantizedZeroAsCanonicalZero)
+{
+  uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::CanonicalV1);
+
+  const auto nonzero = forwarder.prepare(8U, 2, 1.0);
+  ASSERT_EQ(nonzero.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(nonzero.candidate.has_value());
+  ASSERT_NE(nonzero.candidate->canonical_e_nm, 0);
+  forwarder.commit(*nonzero.candidate);
+
+  const auto zero = forwarder.prepare(9U, 2, -0.0000004);
+
+  EXPECT_EQ(zero.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(zero.candidate.has_value());
+  EXPECT_EQ(zero.candidate->canonical_e_nm, 0);
+  EXPECT_EQ(zero.candidate->line, "E 9 2 0.000000\n");
+  EXPECT_EQ(zero.candidate->line.find("-0.000000"), std::string::npos);
+}
+
 TEST(CanonicalExtrusionWire, NeverUsesScientificNotation)
 {
   const uart_bridge::ExtrusionForwarder forwarder(
@@ -168,6 +189,69 @@ TEST(CanonicalExtrusionWire, SuppressesValuesBelowHalfOfSixthDecimal)
     preparation.decision,
     uart_bridge::ExtrusionDecision::SuppressInitialZero);
   EXPECT_FALSE(preparation.candidate.has_value());
+}
+
+TEST(CanonicalExtrusionWire, RoundsRepresentableValuesAcrossHalfQuantumBoundary)
+{
+  const double positive_inside = 0.5e-6;
+  const long double positive_inside_units =
+    static_cast<long double>(positive_inside) * 1'000'000.0L;
+  ASSERT_LT(positive_inside_units, 0.5L);
+
+  const uart_bridge::ExtrusionForwarder positive_forwarder(
+    uart_bridge::ExtrusionWireMode::CanonicalV1);
+  const auto positive_inside_preparation =
+    positive_forwarder.prepare(3U, 1, positive_inside);
+
+  EXPECT_EQ(
+    positive_inside_preparation.decision,
+    uart_bridge::ExtrusionDecision::SuppressInitialZero);
+  EXPECT_FALSE(positive_inside_preparation.candidate.has_value());
+
+  const double positive_outside = std::nextafter(
+    positive_inside, std::numeric_limits<double>::infinity());
+  const long double positive_outside_units =
+    static_cast<long double>(positive_outside) * 1'000'000.0L;
+  ASSERT_GT(positive_outside_units, 0.5L);
+  const auto positive_outside_preparation =
+    positive_forwarder.prepare(4U, 1, positive_outside);
+
+  EXPECT_EQ(
+    positive_outside_preparation.decision,
+    uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(positive_outside_preparation.candidate.has_value());
+  EXPECT_EQ(positive_outside_preparation.candidate->canonical_e_nm, 1);
+  EXPECT_EQ(positive_outside_preparation.candidate->line, "E 4 1 0.000001\n");
+
+  const double negative_inside = -0.5e-6;
+  const long double negative_inside_units =
+    static_cast<long double>(negative_inside) * 1'000'000.0L;
+  ASSERT_GT(negative_inside_units, -0.5L);
+
+  const uart_bridge::ExtrusionForwarder negative_forwarder(
+    uart_bridge::ExtrusionWireMode::CanonicalV1);
+  const auto negative_inside_preparation =
+    negative_forwarder.prepare(5U, 1, negative_inside);
+
+  EXPECT_EQ(
+    negative_inside_preparation.decision,
+    uart_bridge::ExtrusionDecision::SuppressInitialZero);
+  EXPECT_FALSE(negative_inside_preparation.candidate.has_value());
+
+  const double negative_outside = std::nextafter(
+    negative_inside, -std::numeric_limits<double>::infinity());
+  const long double negative_outside_units =
+    static_cast<long double>(negative_outside) * 1'000'000.0L;
+  ASSERT_LT(negative_outside_units, -0.5L);
+  const auto negative_outside_preparation =
+    negative_forwarder.prepare(6U, 1, negative_outside);
+
+  EXPECT_EQ(
+    negative_outside_preparation.decision,
+    uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(negative_outside_preparation.candidate.has_value());
+  EXPECT_EQ(negative_outside_preparation.candidate->canonical_e_nm, -1);
+  EXPECT_EQ(negative_outside_preparation.candidate->line, "E 6 1 -0.000001\n");
 }
 
 TEST(CanonicalExtrusionWire, RoundsValuesAboveHalfOfSixthDecimal)
