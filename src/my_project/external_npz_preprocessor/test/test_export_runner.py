@@ -403,19 +403,28 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.allclose(data["e"][travel_idx], 0.0)
     assert np.isclose(data["z"][travel_idx[0]], cut_z + 20.0)
     assert np.isclose(data["z"][travel_idx[-1]], cut_z)
+    assert np.isclose(data["x"][travel_idx[0]], 10.0)
+    assert np.isclose(data["x"][travel_idx[-1]], 30.0)
+    assert np.allclose(data["y"][travel_idx], 0.0)
 
     prime_idx = _next_src_line_group(src_lines, travel_idx[-1])
     assert len(prime_idx) == 1
     assert np.isclose(data["e"][prime_idx[0]], 6.0)
     assert np.isclose(data["z"][prime_idx[0]], cut_z)
+    assert np.isclose(data["x"][prime_idx[0]], 30.0)
+    assert np.isclose(data["y"][prime_idx[0]], 0.0)
 
     settle_idx = _next_src_line_group(src_lines, prime_idx[-1])
     assert np.allclose(data["e"][settle_idx], 6.0)
     assert np.allclose(data["z"][settle_idx], cut_z)
+    assert np.allclose(data["x"][settle_idx], 30.0)
+    assert np.allclose(data["y"][settle_idx], 0.0)
 
     print_idx = _next_src_line_group(src_lines, settle_idx[-1])
     assert np.isclose(data["e"][print_idx[0]], 6.0)
     assert np.isclose(data["z"][print_idx[0]], cut_z)
+    assert np.isclose(data["x"][print_idx[0]], 30.0)
+    assert np.isclose(data["y"][print_idx[0]], 0.0)
 
 
 def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
