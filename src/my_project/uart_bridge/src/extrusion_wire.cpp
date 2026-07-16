@@ -93,6 +93,12 @@ ExtrusionPreparation ExtrusionForwarder::prepare(
   if (!last_sent_valid_ && canonical_e_nm == 0) {
     return {ExtrusionDecision::SuppressInitialZero, std::nullopt};
   }
+  if (
+    last_sent_valid_ && last_sent_tool_id_ == tool_id &&
+    last_sent_canonical_e_nm_ == canonical_e_nm)
+  {
+    return {ExtrusionDecision::SuppressDuplicate, std::nullopt};
+  }
 
   ExtrusionCandidate candidate;
   candidate.line = make_canonical_line(seq_used, tool_id, canonical_e_nm);
