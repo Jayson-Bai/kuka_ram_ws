@@ -13,6 +13,7 @@ namespace
 {
 
 constexpr std::uint64_t kCanonicalUnitsPerWhole = 1'000'000U;
+constexpr double kLegacyEpsilon = 1e-9;
 
 std::uint64_t unsigned_magnitude(std::int64_t value) noexcept
 {
@@ -71,22 +72,42 @@ ExtrusionForwarder::ExtrusionForwarder(ExtrusionWireMode mode) noexcept
 ExtrusionPreparation ExtrusionForwarder::prepare(
   std::uint32_t seq_used, std::int32_t tool_id, double scaled_e_abs) const
 {
-  if (mode_ != ExtrusionWireMode::CanonicalV1) {
-    return {};
+
+  if (mode_ == ExtrusionWireMode::LegacyV1) {
+    if (!last_sent_valid_ && std::abs(scaled_e_abs) <= kLegacyEpsilon) {
+      return {ExtrusionDecision::SuppressInitialZero, std::nullopt};
+    }
+    if (
+      last_sent_valid_ && last_sent_tool_id_ == tool_id &&
+      std::abs(last_sent_legacy_e_abs_ - scaled_e_abs) <= kLegacyEpsilon)
+    {
+      return {ExtrusionDecision::SuppressDuplicate, std::nullopt};
+    }
+
+    std::ostringstream command;
+    command << "E " << seq_used << " " << tool_id << " " <<
+      static_cast<float>(scaled_e_abs) << "\n";
+
+    ExtrusionCandidate candidate;
+    candidate.line = command.str();
+    candidate.tool_id = tool_id;
+    candidate.scaled_e_abs = scaled_e_abs;
+    return {ExtrusionDecision::Send, candidate};
   }
+
   if (!std::isfinite(scaled_e_abs)) {
-    return {ExtrusionDecision::SuppressDuplicate, std::nullopt};
+    return {ExtrusionDecision::RejectNonFinite, std::nullopt};
   }
 
   const long double units = static_cast<long double>(scaled_e_abs) * 1'000'000.0L;
   if (!std::isfinite(units)) {
-    return {ExtrusionDecision::SuppressDuplicate, std::nullopt};
+    return {ExtrusionDecision::RejectOutOfRange, std::nullopt};
   }
 
   const long double rounded_units = std::round(units);
   const long double int64_limit = std::ldexp(1.0L, 63);
   if (rounded_units < -int64_limit || rounded_units >= int64_limit) {
-    return {ExtrusionDecision::SuppressDuplicate, std::nullopt};
+    return {ExtrusionDecision::RejectOutOfRange, std::nullopt};
   }
 
   const auto canonical_e_nm = static_cast<std::int64_t>(rounded_units);

@@ -2,6 +2,7 @@
 
 #include <locale>
 #include <stdexcept>
+#include <limits>
 #include <string>
 
 #include "uart_bridge/extrusion_wire.hpp"
@@ -59,6 +60,55 @@ TEST(CanonicalExtrusionWire, FormatsFixedSixCommand)
   EXPECT_EQ(preparation.decision, uart_bridge::ExtrusionDecision::Send);
   ASSERT_TRUE(preparation.candidate.has_value());
   EXPECT_EQ(preparation.candidate->line, "E 42 3 1.200000\n");
+}
+
+TEST(CanonicalExtrusionWire, RejectsNonFiniteAndOutOfRangeWithoutStateChange)
+{
+  uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::CanonicalV1);
+
+  const auto nan = forwarder.prepare(
+    1U, 1, std::numeric_limits<double>::quiet_NaN());
+  EXPECT_EQ(nan.decision, uart_bridge::ExtrusionDecision::RejectNonFinite);
+  EXPECT_FALSE(nan.candidate.has_value());
+
+  const auto positive_infinity = forwarder.prepare(
+    2U, 1, std::numeric_limits<double>::infinity());
+  EXPECT_EQ(
+    positive_infinity.decision,
+    uart_bridge::ExtrusionDecision::RejectNonFinite);
+  EXPECT_FALSE(positive_infinity.candidate.has_value());
+
+  const auto negative_infinity = forwarder.prepare(
+    3U, 1, -std::numeric_limits<double>::infinity());
+  EXPECT_EQ(
+    negative_infinity.decision,
+    uart_bridge::ExtrusionDecision::RejectNonFinite);
+  EXPECT_FALSE(negative_infinity.candidate.has_value());
+
+  const auto out_of_range = forwarder.prepare(4U, 1, 1.0e20);
+  EXPECT_EQ(
+    out_of_range.decision,
+    uart_bridge::ExtrusionDecision::RejectOutOfRange);
+  EXPECT_FALSE(out_of_range.candidate.has_value());
+
+  const auto zero = forwarder.prepare(5U, 1, 0.0);
+  EXPECT_EQ(
+    zero.decision,
+    uart_bridge::ExtrusionDecision::SuppressInitialZero);
+  EXPECT_FALSE(zero.candidate.has_value());
+}
+
+TEST(CanonicalExtrusionWire, FormatsNegativeValues)
+{
+  const uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::CanonicalV1);
+
+  const auto preparation = forwarder.prepare(5U, 2, -0.00000051);
+
+  EXPECT_EQ(preparation.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(preparation.candidate.has_value());
+  EXPECT_EQ(preparation.candidate->line, "E 5 2 -0.000001\n");
 }
 
 TEST(CanonicalExtrusionWire, SuppressesInitialNegativeQuantizedZero)
@@ -196,3 +246,62 @@ TEST(CanonicalExtrusionWire, ResetRestoresInitialZeroSuppression)
 }
 
 }  // namespace
+
+TEST(LegacyExtrusionWire, KeepsOldFloatTextAndDoubleEpsilonDedup)
+{
+  uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::LegacyV1);
+
+  const auto first = forwarder.prepare(7U, 2, 1.25);
+  EXPECT_EQ(first.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(first.candidate.has_value());
+  EXPECT_EQ(first.candidate->line, "E 7 2 1.25\n");
+  forwarder.commit(*first.candidate);
+
+  const auto duplicate = forwarder.prepare(8U, 2, 1.25 + 0.5e-9);
+  EXPECT_EQ(
+    duplicate.decision,
+    uart_bridge::ExtrusionDecision::SuppressDuplicate);
+  EXPECT_FALSE(duplicate.candidate.has_value());
+
+  const auto changed = forwarder.prepare(9U, 2, 1.25 + 2.0e-9);
+  EXPECT_EQ(changed.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(changed.candidate.has_value());
+
+  const auto tool_change = forwarder.prepare(9U, 3, 1.25 + 2.0e-9);
+  EXPECT_EQ(tool_change.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(tool_change.candidate.has_value());
+}
+
+TEST(LegacyExtrusionWire, SuppressesInitialNearZero)
+{
+  const uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::LegacyV1);
+
+  const auto near_zero = forwarder.prepare(1U, 1, 0.5e-9);
+  EXPECT_EQ(
+    near_zero.decision,
+    uart_bridge::ExtrusionDecision::SuppressInitialZero);
+  EXPECT_FALSE(near_zero.candidate.has_value());
+
+  const auto send = forwarder.prepare(2U, 1, 2.0e-9);
+  EXPECT_EQ(send.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(send.candidate.has_value());
+}
+
+TEST(LegacyExtrusionWire, ForwardsReturnToZeroAfterCommit)
+{
+  uart_bridge::ExtrusionForwarder forwarder(
+    uart_bridge::ExtrusionWireMode::LegacyV1);
+
+  const auto first = forwarder.prepare(1U, 2, 1.0);
+  ASSERT_EQ(first.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(first.candidate.has_value());
+  forwarder.commit(*first.candidate);
+
+  const auto zero = forwarder.prepare(2U, 2, 0.0);
+
+  EXPECT_EQ(zero.decision, uart_bridge::ExtrusionDecision::Send);
+  ASSERT_TRUE(zero.candidate.has_value());
+  EXPECT_EQ(zero.candidate->line, "E 2 2 0\n");
+}
