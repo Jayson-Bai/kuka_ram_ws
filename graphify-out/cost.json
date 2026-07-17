@@ -5,6 +5,13 @@
       "input_tokens": 5965,
       "output_tokens": 6137,
       "files": 501
+    },
+    {
+      "date": "2026-07-17T03:30:43.172134+00:00",
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "files": 34,
+      "backend": "codex-subagents-local"
     }
   ],
   "total_input_tokens": 5965,
