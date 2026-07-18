@@ -616,7 +616,6 @@ def test_print_test_resin_print_always_prepares_head_before_job():
 
     assert '_PRINT_TEST_FIBER_TOOL_ID = 1' in src
     assert '_PRINT_TEST_RESIN_TOOL_ID = 2' in src
-    assert '_PRINT_TEST_TEMP_TOLERANCE_C = 20.0' in src
 
     print_resin = src.split("    def _on_print_test_print_resin", 1)[1].split(
         "    def _start_print_test_resin_matrix", 1
@@ -769,9 +768,44 @@ def test_fiber_offset_confirm_saves_and_downlinks_current_absolute_offset():
     )[0]
 
     assert "save_head_calibration(calibration" in confirm_section
-    assert "self._print_test_last_sent_fiber_offset = (" in confirm_section
+    assert "self._print_test_pending_initial_fiber_offset = (" in confirm_section
     assert "calibration.resin_z_print_compensation_mm" in confirm_section
-    assert 'self._run_print_test_job("travel", start, target_pose=target)' in confirm_section
+    assert "target_pose=target" in confirm_section
+    assert "self._print_test_pending_initial_fiber_offset = (" in confirm_section
+
+
+def test_fiber_offset_full_downlink_is_one_shot_and_nudge_remains_available():
+    src = _source()
+
+    prepare = src.split("    def _on_print_test_prepare", 1)[1].split(
+        "    def _set_print_test_controls_enabled", 1
+    )[0]
+    controls = src.split("    def _set_print_test_controls_enabled", 1)[1].split(
+        "    def _on_current_correction", 1
+    )[0]
+    confirm_section = src.split("    def _on_print_test_confirm_fiber_offset", 1)[1].split(
+        "    def _on_print_test_print_fiber", 1
+    )[0]
+    send_section = src.split(
+        "    def _on_print_test_send_fiber_offset_nudge", 1
+    )[1].split("    def _on_print_test_confirm_fiber_offset", 1)[0]
+
+    assert "self._print_test_fiber_offset_initial_sent = False" in prepare
+    assert (
+        "fiber_offset_confirm_ready = fiber_ready and not "
+        "self._print_test_fiber_offset_initial_sent" in controls
+    )
+    assert "self._btn_test_confirm_fiber_offset.setEnabled(fiber_offset_confirm_ready)" in controls
+    assert "if self._print_test_fiber_offset_initial_sent:" in confirm_section
+    assert "def _mark_print_test_fiber_offset_initial_sent" in src
+    assert "self._print_test_fiber_confirmed = False" in send_section
+    assert "print_test_initial_fiber_offset_dispatched = QtCore.pyqtSignal()" in src
+    assert "print_test_initial_fiber_offset_dispatched.emit()" in src
+    worker = src.split("    def _run_print_test_job", 1)[1].split("    # ---- Offset persistence ----", 1)[0]
+    publisher = src.split("    def _on_print_test_load_npz", 1)[1].split("    def _on_scale_submit", 1)[0]
+    assert "self._print_test_pending_initial_fiber_offset = None" in worker
+    assert "self._widget._print_test_pending_initial_fiber_offset = None" in publisher
+    assert "calibration.resin_z_print_compensation_mm" not in send_section
 
 
 def test_fiber_offset_micro_nudges_stage_ui_values_but_do_not_downlink_or_save():
@@ -822,8 +856,8 @@ def test_fiber_offset_confirm_only_saves_without_downlinking_again():
     )[0]
 
     assert "save_head_calibration(calibration" in confirm_section
-    assert "self._print_test_fiber_confirmed = True" in confirm_section
-    assert 'self._run_print_test_job("travel", start, target_pose=target)' in confirm_section
+    assert "self._print_test_fiber_confirmed = True" in src
+    assert "target_pose=target" in confirm_section
     assert "calibration.resin_z_print_compensation_mm" in confirm_section
 
 

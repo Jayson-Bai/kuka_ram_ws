@@ -32,7 +32,6 @@ _DEFAULT_GCODE_INPUT_DIR = str(_DEFAULT_DATA_ROOT / "input_gcode")
 _DEFAULT_NPZ_OUTPUT_DIR = str(_DEFAULT_DATA_ROOT / "output_npz")
 _DEFAULT_NPZ_PATH = os.path.join(_DEFAULT_NPZ_OUTPUT_DIR, "test.npz")
 _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM = 10.0
-_PRINT_TEST_TEMP_TOLERANCE_C = 20.0
 _PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PRINT_TEST_FIBER_TOOL_ID = 1
 _PRINT_TEST_RESIN_TOOL_ID = 2
@@ -847,6 +846,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
     uart_command_submit = QtCore.pyqtSignal(str)
     print_test_rsi_command_submit = QtCore.pyqtSignal(str)
     print_test_load_npz_submit = QtCore.pyqtSignal(str)
+    print_test_initial_fiber_offset_dispatched = QtCore.pyqtSignal()
     current_correction_received = QtCore.pyqtSignal(object)
     print_test_status = QtCore.pyqtSignal(str, str)
     print_test_controls_enabled = QtCore.pyqtSignal(bool)
@@ -873,6 +873,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._head_calibration = load_head_calibration()
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
+        self._print_test_fiber_offset_initial_sent = False
+        self._print_test_pending_initial_fiber_offset = None
         self._print_test_last_sent_fiber_offset = None
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
@@ -3739,7 +3741,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._print_test_pending_after_tool_change = None
                 if pending_after_tool_change == "print_resin_matrix":
                     self._set_print_test_status(
-                        "树脂头、风扇和温度已就绪，开始树脂测试...", "#1b6e3c"
+                        "树脂头、风扇已就绪，开始树脂测试...", "#1b6e3c"
                     )
                     self._start_print_test_resin_matrix()
                 elif pending_after_tool_change == "adjust_fiber_offset":
@@ -3749,12 +3751,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     )
                 elif pending_after_tool_change == "print_fiber_matrix":
                     self._set_print_test_status(
-                        "纤维头、风扇和温度已就绪，开始纤维测试...", "#1b6e3c"
+                        "纤维头、风扇已就绪，开始纤维测试...", "#1b6e3c"
                     )
                     self._start_print_test_fiber_matrix()
                 elif pending_after_tool_change == "print_composite_matrix":
                     self._set_print_test_status(
-                        "纤维头、风扇和温度已就绪，开始复合打印...", "#1b6e3c"
+                        "纤维头、风扇已就绪，开始复合打印...", "#1b6e3c"
                     )
                     self._start_print_test_composite_matrix()
                 else:
@@ -4163,6 +4165,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._test_correction_label.setText("RSI 修正量: 未收到")
         self._print_test_resin_height_confirmed = False
         self._print_test_fiber_confirmed = False
+        self._print_test_fiber_offset_initial_sent = False
+        self._print_test_pending_initial_fiber_offset = None
         self._print_test_last_sent_fiber_offset = None
         self._print_test_waiting_for_tool = None
         self._print_test_pending_after_zero = None
@@ -4214,7 +4218,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._test_fiber_z_comp_input,
         ):
             inp.setEnabled(fiber_ready)
-        self._btn_test_confirm_fiber_offset.setEnabled(fiber_ready)
+        fiber_offset_confirm_ready = fiber_ready and not self._print_test_fiber_offset_initial_sent
+        self._btn_test_confirm_fiber_offset.setEnabled(fiber_offset_confirm_ready)
         fiber_nudge_ready = fiber_ready
         self._btn_test_send_fiber_offset_nudge.setEnabled(fiber_nudge_ready)
         for btn in getattr(self, "_fiber_offset_nudge_buttons", []):
@@ -4261,7 +4266,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     self._set_print_test_controls_enabled(False)
                     self._send_print_test_head_prepare("fiber")
                     self._set_print_test_status(
-                        "已到达纤维换头安全位置，正在切换纤维头并确认温度/风扇...", "#1b6e3c"
+                        "已到达纤维换头安全位置，正在切换纤维头并确认风扇...", "#1b6e3c"
                     )
                     return
                 self._set_print_test_controls_enabled(True)
@@ -4285,17 +4290,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
-            return
-        temp_target = float(self._print_test_params["resin"].get("temp", 0.0))
-        if self._print_test_resin_temp is None:
-            self._set_print_test_status("尚未收到树脂温度状态。", "#b42318")
-            return
-        current_temp, _target_temp = self._print_test_resin_temp
-        if abs(current_temp - temp_target) > _PRINT_TEST_TEMP_TOLERANCE_C:
-            self._set_print_test_status(
-                f"树脂温度未到达: 当前 {current_temp:.1f} / 目标 {temp_target:.1f}",
-                "#b42318",
-            )
             return
         start = self._print_test_current_correction
         target = self._print_test_matrix_target(start, self._print_test_params, "resin")
@@ -4377,7 +4371,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_controls_enabled(False)
         self._send_print_test_head_prepare("resin")
         self._set_print_test_status(
-            "已发送树脂头切换和风扇命令，等待 UART 工具、风扇和温度状态确认...",
+            "已发送树脂头切换和风扇命令，等待 UART 工具和风扇状态确认...",
             "#b15e00",
         )
 
@@ -4474,6 +4468,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if not self._print_test_seen_correction:
             self._set_print_test_status("尚未收到 KUKA/RSI 首帧修正量。", "#b42318")
             return
+        if self._print_test_fiber_offset_initial_sent:
+            self._set_print_test_status("纤维初始偏置已下发，请使用“下发微调”。", "#b15e00")
+            return
         if self._print_test_busy:
             self._set_print_test_status("上一段测试动作尚未完成。", "#b42318")
             return
@@ -4495,15 +4492,27 @@ class _UiStatusWidget(QtWidgets.QWidget):
             start[4],
             start[5],
         )
-        self._print_test_fiber_confirmed = True
-        self._print_test_last_sent_fiber_offset = (
+        self._print_test_pending_initial_fiber_offset = (
             calibration.fiber_x_print_compensation_mm,
             calibration.fiber_y_print_compensation_mm,
             calibration.fiber_z_print_compensation_mm,
         )
         self._set_print_test_controls_enabled(self._print_test_seen_correction)
-        self._run_print_test_job("travel", start, target_pose=target)
+        self._run_print_test_job(
+            "travel",
+            start,
+            target_pose=target
+        )
         self._set_print_test_status("纤维偏置已确认、保存并下发；后续微调将只发送增量。", "#1b6e3c")
+
+    def _mark_print_test_fiber_offset_initial_sent(self):
+        pending = self._print_test_pending_initial_fiber_offset
+        if pending is None:
+            return
+        self._print_test_fiber_offset_initial_sent = True
+        self._print_test_fiber_confirmed = True
+        self._print_test_last_sent_fiber_offset = pending
+        self._print_test_pending_initial_fiber_offset = None
 
     def _on_print_test_print_fiber(self):
         if self._print_test_params is None:
@@ -4564,7 +4573,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_controls_enabled(False)
         self._send_print_test_head_prepare("fiber")
         self._set_print_test_status(
-            "已发送纤维头切换和风扇命令，等待 UART 工具、风扇和温度状态确认...",
+            "已发送纤维头切换和风扇命令，等待 UART 工具和风扇状态确认...",
             "#b15e00",
         )
 
@@ -4594,24 +4603,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 return False, "等待树脂头切换完成..."
             if not bool(status.fan_ok_resin):
                 return False, "等待树脂头风扇开启..."
-            current_temp = float(status.current_temp_resin)
-            target_temp = float(self._print_test_params["resin"]["temp"])
-            label = "树脂"
         elif head_key == "fiber":
             if int(status.current_tool) != _PRINT_TEST_FIBER_TOOL_ID:
                 return False, "等待纤维头切换完成..."
             if not bool(status.fan_ok_cf):
                 return False, "等待纤维头风扇开启..."
-            current_temp = float(status.current_temp_cf)
-            target_temp = float(self._print_test_params["fiber"]["temp"])
-            label = "纤维"
         else:
             return False, "未知打印头。"
-        if abs(current_temp - target_temp) > _PRINT_TEST_TEMP_TOLERANCE_C:
-            return (
-                False,
-                f"等待{label}头温度到达: 当前 {current_temp:.1f} / 目标 {target_temp:.1f}",
-            )
         return True, ""
 
     def _print_test_matrix_target(
@@ -4709,6 +4707,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             except Exception as exc:
                 self._print_test_busy = False
                 self._print_test_target = None
+                self._print_test_pending_initial_fiber_offset = None
                 self._set_print_test_controls_enabled(True)
                 self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
                 return
@@ -4847,6 +4846,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     self._print_test_busy = False
                     self._print_test_target = None
                     self._print_test_pending_after_zero = None
+                    self._print_test_pending_initial_fiber_offset = None
                     self.print_test_controls_enabled.emit(True)
                     return
                 self.print_test_rsi_command_submit.emit("RESET")
@@ -4857,6 +4857,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._print_test_busy = False
                 self._print_test_target = None
                 self._print_test_pending_after_zero = None
+                self._print_test_pending_initial_fiber_offset = None
                 self.print_test_controls_enabled.emit(True)
                 self.print_test_status.emit(f"测试动作生成失败: {exc}", "#b42318")
 
@@ -5474,6 +5475,9 @@ class MyProjectUiPlugin(Plugin):
         self._widget.uart_command_submit.connect(self._on_uart_command_submit)
         self._widget.print_test_rsi_command_submit.connect(self._on_print_test_rsi_command)
         self._widget.print_test_load_npz_submit.connect(self._on_print_test_load_npz)
+        self._widget.print_test_initial_fiber_offset_dispatched.connect(
+            self._widget._mark_print_test_fiber_offset_initial_sent
+        )
         context.add_widget(self._widget)
 
         # Launch state
@@ -5568,10 +5572,13 @@ class MyProjectUiPlugin(Plugin):
 
     def _on_print_test_load_npz(self, path: str):
         if not self._widget._validate_print_test_npz_z_floor(path):
+            self._widget._print_test_pending_initial_fiber_offset = None
             return
         msg = StringMsg()
         msg.data = path
         self._print_test_load_pub.publish(msg)
+        if self._widget._print_test_pending_initial_fiber_offset is not None:
+            self._widget.print_test_initial_fiber_offset_dispatched.emit()
 
     def _on_scale_submit(self, value: float):
         if not self._param_client.service_is_ready():
