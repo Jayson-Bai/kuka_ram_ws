@@ -70,6 +70,7 @@ private:
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
   std::atomic<bool> auto_abort_sent_{false};
+  std::atomic<bool> print_test_mode_active_{false};
 
   std::unique_ptr<control_center::NpzLoader> npz_loader_;
   std::unique_ptr<control_center::QueueManager> queue_manager_;
@@ -232,6 +233,7 @@ private:
         final_traj_seq_.reset();
         final_seq_heartbeat_count_ = 0;
         auto_abort_sent_.store(false);
+        print_test_mode_active_.store(true);
       }
       paused_.store(false);
       RCLCPP_INFO(get_logger(), "测试模式RESET：清空中心节点旧NPZ轨迹源");
@@ -297,6 +299,7 @@ private:
       final_traj_seq_.reset();
       final_seq_heartbeat_count_ = 0;
       auto_abort_sent_.store(false);
+      print_test_mode_active_.store(true);
     }
     paused_.store(false);
     RCLCPP_INFO(get_logger(), "测试模式动态加载 NPZ：%s", path.c_str());
@@ -391,6 +394,9 @@ private:
 
   void check_print_complete(const RsiHeartBeat & msg)
   {
+    if (print_test_mode_active_.load()) {
+      return;
+    }
     std::optional<uint32_t> final_seq;
     {
       std::lock_guard<std::mutex> lk(queue_mutex_);
@@ -482,6 +488,7 @@ private:
       RCLCPP_INFO(get_logger(), "center_node收到RESUME命令，恢复轨迹发布");
     } else if (cmd == "ABORT") {
       aborted_.store(true);
+      print_test_mode_active_.store(false);
       paused_.store(true);
       {
         std::lock_guard<std::mutex> lk(queue_mutex_);
