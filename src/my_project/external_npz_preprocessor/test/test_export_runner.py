@@ -71,6 +71,7 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     assert captured["kwargs"]["resin_z_print_compensation_mm"] == 1.25
     assert captured["kwargs"]["cut_lift_mm"] == 22.0
     assert captured["kwargs"]["cut_wait_s"] == 11.0
+    assert captured["kwargs"]["fiber_retract_length_mm"] == 10.0
 
 
 def test_exporter_uses_curve_start_acceleration_without_changing_default(tmp_path, monkeypatch):
@@ -395,10 +396,16 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.isclose(np.max(data["z"][cut_motion_idx]), cut_z + 20.0)
     assert np.isclose(np.max(data["e"][cut_motion_idx]), cut_e + 20.0)
     assert np.isclose(data["z"][cut_motion_idx[-1]], cut_z + 20.0)
-    assert np.isclose(data["e"][cut_motion_idx[-1]], cut_e)
+    assert np.isclose(
+        data["e"][cut_motion_idx[-1]],
+        cut_e - params.fiber.retract_length_mm,
+    )
 
     assert event_types[reset_idx] == "extrude_reset"
-    assert np.isclose(data["e"][reset_idx], cut_e)
+    assert np.isclose(
+        data["e"][reset_idx],
+        cut_e - params.fiber.retract_length_mm,
+    )
     assert np.isclose(data["z"][reset_idx], cut_z + 20.0)
 
     anchor_idx = _next_src_line_group(src_lines, reset_idx)

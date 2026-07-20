@@ -89,6 +89,7 @@ def export_npz(
     tool_change_safe_lift_mm: float = 20.0,
     cut_lift_mm: float = 20.0,
     cut_wait_s: float = 15.0,
+    fiber_retract_length_mm: float = 0.0,
 ) -> dict:
     """
     导出 npz（分片）.
@@ -1253,6 +1254,11 @@ def export_npz(
 
         lift_mm = max(0.0, float(cut_lift_mm))
         wait_s = max(0.0, float(cut_wait_s))
+        fiber_retract_mm = (
+            max(0.0, float(fiber_retract_length_mm))
+            if current_tool == 1 else 0.0
+        )
+        total_retract_mm = lift_mm + fiber_retract_mm
         if lift_mm <= 1e-9:
             if wait_s > 1e-9:
                 _append_extrude_wait(ExtrudeWait(
@@ -1265,6 +1271,19 @@ def export_npz(
                     subtype=subtype,
                     raw="cut_wait",
                 ), layer, subtype, occ, mark_path_end=False)
+            if total_retract_mm > 1e-9:
+                retract_feedrate = _next_retract_feedrate(command_index)
+                retract_speed = max(_feed_mm_s_from_feedrate(retract_feedrate), 1e-9)
+                _append_extrude_wait(ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=total_retract_mm / retract_speed,
+                    delta_e=-total_retract_mm,
+                    feedrate=retract_feedrate,
+                    line=cmd.line or 0,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="cut_safety_retract",
+                ), layer, subtype, occ, mark_path_end=True)
             return
 
         hold_row = last_pose or CsvRow(
@@ -1321,8 +1340,8 @@ def export_npz(
         retract_speed = max(_feed_mm_s_from_feedrate(retract_feedrate), 1e-9)
         _append_extrude_wait(ExtrudeWait(
             type="EXTRUDE_WAIT",
-            wait_sec=lift_mm / retract_speed,
-            delta_e=-lift_mm,
+            wait_sec=total_retract_mm / retract_speed,
+            delta_e=-total_retract_mm,
             feedrate=retract_feedrate,
             line=cmd.line or 0,
             layer=layer,
