@@ -385,26 +385,37 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     cut_e = float(data["e"][cut_idx])
     cut_z = float(data["z"][cut_idx])
 
-    reset_group = _next_src_line_group(src_lines, cut_idx)
-    assert len(reset_group) == 1
-    reset_idx = reset_group[0]
+    local_reset_idx = cut_idx + 1
+    assert event_types[local_reset_idx] == "extrude_reset"
+    assert np.isclose(data["e"][local_reset_idx], cut_e)
+    local_anchor_idx = local_reset_idx + 1
+    assert event_types[local_anchor_idx] == ""
+    assert np.isclose(data["e"][local_anchor_idx], 0.0)
+    for field in ("x", "y", "z", "a", "b", "c"):
+        assert np.isclose(data[field][local_anchor_idx], data[field][cut_idx])
+
+    reset_idx = next(
+        idx
+        for idx in range(local_anchor_idx + 1, len(event_types))
+        if event_types[idx] == "extrude_reset"
+    )
     cut_motion_idx = [
-        idx for idx in range(cut_idx + 1, reset_idx) if src_lines[idx] == cut_src
+        idx for idx in range(local_anchor_idx + 1, reset_idx) if src_lines[idx] == cut_src
     ]
 
     assert cut_motion_idx
     assert np.isclose(np.max(data["z"][cut_motion_idx]), cut_z + 20.0)
-    assert np.isclose(np.max(data["e"][cut_motion_idx]), cut_e + 20.0)
+    assert np.isclose(np.max(data["e"][cut_motion_idx]), 20.0)
     assert np.isclose(data["z"][cut_motion_idx[-1]], cut_z + 20.0)
     assert np.isclose(
         data["e"][cut_motion_idx[-1]],
-        cut_e - params.fiber.retract_length_mm,
+        -params.fiber.retract_length_mm,
     )
 
     assert event_types[reset_idx] == "extrude_reset"
     assert np.isclose(
         data["e"][reset_idx],
-        cut_e - params.fiber.retract_length_mm,
+        -params.fiber.retract_length_mm,
     )
     assert np.isclose(data["z"][reset_idx], cut_z + 20.0)
 
@@ -494,6 +505,7 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
             "tool_change_cf",
             "extrude_reset",
             "cut",
+            "extrude_reset",
             "extrude_reset",
         ]
 
