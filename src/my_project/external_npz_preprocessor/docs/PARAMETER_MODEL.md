@@ -76,16 +76,28 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 
 ## Prime and Retract
 
-Prime/retract defaults come from the existing test-mode UI values. The whole part's first printable path keeps the one-time initial `retract`. Before every printable path, after travel has reached the start pose, the order is `prime -> optional prime_settle -> PRINT`. A zero prime length emits neither prime nor settle.
+Prime/retract defaults come from the existing test-mode UI values. Resin keeps its existing per-path prime/retract behavior.
+
+Fiber uses the UI values only at fiber-layer boundaries:
+
+- Before the whole job's first fiber: reset, UI retract, reset, UI prime, optional settle, reset, print.
+- Before the first fiber of every later fiber-bearing layer: reset, UI prime, optional settle, reset, print.
+- Middle fibers in the same layer: no UI prime or UI retract.
+- After the last fiber's CUT in every fiber-bearing layer: reset, UI retract, then the existing path reset.
+
+A one-path fiber layer is both first and last. Layers without fiber emit no fiber UI action. A zero prime length emits neither prime nor settle.
 
 `prime_settle_s` is persisted in `print_params.json` and exposed through the CLI, standalone UI, and formal-print UI. Legacy JSON without the field uses `0.5 s`; `0` disables only the settle, while negative, `NaN`, and infinite values are rejected. With `dt=0.004 s`, the default `0.5 s` settle becomes exactly 125 stationary rows with unchanged XYZ and E.
 
 Every printable path, including the generated primeline and final path, ends at an explicit E boundary:
 
 - Resin: `PRINT -> retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
-- Fiber: `PRINT -> CUT/lift/wait/safety retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
+- Non-final fiber in a layer: `PRINT -> CUT/reset/lift/wait/fixed retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
+- Layer-final fiber: `PRINT -> CUT/reset/lift/wait/fixed retract -> reset -> UI retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
 
-The existing tool-change `G92 E0` / `ResetECommand` remains unchanged and is additive to the per-path reset. The reset event is exported at the old E value; only the exact internal `external_npz_reset_anchor` marker makes the following one-`dt` row start at `E=0`. Converter-side `current_e` is then zero, travel remains at `E=0`, and the next destination prime is computed from zero. Ordinary `ExtrudeWait` and GCode behavior are unchanged.
+For external-NPZ fiber CUT, `cut_lift_mm=L` produces the closed absolute-E interval `0→+L→0`. It does not consume `fiber_prime_length_mm=P` or `fiber_retract_length_mm=R`; UI prime is always `0→+P`, and UI retract is always `0→-R`. Their configured speeds are independent as well.
+
+The existing tool-change `G92 E0` / `ResetECommand` remains unchanged and is additive to the per-path and phase resets. The reset event is exported at the old E value; only the exact internal `external_npz_reset_anchor` marker makes the following one-`dt` row start at `E=0`. Converter-side `current_e` is then zero, travel remains at `E=0`, and ordinary GCode behavior is unchanged.
 
 ## Persistent Parameter JSON
 

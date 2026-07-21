@@ -338,7 +338,9 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
         (-15.0, 1800.0, "RESIN_PRINT"),
         (18.0, 900.0, "RESIN_PRINT"),
         (-15.0, 1800.0, "RESIN_PRINT"),
+        (-10.0, 300.0, "FIBER_PRINT"),
         (12.0, 300.0, "FIBER_PRINT"),
+        (-10.0, 300.0, "FIBER_PRINT"),
     ]
     assert [round(cmd.wait_sec, 6) for cmd in waits] == [
         0.5,
@@ -346,7 +348,9 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
         0.5,
         1.2,
         0.5,
+        2.0,
         2.4,
+        2.0,
     ]
 
 
@@ -447,15 +451,13 @@ def test_each_printable_path_has_reset_pair_including_primeline_and_final_path()
             if isinstance(cmd, ResetECommand)
             and cmd.raw == "external_npz_path_reset"
         ]
-        anchors = [
-            cmd
-            for cmd in path_tail
-            if isinstance(cmd, ExtrudeWait)
-            and cmd.raw == "external_npz_reset_anchor"
-        ]
-
-        assert len(resets) == len(anchors) == 1
-        reset, anchor = resets[0], anchors[0]
+        assert len(resets) == 1
+        reset = resets[0]
+        reset_index = path_tail.index(reset)
+        assert reset_index + 1 < len(path_tail)
+        anchor = path_tail[reset_index + 1]
+        assert isinstance(anchor, ExtrudeWait)
+        assert anchor.raw == "external_npz_reset_anchor"
         assert path_tail.index(anchor) == path_tail.index(reset) + 1
         assert reset.pose == curve.control_points[-1]
         boundary_pairs.append((reset, anchor))
@@ -521,7 +523,7 @@ def test_zero_prime_length_suppresses_prime_and_settle():
     )
 
 
-def test_each_fiber_path_primes_then_cuts_and_resets():
+def test_fiber_ui_actions_apply_only_at_layer_boundaries_with_absolute_resets():
     job = SourceJob(
         meta={},
         layers=[
@@ -529,30 +531,30 @@ def test_each_fiber_path_primes_then_cuts_and_resets():
                 index=0,
                 resin_paths=[],
                 fiber_paths=[
-                    MaterialPath(
-                        material="F",
-                        order=0,
-                        points=np.array(
-                            [[0.0, 0.0, 0.6, 0.0, 0.0, 0.0],
-                             [10.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
-                            dtype=np.float32,
-                        ),
-                    ),
-                    MaterialPath(
-                        material="F",
-                        order=1,
-                        points=np.array(
-                            [[20.0, 0.0, 0.6, 0.0, 0.0, 0.0],
-                             [30.0, 0.0, 0.6, 0.0, 0.0, 0.0]],
-                            dtype=np.float32,
-                        ),
-                    ),
+                    _straight_path("F", 0, 0.0, 10.0, z=0.6),
+                    _straight_path("F", 1, 20.0, 30.0, z=0.6),
                 ],
-            )
+            ),
+            LayerPaths(
+                index=1,
+                resin_paths=[],
+                fiber_paths=[
+                    _straight_path("F", 0, 40.0, 50.0, z=1.2),
+                    _straight_path("F", 1, 60.0, 70.0, z=1.2),
+                ],
+            ),
         ],
     )
 
-    params = ProcessParams()
+    params = ProcessParams(
+        fiber=FiberProcessParams(
+            prime_length_mm=6.0,
+            retract_length_mm=4.0,
+            prime_speed_mm_s=3.0,
+            retract_speed_mm_s=2.0,
+        ),
+        prime_settle_s=0.75,
+    )
     commands = source_job_to_parsed_commands(job, params)
     fiber_paths = [
         cmd
@@ -560,52 +562,92 @@ def test_each_fiber_path_primes_then_cuts_and_resets():
         if isinstance(cmd, GlobalCurveCommand)
         and cmd.subtype == "FIBER_PRINT"
     ]
-    fiber_prepare_table = []
-    for path_number, fiber_path in enumerate(fiber_paths):
-        path_index = commands.index(fiber_path)
-        prime, settle = commands[path_index - 2:path_index]
+    assert len(fiber_paths) == 4
+    assert all(
+        fiber_path.e_val - fiber_path.delta_e == pytest.approx(0.0)
+        for fiber_path in fiber_paths
+    )
 
-        assert isinstance(prime, ExtrudeWait)
-        assert isinstance(settle, ExtrudeWait)
-        assert prime.delta_e == pytest.approx(params.fiber.prime_length_mm)
-        assert settle.wait_sec == pytest.approx(params.prime_settle_s)
-        assert [prime.line, settle.line, fiber_path.line] == list(
-            range(prime.line, prime.line + 3)
-        )
-        fiber_prepare_table.append((path_number, prime.raw, settle.raw))
-
-    assert fiber_prepare_table == [
-        (0, "external_npz_prime", "external_npz_prime_settle"),
-        (1, "external_npz_prime", "external_npz_prime_settle"),
+    primes = [
+        cmd for cmd in commands
+        if isinstance(cmd, ExtrudeWait) and cmd.raw == "external_npz_prime"
+        and cmd.subtype == "FIBER_PRINT"
+    ]
+    initial_retracts = [
+        cmd for cmd in commands
+        if isinstance(cmd, ExtrudeWait)
+        and cmd.raw == "external_npz_fiber_initial_retract"
+    ]
+    layer_retracts = [
+        cmd for cmd in commands
+        if isinstance(cmd, ExtrudeWait)
+        and cmd.raw == "external_npz_fiber_layer_retract"
+    ]
+    assert [(cmd.layer, cmd.delta_e) for cmd in primes] == [
+        (0, pytest.approx(6.0)),
+        (1, pytest.approx(6.0)),
+    ]
+    assert [(cmd.layer, cmd.delta_e) for cmd in initial_retracts] == [
+        (0, pytest.approx(-4.0)),
+    ]
+    assert [(cmd.layer, cmd.delta_e) for cmd in layer_retracts] == [
+        (0, pytest.approx(-4.0)),
+        (1, pytest.approx(-4.0)),
     ]
 
     first_fiber_index = commands.index(fiber_paths[0])
-    curve, cut, reset, anchor, travel = commands[
-        first_fiber_index:first_fiber_index + 5
+    assert [cmd.raw for cmd in commands[first_fiber_index - 9:first_fiber_index]] == [
+        "external_npz_fiber_prepare_reset",
+        "external_npz_reset_anchor",
+        "external_npz_fiber_initial_retract",
+        "external_npz_fiber_prime_reset",
+        "external_npz_reset_anchor",
+        "external_npz_prime",
+        "external_npz_prime_settle",
+        "external_npz_fiber_print_reset",
+        "external_npz_reset_anchor",
     ]
 
-    assert curve is fiber_paths[0]
-    assert isinstance(cut, MCommand)
-    assert cut.code == "CUT"
-    assert cut.params == {"P": 1.0}
-    assert isinstance(reset, ResetECommand)
-    assert reset.raw == "external_npz_path_reset"
-    assert reset.pose == curve.control_points[-1]
-    assert isinstance(anchor, ExtrudeWait)
-    assert anchor.raw == "external_npz_reset_anchor"
-    assert isinstance(travel, MoveCommand)
-    assert travel.raw == "external_npz_travel"
-    assert travel.e_val == pytest.approx(0.0)
-
-    final_fiber_index = commands.index(fiber_paths[-1])
-    final_cut, final_reset, final_anchor = commands[
-        final_fiber_index + 1:final_fiber_index + 4
+    second_layer_first_index = commands.index(fiber_paths[2])
+    assert [
+        cmd.raw for cmd in commands[second_layer_first_index - 6:second_layer_first_index]
+    ] == [
+        "external_npz_fiber_prime_reset",
+        "external_npz_reset_anchor",
+        "external_npz_prime",
+        "external_npz_prime_settle",
+        "external_npz_fiber_print_reset",
+        "external_npz_reset_anchor",
     ]
-    assert isinstance(final_cut, MCommand) and final_cut.code == "CUT"
-    assert isinstance(final_reset, ResetECommand)
-    assert final_reset.raw == "external_npz_path_reset"
-    assert isinstance(final_anchor, ExtrudeWait)
-    assert final_anchor.raw == "external_npz_reset_anchor"
+
+    for layer_last_curve in (fiber_paths[1], fiber_paths[3]):
+        curve_index = commands.index(layer_last_curve)
+        cut, retract_reset, retract_anchor, retract, path_reset, path_anchor = commands[
+            curve_index + 1:curve_index + 7
+        ]
+        assert isinstance(cut, MCommand) and cut.code == "CUT"
+        assert isinstance(retract_reset, ResetECommand)
+        assert retract_reset.raw == "external_npz_fiber_layer_retract_reset"
+        assert retract_anchor.raw == "external_npz_reset_anchor"
+        assert retract.raw == "external_npz_fiber_layer_retract"
+        assert isinstance(path_reset, ResetECommand)
+        assert path_reset.raw == "external_npz_path_reset"
+        assert path_anchor.raw == "external_npz_reset_anchor"
+
+
+def test_single_fiber_path_is_both_layer_first_and_layer_last():
+    job = _job_with_paths(
+        fiber_paths=[_straight_path("F", 0, 0.0, 10.0, z=0.6)]
+    )
+
+    commands = source_job_to_parsed_commands(job, ProcessParams())
+
+    relevant_raws = [
+        cmd.raw for cmd in commands
+        if (cmd.raw or "").startswith("external_npz_fiber_")
+    ]
+    assert relevant_raws.count("external_npz_fiber_initial_retract") == 1
+    assert relevant_raws.count("external_npz_fiber_layer_retract") == 1
 
 
 def test_initializes_both_heads_before_first_path_and_resets_after_tool_change():

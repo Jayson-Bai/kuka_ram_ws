@@ -90,6 +90,7 @@ def export_npz(
     cut_lift_mm: float = 20.0,
     cut_wait_s: float = 15.0,
     fiber_retract_length_mm: float | None = None,
+    external_npz_cut_absolute_e: bool = False,
 ) -> dict:
     """
     导出 npz（分片）.
@@ -1252,14 +1253,15 @@ def export_npz(
             return
         _emit_event(ev, layer, subtype, occ)
 
+        is_external_npz_fiber_cut = (
+            current_tool == 1
+            and external_npz_cut_absolute_e
+            and (cmd.raw or "") == "external_npz_cut"
+        )
         # External-NPZ fiber CUTs need a real absolute-E boundary before
         # the lift/retract safety sequence. Keep generic GCode CUT behavior
         # unchanged by limiting this boundary to converter-generated CUTs.
-        if (
-            current_tool == 1
-            and fiber_retract_length_mm is not None
-            and (cmd.raw or "") == "external_npz_cut"
-        ):
+        if is_external_npz_fiber_cut:
             _emit_event(_PendingEvent(
                 event_type="extrude_reset",
                 payload=str(current_tool),
@@ -1279,10 +1281,15 @@ def export_npz(
 
         lift_mm = max(0.0, float(cut_lift_mm))
         wait_s = max(0.0, float(cut_wait_s))
-        fiber_retract_mm = (
-            max(0.0, float(fiber_retract_length_mm))
-            if current_tool == 1 and fiber_retract_length_mm is not None else 0.0
-        )
+        if is_external_npz_fiber_cut:
+            # UI fiber retract is emitted separately by the converter only at
+            # fiber-layer boundaries. CUT itself is always a closed 0→L→0 pair.
+            fiber_retract_mm = 0.0
+        else:
+            fiber_retract_mm = (
+                max(0.0, float(fiber_retract_length_mm))
+                if current_tool == 1 and fiber_retract_length_mm is not None else 0.0
+            )
         total_retract_mm = lift_mm + fiber_retract_mm
         if lift_mm <= 1e-9:
             if wait_s > 1e-9:

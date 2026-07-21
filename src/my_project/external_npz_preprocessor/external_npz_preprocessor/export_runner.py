@@ -89,5 +89,5 @@ def convert_external_npz(
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
         cut_lift_mm=cut_lift_mm,
         cut_wait_s=cut_wait_s,
-        fiber_retract_length_mm=params.fiber.retract_length_mm,
+        external_npz_cut_absolute_e=True,
     )

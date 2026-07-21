@@ -52,8 +52,11 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
     initial_print_prepare_done = False
 
     primeline_inserted = False
+    first_fiber_in_job = True
 
     for layer in job.layers:
+        fiber_path_count = len(layer.fiber_paths)
+        fiber_path_number = 0
         ordered_paths: list[MaterialPath] = []
         ordered_paths.extend(layer.resin_paths)
         ordered_paths.extend(layer.fiber_paths)
@@ -68,6 +71,11 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             )
             primeline_inserted = True
         for material_path in ordered_paths:
+            is_fiber = material_path.material == "F"
+            is_first_fiber_in_layer = is_fiber and fiber_path_number == 0
+            is_last_fiber_in_layer = (
+                is_fiber and fiber_path_number == fiber_path_count - 1
+            )
             tool = _tool_for_material(material_path.material)
             subtype = _subtype_for_material(material_path.material)
             first_pose = _offset_source_position(
@@ -147,16 +155,75 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                     line += 1
                 initial_print_prepare_done = True
 
-            for wait in _path_prime_waits(
-                material_path.material,
-                params,
-                line,
-                layer.index,
-                subtype,
-            ):
-                commands.append(wait)
-                current_e += wait.delta_e
-                line += 1
+            if is_first_fiber_in_layer:
+                if first_fiber_in_job:
+                    for boundary in _reset_boundary_commands(
+                        params,
+                        line,
+                        layer.index,
+                        subtype,
+                        first_pose,
+                        reset_raw="external_npz_fiber_prepare_reset",
+                    ):
+                        commands.append(boundary)
+                        line += 1
+                    current_e = 0.0
+                    for wait in _path_retract_waits(
+                        material_path.material,
+                        params,
+                        line,
+                        layer.index,
+                        subtype,
+                        raw="external_npz_fiber_initial_retract",
+                    ):
+                        commands.append(wait)
+                        current_e += wait.delta_e
+                        line += 1
+
+                for boundary in _reset_boundary_commands(
+                    params,
+                    line,
+                    layer.index,
+                    subtype,
+                    first_pose,
+                    reset_raw="external_npz_fiber_prime_reset",
+                ):
+                    commands.append(boundary)
+                    line += 1
+                current_e = 0.0
+                for wait in _path_prime_waits(
+                    material_path.material,
+                    params,
+                    line,
+                    layer.index,
+                    subtype,
+                ):
+                    commands.append(wait)
+                    current_e += wait.delta_e
+                    line += 1
+                for boundary in _reset_boundary_commands(
+                    params,
+                    line,
+                    layer.index,
+                    subtype,
+                    first_pose,
+                    reset_raw="external_npz_fiber_print_reset",
+                ):
+                    commands.append(boundary)
+                    line += 1
+                current_e = 0.0
+                first_fiber_in_job = False
+            elif not is_fiber:
+                for wait in _path_prime_waits(
+                    material_path.material,
+                    params,
+                    line,
+                    layer.index,
+                    subtype,
+                ):
+                    commands.append(wait)
+                    current_e += wait.delta_e
+                    line += 1
 
             print_moves, current_e = _print_moves_from_positions(
                 source_positions=source_positions,
@@ -192,6 +259,29 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                     )
                 )
                 line += 1
+                if is_last_fiber_in_layer:
+                    for boundary in _reset_boundary_commands(
+                        params,
+                        line,
+                        layer.index,
+                        subtype,
+                        previous_pose,
+                        reset_raw="external_npz_fiber_layer_retract_reset",
+                    ):
+                        commands.append(boundary)
+                        line += 1
+                    current_e = 0.0
+                    for wait in _path_retract_waits(
+                        material_path.material,
+                        params,
+                        line,
+                        layer.index,
+                        subtype,
+                        raw="external_npz_fiber_layer_retract",
+                    ):
+                        commands.append(wait)
+                        current_e += wait.delta_e
+                        line += 1
 
             if material_path.material != "F":
                 for wait in _path_retract_waits(material_path.material, params, line, layer.index, subtype):
@@ -210,6 +300,8 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 commands.append(boundary)
                 line += 1
             current_e = 0.0
+            if is_fiber:
+                fiber_path_number += 1
 
     return commands
 
@@ -284,12 +376,14 @@ def _path_prime_waits(
     return waits
 
 
-def _path_reset_commands(
+def _reset_boundary_commands(
     params: ProcessParams,
     line: int,
     layer: int,
     subtype: str,
     pose: Position,
+    *,
+    reset_raw: str,
 ) -> list[ResetECommand | ExtrudeWait]:
     reset = ResetECommand(
         type="RESET_E",
@@ -297,7 +391,7 @@ def _path_reset_commands(
         line=line,
         layer=layer,
         subtype=subtype,
-        raw="external_npz_path_reset",
+        raw=reset_raw,
         pose=pose,
     )
     anchor = ExtrudeWait(
@@ -313,12 +407,31 @@ def _path_reset_commands(
     return [reset, anchor]
 
 
+def _path_reset_commands(
+    params: ProcessParams,
+    line: int,
+    layer: int,
+    subtype: str,
+    pose: Position,
+) -> list[ResetECommand | ExtrudeWait]:
+    return _reset_boundary_commands(
+        params,
+        line,
+        layer,
+        subtype,
+        pose,
+        reset_raw="external_npz_path_reset",
+    )
+
+
 def _path_retract_waits(
     material: str,
     params: ProcessParams,
     line: int,
     layer: int,
     subtype: str,
+    *,
+    raw: str = "external_npz_retract",
 ) -> list[ExtrudeWait]:
     process = _process_params_for_material(material, params)
     retract = _make_extrude_wait(
@@ -327,7 +440,7 @@ def _path_retract_waits(
         line=line,
         layer=layer,
         subtype=subtype,
-        raw="external_npz_retract",
+        raw=raw,
     )
     return [retract] if retract is not None else []
 

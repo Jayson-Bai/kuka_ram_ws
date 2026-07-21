@@ -71,7 +71,8 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     assert captured["kwargs"]["resin_z_print_compensation_mm"] == 1.25
     assert captured["kwargs"]["cut_lift_mm"] == 22.0
     assert captured["kwargs"]["cut_wait_s"] == 11.0
-    assert captured["kwargs"]["fiber_retract_length_mm"] == 10.0
+    assert "fiber_retract_length_mm" not in captured["kwargs"]
+    assert captured["kwargs"]["external_npz_cut_absolute_e"] is True
 
 
 def test_exporter_uses_curve_start_acceleration_without_changing_default(tmp_path, monkeypatch):
@@ -320,7 +321,7 @@ def test_external_npz_prime_settle_exports_125_stationary_rows(tmp_path):
         assert np.allclose(data["e"][settle_idx], 2.0)
 
 
-def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_travel(tmp_path):
+def test_fiber_cut_and_ui_actions_use_independent_absolute_e_boundaries(tmp_path):
     import json
     import numpy as np
 
@@ -407,16 +408,10 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.isclose(np.max(data["z"][cut_motion_idx]), cut_z + 20.0)
     assert np.isclose(np.max(data["e"][cut_motion_idx]), 20.0)
     assert np.isclose(data["z"][cut_motion_idx[-1]], cut_z + 20.0)
-    assert np.isclose(
-        data["e"][cut_motion_idx[-1]],
-        -params.fiber.retract_length_mm,
-    )
+    assert np.isclose(data["e"][cut_motion_idx[-1]], 0.0)
 
     assert event_types[reset_idx] == "extrude_reset"
-    assert np.isclose(
-        data["e"][reset_idx],
-        -params.fiber.retract_length_mm,
-    )
+    assert np.isclose(data["e"][reset_idx], 0.0)
     assert np.isclose(data["z"][reset_idx], cut_z + 20.0)
 
     anchor_idx = _next_src_line_group(src_lines, reset_idx)
@@ -435,24 +430,58 @@ def test_fiber_cut_lift_retracts_before_travel_and_next_path_prepares_after_trav
     assert np.isclose(data["x"][travel_idx[-1]], 30.0)
     assert np.allclose(data["y"][travel_idx], 0.0)
 
-    prime_idx = _next_src_line_group(src_lines, travel_idx[-1])
-    assert len(prime_idx) == 1
-    assert np.isclose(data["e"][prime_idx[0]], 6.0)
-    assert np.isclose(data["z"][prime_idx[0]], cut_z)
-    assert np.isclose(data["x"][prime_idx[0]], 30.0)
-    assert np.isclose(data["y"][prime_idx[0]], 0.0)
+    second_cut_idx = event_types.index("cut", cut_idx + 1)
+    second_print_idx = list(range(travel_idx[-1] + 1, second_cut_idx))
+    assert second_print_idx
+    assert not any(event_types[idx] for idx in second_print_idx)
+    assert np.min(data["e"][second_print_idx]) >= 0.0
+    assert np.max(data["e"][second_print_idx]) > 0.0
 
-    settle_idx = _next_src_line_group(src_lines, prime_idx[-1])
-    assert np.allclose(data["e"][settle_idx], 6.0)
-    assert np.allclose(data["z"][settle_idx], cut_z)
-    assert np.allclose(data["x"][settle_idx], 30.0)
-    assert np.allclose(data["y"][settle_idx], 0.0)
+    second_cut_src = src_lines[second_cut_idx]
+    second_cut_z = float(data["z"][second_cut_idx])
+    second_local_reset_idx = second_cut_idx + 1
+    assert event_types[second_local_reset_idx] == "extrude_reset"
+    second_local_anchor_idx = second_local_reset_idx + 1
+    assert np.isclose(data["e"][second_local_anchor_idx], 0.0)
 
-    print_idx = _next_src_line_group(src_lines, settle_idx[-1])
-    assert np.isclose(data["e"][print_idx[0]], 6.0)
-    assert np.isclose(data["z"][print_idx[0]], cut_z)
-    assert np.isclose(data["x"][print_idx[0]], 30.0)
-    assert np.isclose(data["y"][print_idx[0]], 0.0)
+    layer_retract_reset_idx = next(
+        idx
+        for idx in range(second_local_anchor_idx + 1, len(event_types))
+        if event_types[idx] == "extrude_reset"
+    )
+    second_cut_motion_idx = [
+        idx
+        for idx in range(second_local_anchor_idx + 1, layer_retract_reset_idx)
+        if src_lines[idx] == second_cut_src
+    ]
+    assert second_cut_motion_idx
+    assert np.isclose(
+        np.max(data["z"][second_cut_motion_idx]),
+        second_cut_z + 20.0,
+    )
+    assert np.isclose(np.max(data["e"][second_cut_motion_idx]), 20.0)
+    assert np.isclose(data["e"][second_cut_motion_idx[-1]], 0.0)
+    assert np.isclose(data["e"][layer_retract_reset_idx], 0.0)
+
+    layer_retract_anchor_idx = _next_src_line_group(
+        src_lines, layer_retract_reset_idx
+    )
+    assert len(layer_retract_anchor_idx) == 1
+    assert np.isclose(data["e"][layer_retract_anchor_idx[0]], 0.0)
+    ui_retract_idx = _next_src_line_group(
+        src_lines, layer_retract_anchor_idx[-1]
+    )
+    assert np.isclose(data["e"][ui_retract_idx[-1]], -4.0)
+
+    path_reset_idx = next(
+        idx
+        for idx in range(layer_retract_reset_idx + 1, len(event_types))
+        if event_types[idx] == "extrude_reset"
+    )
+    assert np.isclose(data["e"][path_reset_idx], -4.0)
+    path_anchor_idx = _next_src_line_group(src_lines, path_reset_idx)
+    assert len(path_anchor_idx) == 1
+    assert np.isclose(data["e"][path_anchor_idx[0]], 0.0)
 
 
 def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
@@ -504,7 +533,11 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
             "extrude_reset",
             "tool_change_cf",
             "extrude_reset",
+            "extrude_reset",
+            "extrude_reset",
+            "extrude_reset",
             "cut",
+            "extrude_reset",
             "extrude_reset",
             "extrude_reset",
         ]

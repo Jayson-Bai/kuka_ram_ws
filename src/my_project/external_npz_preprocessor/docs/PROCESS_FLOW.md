@@ -137,33 +137,50 @@ enable_extrude_wait=True
 
 ### 路径准备规则
 
-等待段不并入 travel。整件第一条可打印路径在自己的 prime 前保留一次既有初始回抽。每条路径都在到达起点后执行 `prime -> 可选 prime_settle -> PRINT`。路径结束后先完成本材料的卸压动作，再立即 reset + anchor，之后才允许 travel：
+等待段不并入 travel。树脂继续使用原有的逐路径 `prime -> 可选 prime_settle -> PRINT -> retract` 规则，整件第一条可打印路径前的既有初始回抽也保持不变。
+
+纤维 UI 预挤出/回抽按“含纤维层”的首尾路径生效。每个独立 UI 动作都用 reset + anchor 从 `E=0` 开始，避免与打印累计值或 CUT 固定动作共享绝对 E 基准：
 
 ```text
-# Whole part first print path only:
-ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
+# Whole job's first fiber, after travel reaches its start:
+ResetECommand(raw="external_npz_fiber_prepare_reset")
+ExtrudeWait(delta_e=0, raw="external_npz_reset_anchor")
+ExtrudeWait(delta_e=-fiber.retract_length_mm, raw="external_npz_fiber_initial_retract")
 
-# Every printable path, at its start pose:
-ExtrudeWait(delta_e=+material.prime_length_mm, feedrate=material.prime_speed_mm_s * 60)
+# First fiber of every fiber-bearing layer:
+ResetECommand(raw="external_npz_fiber_prime_reset")
+ExtrudeWait(delta_e=0, raw="external_npz_reset_anchor")
+ExtrudeWait(delta_e=+fiber.prime_length_mm, raw="external_npz_prime")
 ExtrudeWait(wait_sec=prime_settle_s, delta_e=0, raw="external_npz_prime_settle")
+ResetECommand(raw="external_npz_fiber_print_reset")
+ExtrudeWait(delta_e=0, raw="external_npz_reset_anchor")
 PRINT path
 
-# Resin path end:
-ExtrudeWait(delta_e=-material.retract_length_mm, feedrate=material.retract_speed_mm_s * 60)
-ResetECommand(raw="external_npz_path_reset")
-ExtrudeWait(wait_sec=dt, delta_e=0, raw="external_npz_reset_anchor")
+# Middle fibers in the same layer:
+TRAVEL(E=0) -> PRINT path
 
-# Fiber path end:
+# Every fiber path end:
 CUT
-# exporter expands CUT as event -> lift(+same E) -> remaining wait -> equal safety retract
+# exporter expands external-NPZ CUT as:
+# cut event -> reset -> anchor(E=0) -> lift(E:0→+L)
+# -> remaining wait(E=+L) -> safety retract(E:+L→0)
+
+# Last fiber of every fiber-bearing layer, after CUT:
+ResetECommand(raw="external_npz_fiber_layer_retract_reset")
+ExtrudeWait(delta_e=0, raw="external_npz_reset_anchor")
+ExtrudeWait(delta_e=-fiber.retract_length_mm, raw="external_npz_fiber_layer_retract")
+
+# Every printable path still ends with:
 ResetECommand(raw="external_npz_path_reset")
 ExtrudeWait(wait_sec=dt, delta_e=0, raw="external_npz_reset_anchor")
 
-# If another path follows:
-TRAVEL(E=0) -> next path start -> prime -> optional prime_settle -> PRINT
+# If another path follows, travel remains:
+TRAVEL(E=0)
 ```
 
-树脂 normal retract 和纤维剪切安全回抽都发生在 path reset 之前。reset 之后不再保留任何尚未执行的正/负 E 累计；anchor 提供一个明确的 `E=0` 导出周期。travel 本身不携带 prime/retract，系统 NPZ 中的 travel 行保持 `E=0`。下一条路径到达起点后才执行自己的 prime 和 settle。
+其中 `L=cut_lift_mm`。CUT 的挤出和固定回抽只受 L 控制，不再读取 `fiber.prime_length_mm` 或 `fiber.retract_length_mm`。层末 UI 回抽前的 reset 同时阻断 CUT 向后读取 UI 回抽速度；CUT 固定回抽继续使用默认移动速度，UI 回抽使用自己的 `fiber.retract_speed_mm_s`。
+
+只有一条纤维的层同时执行层首预挤出和层末回抽。无纤维层不产生纤维 UI 动作；下一个实际含纤维层仍按层首规则处理。path reset 之后不保留任何正/负 E 累计，travel 行保持 `E=0`。
 
 `prime_settle_s=0.5` 且 `dt=0.004` 时，settle 导出为恰好 125 个固定 XYZ、固定 E 的采样行。
 
