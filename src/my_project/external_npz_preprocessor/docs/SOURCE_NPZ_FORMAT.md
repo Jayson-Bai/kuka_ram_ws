@@ -194,7 +194,7 @@ SourceJob
 
 每条源路径会转成独立打印段。整件第一条可打印路径在 prime 前保留一次初始回抽；每条路径到达起点后执行 `prime -> 可选 prime_settle -> PRINT`。
 
-树脂路径结束顺序为 `PRINT -> retract -> path reset -> one-cycle E=0 anchor`。纤维路径先插入语义级 `CUT`；`path_processing_core.npz_exporter.export_npz()` 展开 cut 事件、剪切抬升、等待补足和等量安全回抽后，再执行 `path reset -> one-cycle E=0 anchor`。如果还有下一条路径，travel 在 anchor 之后执行并保持 `E=0`，到达目的点后才执行下一条 prime 和 settle。
+树脂路径结束顺序为 `PRINT -> retract -> path reset -> one-cycle E=0 anchor`。纤维路径先插入语义级 `CUT`；`path_processing_core.npz_exporter.export_npz()` 在 CUT 前建立 E=0 基准，再展开非阻塞 cut 事件、同步抬升/挤出、3 秒高位保持、独立 reset、等量回抽、3 秒高位保持、最终 reset 和剩余等待，之后才执行原有 `path reset -> one-cycle E=0 anchor`。如果还有下一条路径，travel 在 anchor 之后执行并保持 `E=0`。
 
 该边界覆盖 converter 生成的 primeline、所有源路径和最终路径。路径 reset 与工具切换 reset 同时保留；reset 事件行仍是旧 E，只有精确内部 `external_npz_reset_anchor` 行从 `E=0` 导出。
 

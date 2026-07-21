@@ -1251,45 +1251,162 @@ def export_npz(
         ev = _mcommand_to_event(cmd, current_tool)
         if ev is None:
             return
-        _emit_event(ev, layer, subtype, occ)
 
         is_external_npz_fiber_cut = (
             current_tool == 1
             and external_npz_cut_absolute_e
             and (cmd.raw or "") == "external_npz_cut"
         )
-        # External-NPZ fiber CUTs need a real absolute-E boundary before
-        # the lift/retract safety sequence. Keep generic GCode CUT behavior
-        # unchanged by limiting this boundary to converter-generated CUTs.
         if is_external_npz_fiber_cut:
-            _emit_event(_PendingEvent(
-                event_type="extrude_reset",
-                payload=str(current_tool),
-                src_line=cmd.line or 0,
-                tool_id=current_tool,
-            ), layer, subtype, occ)
+            # Keep converter-generated fiber CUT extrusion phases independent
+            # from path E and from each other:
+            # reset -> CUT -> lift 0..L -> settle -> reset ->
+            # retract 0..-L -> settle -> reset -> remaining high hold.
+            # CUT stays nonblocking; putting the first reset before it prevents
+            # RSI from advancing to an E=0 anchor before the reset handshake.
+            settle_s = 3.0
+            lift_mm = max(0.0, float(cut_lift_mm))
+            wait_s = max(0.0, float(cut_wait_s))
+            lift_feedrate = max(float(default_feed_mm_s), 1e-9) * 60.0
+            lift_speed = max(_feed_mm_s_from_feedrate(lift_feedrate), 1e-9)
+            retract_feedrate = lift_feedrate
+            retract_speed = lift_speed
+
+            def _append_cut_reset_anchor(*, mark_path_end: bool = False):
+                _emit_event(_PendingEvent(
+                    event_type="extrude_reset",
+                    payload=str(current_tool),
+                    src_line=cmd.line or 0,
+                    tool_id=current_tool,
+                ), layer, subtype, occ)
+                _append_extrude_wait(ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=dt,
+                    delta_e=0.0,
+                    feedrate=lift_feedrate,
+                    line=cmd.line or 0,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="external_npz_reset_anchor",
+                ), layer, subtype, occ, mark_path_end=mark_path_end)
+
+            _append_cut_reset_anchor()
+            _emit_event(ev, layer, subtype, occ)
+
+            if lift_mm > 1e-9:
+                hold_row = last_pose or CsvRow(
+                    seq=seq,
+                    x=0.0,
+                    y=0.0,
+                    z=0.0,
+                    a=0.0,
+                    b=0.0,
+                    c=0.0,
+                    e=0.0,
+                    tool_id=current_tool,
+                    move_type="TRAVEL",
+                    src_line=str(cmd.line),
+                    event_flag=0,
+                    event_type="",
+                    payload="",
+                    trigger_seq=None,
+                    path_id=_path_id_for(layer, subtype, occ),
+                )
+                start_p = Position(
+                    hold_row.x, hold_row.y, hold_row.z,
+                    hold_row.a, hold_row.b, hold_row.c,
+                )
+                end_p = Position(
+                    hold_row.x, hold_row.y, hold_row.z + lift_mm,
+                    hold_row.a, hold_row.b, hold_row.c,
+                )
+                lift_gc = GlobalCurveCommand(
+                    type="TRAVEL",
+                    cmd="SPLINE",
+                    start_pos=start_p,
+                    control_points=[end_p, end_p, end_p],
+                    e_val=lift_mm,
+                    delta_e=lift_mm,
+                    feedrate=lift_feedrate,
+                    line=cmd.line or 0,
+                    raw="cut_lift_feed",
+                    constraints=[],
+                    original_moves=[],
+                )
+                _append_sample(
+                    lift_gc, layer, subtype, occ, mark_path_end=False
+                )
+
             _append_extrude_wait(ExtrudeWait(
                 type="EXTRUDE_WAIT",
-                wait_sec=dt,
+                wait_sec=settle_s,
                 delta_e=0.0,
-                feedrate=max(float(default_feed_mm_s), 1e-9) * 60.0,
+                feedrate=lift_feedrate,
                 line=cmd.line or 0,
                 layer=layer,
                 subtype=subtype,
-                raw="external_npz_reset_anchor",
+                raw="external_npz_cut_lift_settle",
             ), layer, subtype, occ, mark_path_end=False)
+
+            # The reset at +L makes the equal retract a separate absolute
+            # interval 0..-L instead of allowing it to inherit lift E.
+            _append_cut_reset_anchor()
+            if lift_mm > 1e-9:
+                _append_extrude_wait(ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=lift_mm / retract_speed,
+                    delta_e=-lift_mm,
+                    feedrate=retract_feedrate,
+                    line=cmd.line or 0,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="cut_safety_retract",
+                ), layer, subtype, occ, mark_path_end=False)
+
+            _append_extrude_wait(ExtrudeWait(
+                type="EXTRUDE_WAIT",
+                wait_sec=settle_s,
+                delta_e=0.0,
+                feedrate=retract_feedrate,
+                line=cmd.line or 0,
+                layer=layer,
+                subtype=subtype,
+                raw="external_npz_cut_retract_settle",
+            ), layer, subtype, occ, mark_path_end=False)
+
+            lift_duration_s = lift_mm / lift_speed
+            retract_duration_s = lift_mm / retract_speed
+            remaining_wait_s = max(
+                0.0,
+                wait_s
+                - lift_duration_s
+                - settle_s
+                - retract_duration_s
+                - settle_s,
+            )
+            _append_cut_reset_anchor(mark_path_end=remaining_wait_s <= 1e-9)
+            if remaining_wait_s > 1e-9:
+                _append_extrude_wait(ExtrudeWait(
+                    type="EXTRUDE_WAIT",
+                    wait_sec=remaining_wait_s,
+                    delta_e=0.0,
+                    feedrate=lift_feedrate,
+                    line=cmd.line or 0,
+                    layer=layer,
+                    subtype=subtype,
+                    raw="cut_wait_remaining",
+                ), layer, subtype, occ, mark_path_end=True)
+            return
+
+        # Generic GCode CUT behavior remains unchanged.
+        _emit_event(ev, layer, subtype, occ)
 
         lift_mm = max(0.0, float(cut_lift_mm))
         wait_s = max(0.0, float(cut_wait_s))
-        if is_external_npz_fiber_cut:
-            # UI fiber retract is emitted separately by the converter only at
-            # fiber-layer boundaries. CUT itself is always a closed 0→L→0 pair.
-            fiber_retract_mm = 0.0
-        else:
-            fiber_retract_mm = (
-                max(0.0, float(fiber_retract_length_mm))
-                if current_tool == 1 and fiber_retract_length_mm is not None else 0.0
-            )
+        fiber_retract_mm = (
+            max(0.0, float(fiber_retract_length_mm))
+            if current_tool == 1 and fiber_retract_length_mm is not None else 0.0
+        )
         total_retract_mm = lift_mm + fiber_retract_mm
         if lift_mm <= 1e-9:
             if wait_s > 1e-9:
