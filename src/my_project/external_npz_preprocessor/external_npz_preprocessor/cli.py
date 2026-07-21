@@ -16,6 +16,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resin-layer-height-mm", type=float, default=0.5)
     parser.add_argument("--resin-extrusion-scale", type=float, default=1.0)
     parser.add_argument("--resin-feed-mm-s", type=float, default=10.0)
+    parser.add_argument("--first-layer-resin-feed-mm-s", type=float, default=10.0)
     parser.add_argument("--resin-temperature-c", type=float, default=250.0)
     parser.add_argument("--resin-prime-length-mm", type=float, default=18.0)
     parser.add_argument("--resin-prime-speed-mm-s", type=float, default=15.0)
@@ -25,6 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fiber-layer-height-mm", type=float, default=0.1)
     parser.add_argument("--fiber-extrusion-scale", type=float, default=1.0)
     parser.add_argument("--fiber-feed-mm-s", type=float, default=10.0)
+    parser.add_argument("--first-layer-fiber-feed-mm-s", type=float, default=10.0)
     parser.add_argument("--fiber-start-accel-s", type=float, default=2.0)
     parser.add_argument("--fiber-temperature-c", type=float, default=250.0)
     parser.add_argument("--fiber-prime-length-mm", type=float, default=12.0)
@@ -33,6 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--fiber-retract-speed-mm-s", type=float, default=5.0)
     parser.add_argument("--no-fiber-fan", action="store_false", dest="fiber_fan")
     parser.add_argument("--travel-feed-mm-s", type=float, default=10.0)
+    parser.add_argument("--first-layer-travel-feed-mm-s", type=float, default=10.0)
     parser.add_argument("--default-a", type=float, default=0.0)
     parser.add_argument("--default-b", type=float, default=0.0)
     parser.add_argument("--default-c", type=float, default=0.0)
@@ -50,6 +53,7 @@ def params_from_args(args) -> ProcessParams:
             layer_height_mm=args.resin_layer_height_mm,
             extrusion_scale=args.resin_extrusion_scale,
             feed_mm_s=args.resin_feed_mm_s,
+            first_layer_feed_mm_s=args.first_layer_resin_feed_mm_s,
             temperature_c=args.resin_temperature_c,
             fan_enabled=args.resin_fan,
             prime_length_mm=args.resin_prime_length_mm,
@@ -61,6 +65,7 @@ def params_from_args(args) -> ProcessParams:
             layer_height_mm=args.fiber_layer_height_mm,
             extrusion_scale=args.fiber_extrusion_scale,
             feed_mm_s=args.fiber_feed_mm_s,
+            first_layer_feed_mm_s=args.first_layer_fiber_feed_mm_s,
             start_accel_s=args.fiber_start_accel_s,
             temperature_c=args.fiber_temperature_c,
             fan_enabled=args.fiber_fan,
@@ -70,6 +75,7 @@ def params_from_args(args) -> ProcessParams:
             retract_speed_mm_s=args.fiber_retract_speed_mm_s,
         ),
         travel_feed_mm_s=args.travel_feed_mm_s,
+        first_layer_travel_feed_mm_s=args.first_layer_travel_feed_mm_s,
         default_a=args.default_a,
         default_b=args.default_b,
         default_c=args.default_c,

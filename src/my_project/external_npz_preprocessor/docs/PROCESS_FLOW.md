@@ -201,7 +201,7 @@ TRAVEL(E=0)
 ```text
 start_pos = 上一点
 pos       = 下一点
-feedrate  = 材料打印速度 * 60
+feedrate  = （材料首层打印速度或非首层打印速度） * 60
 delta_e   = 三维路径长度 * e_per_mm
 e_val     = 当前工具内累计 E
 ```
@@ -212,7 +212,7 @@ e_val     = 当前工具内累计 E
 sqrt(dx^2 + dy^2 + dz^2)
 ```
 
-所以曲面路径中的 Z 起伏会参与路径长度和挤出量计算。
+所以曲面路径中的 Z 起伏会参与路径长度和挤出量计算。树脂和纤维分别记录自己的首个实际含该材料层；二者不要求出现在同一个层号。自动擦料线固定使用首层树脂打印速度。
 
 树脂 `E/mm`：
 
@@ -240,13 +240,14 @@ fiber_e_per_mm = fiber_extrusion_scale
 MoveCommand(type="TRAVEL", cmd="G0")
 ```
 
-空走速度来自：
+空走速度按终点路径所属材料选择：
 
 ```text
-travel_feed_mm_s
+终点是该材料首层 -> first_layer_travel_feed_mm_s
+终点是该材料后续层 -> travel_feed_mm_s
 ```
 
-默认是 `10 mm/s`；external-NPZ 转换入口要求该值有限且大于 `0`。每条路径 reset + anchor 后，空走不产生挤出并保持零基线：
+两个空走速度默认都是 `10 mm/s`；external-NPZ 转换入口要求它们有限且大于 `0`。每条路径 reset + anchor 后，空走不产生挤出并保持零基线：
 
 ```text
 delta_e = 0
@@ -289,6 +290,8 @@ export_npz(
     resin_z_print_compensation_mm=resin_z_print_compensation_mm,
 )
 ```
+
+`first_layer_travel_feed_mm_s` 只用于 preprocessor 生成的定位和路径间 `G0`，不会传入 exporter。剪切抬升、工具偏置切换等安全动作继续读取 `default_feed_mm_s=params.travel_feed_mm_s`，默认 `10 mm/s`。
 
 因此，工具切换补偿、树脂 Z 补偿、事件编码、采样和系统 NPZ 字段写入，都由 `path_processing_core.npz_exporter` 统一完成。工具切换补偿保持旧 exporter 顺序：安全抬升 `20 mm` -> 偏置补偿 travel -> 工具切换事件。
 

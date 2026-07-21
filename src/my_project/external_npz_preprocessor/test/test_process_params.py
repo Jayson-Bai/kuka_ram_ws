@@ -50,11 +50,13 @@ def test_default_process_params_match_current_material_setup():
     assert params.resin.layer_height_mm == 0.5
     assert params.resin.extrusion_scale == 1.0
     assert params.resin.feed_mm_s == 10.0
+    assert params.resin.first_layer_feed_mm_s == 10.0
     assert params.resin.temperature_c == 250.0
     assert params.resin.fan_enabled is True
     assert params.fiber.layer_height_mm == 0.1
     assert params.fiber.extrusion_scale == 1.0
     assert params.fiber.feed_mm_s == 10.0
+    assert params.fiber.first_layer_feed_mm_s == 10.0
     assert params.fiber.temperature_c == 250.0
     assert params.fiber.fan_enabled is True
     assert params.fiber.e_per_mm() == 1.0
@@ -68,6 +70,7 @@ def test_default_process_params_match_current_material_setup():
     assert params.fiber.retract_speed_mm_s == 5.0
     assert params.fiber.start_accel_s == 2.0
     assert params.travel_feed_mm_s == 10.0
+    assert params.first_layer_travel_feed_mm_s == 10.0
     assert params.prime_settle_s == pytest.approx(0.5)
     assert params.start_x_mm == 0.0
     assert params.start_y_mm == 0.0

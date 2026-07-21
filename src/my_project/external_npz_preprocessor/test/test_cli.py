@@ -41,3 +41,24 @@ def test_prime_settle_s_cli_override_is_used():
     )
 
     assert params_from_args(args).prime_settle_s == pytest.approx(0.25)
+
+
+def test_first_layer_speed_options_are_exposed_and_used():
+    args = build_parser().parse_args(
+        [
+            "--source",
+            "input.npz",
+            "--first-layer-resin-feed-mm-s",
+            "4.0",
+            "--first-layer-fiber-feed-mm-s",
+            "3.0",
+            "--first-layer-travel-feed-mm-s",
+            "8.0",
+        ]
+    )
+
+    params = params_from_args(args)
+
+    assert params.resin.first_layer_feed_mm_s == pytest.approx(4.0)
+    assert params.fiber.first_layer_feed_mm_s == pytest.approx(3.0)
+    assert params.first_layer_travel_feed_mm_s == pytest.approx(8.0)

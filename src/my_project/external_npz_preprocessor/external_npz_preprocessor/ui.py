@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import traceback
 
-from python_qt_binding import QtWidgets
+from python_qt_binding import QtCore, QtWidgets
 
 from .export_runner import (
     convert_external_npz,
@@ -31,7 +31,8 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("External NPZ Preprocessor")
-        self.resize(880, 680)
+        self.setMinimumSize(720, 560)
+        self.resize(960, 760)
         ensure_default_data_dirs()
         self._last_auto_output = ""
         self._build_ui()
@@ -58,6 +59,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.resin_layer_height = self._spin(0.5)
         self.resin_extrusion_scale = self._spin(1.0)
         self.resin_feed = self._spin(10.0)
+        self.first_layer_resin_feed = self._spin(10.0, minimum=0.001)
         self.resin_temp = self._spin(250.0, maximum=500.0)
         self.resin_prime_length = self._spin(18.0)
         self.resin_prime_speed = self._spin(15.0)
@@ -68,6 +70,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_layer_height = self._spin(0.1)
         self.fiber_extrusion_scale = self._spin(1.0)
         self.fiber_feed = self._spin(10.0)
+        self.first_layer_fiber_feed = self._spin(10.0, minimum=0.001)
         self.fiber_start_accel = self._spin(2.0, minimum=0.001)
         self.fiber_temp = self._spin(250.0, maximum=500.0)
         self.fiber_prime_length = self._spin(12.0)
@@ -77,6 +80,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_fan = QtWidgets.QCheckBox()
         self.fiber_fan.setChecked(True)
         self.travel_feed = self._spin(10.0)
+        self.first_layer_travel_feed = self._spin(10.0, minimum=0.001)
         self.prime_settle_s = self._spin(0.5)
         self.default_a = self._spin(0.0, minimum=-360.0, maximum=360.0)
         self.default_b = self._spin(0.0, minimum=-360.0, maximum=360.0)
@@ -86,9 +90,21 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         fixed_resin_width = QtWidgets.QLabel(f"固定树脂线宽: {RESIN_FIXED_BEAD_WIDTH_MM:.1f} mm")
         params_layout.addWidget(fixed_resin_width, 0, 0, 1, 4)
         rows = [
+            (
+                "首层树脂打印速度 mm/s",
+                self.first_layer_resin_feed,
+                "首层纤维打印速度 mm/s",
+                self.first_layer_fiber_feed,
+            ),
+            (
+                "首层空走速度 mm/s",
+                self.first_layer_travel_feed,
+                "",
+                QtWidgets.QLabel(""),
+            ),
             ("树脂层高 mm", self.resin_layer_height, "纤维层高 mm", self.fiber_layer_height),
             ("树脂挤出倍率", self.resin_extrusion_scale, "纤维挤出倍率", self.fiber_extrusion_scale),
-            ("树脂速度 mm/s", self.resin_feed, "纤维速度 mm/s", self.fiber_feed),
+            ("树脂非首层打印速度 mm/s", self.resin_feed, "纤维非首层打印速度 mm/s", self.fiber_feed),
             (
                 "",
                 QtWidgets.QLabel(""),
@@ -101,7 +117,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             ("树脂回抽长度 mm", self.resin_retract_length, "纤维回抽长度 mm", self.fiber_retract_length),
             ("树脂回抽速度 mm/s", self.resin_retract_speed, "纤维回抽速度 mm/s", self.fiber_retract_speed),
             ("树脂风扇", self.resin_fan, "纤维风扇", self.fiber_fan),
-            ("预挤出稳定等待 s", self.prime_settle_s, "空走速度 mm/s", self.travel_feed),
+            ("预挤出稳定等待 s", self.prime_settle_s, "非首层空走速度 mm/s", self.travel_feed),
             ("左下角 X mm", self.start_x, "左下角 Y mm", self.start_y),
             ("", QtWidgets.QLabel(""), "默认 A", self.default_a),
             ("", QtWidgets.QLabel(""), "默认 B", self.default_b),
@@ -111,9 +127,15 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
             if left_label:
                 params_layout.addWidget(QtWidgets.QLabel(left_label), row, 0)
                 params_layout.addWidget(left_widget, row, 1)
-            params_layout.addWidget(QtWidgets.QLabel(right_label), row, 2)
-            params_layout.addWidget(right_widget, row, 3)
-        layout.addWidget(params_group)
+            if right_label:
+                params_layout.addWidget(QtWidgets.QLabel(right_label), row, 2)
+                params_layout.addWidget(right_widget, row, 3)
+        params_scroll = QtWidgets.QScrollArea()
+        params_scroll.setWidgetResizable(True)
+        params_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
+        params_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        params_scroll.setWidget(params_group)
+        layout.addWidget(params_scroll, 2)
 
         buttons = QtWidgets.QHBoxLayout()
         self.validate_button = QtWidgets.QPushButton("校验源 NPZ")
@@ -209,6 +231,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.resin_layer_height.setValue(params.resin.layer_height_mm)
         self.resin_extrusion_scale.setValue(params.resin.extrusion_scale)
         self.resin_feed.setValue(params.resin.feed_mm_s)
+        self.first_layer_resin_feed.setValue(params.resin.first_layer_feed_mm_s)
         self.resin_temp.setValue(params.resin.temperature_c)
         self.resin_prime_length.setValue(params.resin.prime_length_mm)
         self.resin_prime_speed.setValue(params.resin.prime_speed_mm_s)
@@ -218,6 +241,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_layer_height.setValue(params.fiber.layer_height_mm)
         self.fiber_extrusion_scale.setValue(params.fiber.extrusion_scale)
         self.fiber_feed.setValue(params.fiber.feed_mm_s)
+        self.first_layer_fiber_feed.setValue(params.fiber.first_layer_feed_mm_s)
         self.fiber_start_accel.setValue(params.fiber.start_accel_s)
         self.fiber_temp.setValue(params.fiber.temperature_c)
         self.fiber_prime_length.setValue(params.fiber.prime_length_mm)
@@ -226,6 +250,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
         self.fiber_retract_speed.setValue(params.fiber.retract_speed_mm_s)
         self.fiber_fan.setChecked(params.fiber.fan_enabled)
         self.travel_feed.setValue(params.travel_feed_mm_s)
+        self.first_layer_travel_feed.setValue(params.first_layer_travel_feed_mm_s)
         self.prime_settle_s.setValue(params.prime_settle_s)
         self.default_a.setValue(params.default_a)
         self.default_b.setValue(params.default_b)
@@ -239,6 +264,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
                 layer_height_mm=self.resin_layer_height.value(),
                 extrusion_scale=self.resin_extrusion_scale.value(),
                 feed_mm_s=self.resin_feed.value(),
+                first_layer_feed_mm_s=self.first_layer_resin_feed.value(),
                 temperature_c=self.resin_temp.value(),
                 fan_enabled=self.resin_fan.isChecked(),
                 prime_length_mm=self.resin_prime_length.value(),
@@ -250,6 +276,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
                 layer_height_mm=self.fiber_layer_height.value(),
                 extrusion_scale=self.fiber_extrusion_scale.value(),
                 feed_mm_s=self.fiber_feed.value(),
+                first_layer_feed_mm_s=self.first_layer_fiber_feed.value(),
                 start_accel_s=self.fiber_start_accel.value(),
                 temperature_c=self.fiber_temp.value(),
                 fan_enabled=self.fiber_fan.isChecked(),
@@ -259,6 +286,7 @@ class ExternalNpzPreprocessorWindow(QtWidgets.QWidget):
                 retract_speed_mm_s=self.fiber_retract_speed.value(),
             ),
             travel_feed_mm_s=self.travel_feed.value(),
+            first_layer_travel_feed_mm_s=self.first_layer_travel_feed.value(),
             prime_settle_s=self.prime_settle_s.value(),
             default_a=self.default_a.value(),
             default_b=self.default_b.value(),

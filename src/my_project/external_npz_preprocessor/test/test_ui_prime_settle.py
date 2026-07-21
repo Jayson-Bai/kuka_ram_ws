@@ -16,7 +16,7 @@ def test_prime_settle_control_defaults_to_nonnegative_half_second():
 
     assert "self.prime_settle_s = self._spin(0.5)" in build_ui
     assert (
-        '("预挤出稳定等待 s", self.prime_settle_s, "空走速度 mm/s", self.travel_feed)'
+        '("预挤出稳定等待 s", self.prime_settle_s, "非首层空走速度 mm/s", self.travel_feed)'
         in build_ui
     )
     assert "def _spin(self, value, minimum=0.0, maximum=100000.0):" in src
@@ -51,3 +51,20 @@ def test_save_persists_reconstructed_process_params():
     )[0]
 
     assert "save_print_params(self._params())" in save_params
+
+
+def test_first_layer_speed_controls_and_resizable_scroll_layout_are_exposed():
+    src = _source()
+
+    assert "self.first_layer_resin_feed = self._spin(10.0" in src
+    assert "self.first_layer_fiber_feed = self._spin(10.0" in src
+    assert "self.first_layer_travel_feed = self._spin(10.0" in src
+    assert "params.resin.first_layer_feed_mm_s" in src
+    assert "params.fiber.first_layer_feed_mm_s" in src
+    assert "params.first_layer_travel_feed_mm_s" in src
+    assert "first_layer_feed_mm_s=self.first_layer_resin_feed.value()" in src
+    assert "first_layer_feed_mm_s=self.first_layer_fiber_feed.value()" in src
+    assert "first_layer_travel_feed_mm_s=self.first_layer_travel_feed.value()" in src
+    assert "params_scroll = QtWidgets.QScrollArea()" in src
+    assert "params_scroll.setWidgetResizable(True)" in src
+    assert "self.setMinimumSize(720, 560)" in src

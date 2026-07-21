@@ -43,7 +43,7 @@ data/external_npz_preprocessor/print_params.json
 
 启动 UI 时会自动读取该文件。所有路径都基于项目共享 data 根目录推导，不在代码中写死工作区绝对路径。
 
-`prime_settle_s` 是一项全局 external-NPZ 参数，默认 `0.5 s`。它会持久化到上述 `print_params.json`，并由 CLI、独立 UI 和正式打印 UI 暴露；旧 JSON 缺少该字段时使用 `0.5 s`。设置为 `0` 只关闭预挤出后的稳定等待，负数、`NaN` 和无穷值会被拒绝。`travel_feed_mm_s` 在 external-NPZ 转换入口必须是有限且大于 `0` 的值。
+`prime_settle_s` 是一项全局 external-NPZ 参数，默认 `0.5 s`。它会持久化到上述 `print_params.json`，并由 CLI、独立 UI 和正式打印 UI 暴露；旧 JSON 缺少该字段时使用 `0.5 s`。设置为 `0` 只关闭预挤出后的稳定等待，负数、`NaN` 和无穷值会被拒绝。`travel_feed_mm_s`、`first_layer_travel_feed_mm_s` 以及两个材料的 `first_layer_feed_mm_s` 在 external-NPZ 转换入口必须是有限且大于 `0` 的值。
 
 主要默认值：
 
@@ -51,13 +51,18 @@ data/external_npz_preprocessor/print_params.json
 - 树脂耗材直径：固定 `1.75 mm`，用于把沉积体积换算成 E 轴料长
 - 树脂层高：`0.5 mm`，用于树脂挤出计算
 - 纤维层高：`0.1 mm`，作为工艺参考
-- 树脂/纤维打印速度：`10 mm/s`
-- 空走速度：`10 mm/s`
+- 首层树脂打印速度：`10 mm/s`
+- 首层纤维打印速度：`10 mm/s`
+- 首层共享空走速度：`10 mm/s`
+- 非首层树脂/纤维打印速度：`10 mm/s`
+- 非首层空走速度：`10 mm/s`
 - 全局预挤出稳定等待：`0.5 s`
 - 树脂/纤维温度：`250 C`
 - 树脂/纤维风扇：默认常开
 - 纤维默认挤出倍率：`1.0`，表示纤维进给速度与 TCP 移动速度一致
 - 纤维起步加速时间：`2.0 s`，只覆盖外部 NPZ 纤维打印路径的七阶起始加速段
+
+树脂首层和纤维首层按各材料第一次实际出现的层独立判定；擦料线使用首层树脂打印速度。空走速度按终点路径所属材料是否位于其首层选择。首层参数不传入剪切抬升、工具偏置切换等 exporter 安全动作，这些动作继续使用 `default_feed_mm_s=params.travel_feed_mm_s`，其默认值为 `10 mm/s`。
 
 共享喷头偏置读取自：
 

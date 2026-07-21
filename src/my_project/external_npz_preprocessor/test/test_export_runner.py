@@ -61,7 +61,10 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     runner.convert_external_npz(
         source,
         tmp_path / "out.npz",
-        ProcessParams(),
+        ProcessParams(
+            travel_feed_mm_s=7.0,
+            first_layer_travel_feed_mm_s=2.0,
+        ),
         calibration_path=calibration_path,
         cut_lift_mm=22.0,
         cut_wait_s=11.0,
@@ -71,6 +74,7 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
     assert captured["kwargs"]["resin_z_print_compensation_mm"] == 1.25
     assert captured["kwargs"]["cut_lift_mm"] == 22.0
     assert captured["kwargs"]["cut_wait_s"] == 11.0
+    assert captured["kwargs"]["default_feed_mm_s"] == 7.0
     assert "fiber_retract_length_mm" not in captured["kwargs"]
     assert captured["kwargs"]["external_npz_cut_absolute_e"] is True
 

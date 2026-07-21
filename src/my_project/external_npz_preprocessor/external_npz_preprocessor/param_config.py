@@ -14,7 +14,7 @@ from .process_params import FiberProcessParams, ProcessParams, ResinProcessParam
 
 _CONFIG_DIR_NAME = "external_npz_preprocessor"
 _CONFIG_FILE_NAME = "print_params.json"
-_CONFIG_VERSION = 1
+_CONFIG_VERSION = 2
 
 
 def default_print_params_path(data_root: str | Path | None = None) -> Path:
@@ -48,6 +48,14 @@ def load_print_params(path: str | Path | None = None) -> ProcessParams:
 def process_params_from_dict(data: dict[str, Any]) -> ProcessParams:
     defaults = asdict(ProcessParams())
     merged = _deep_merge(defaults, data)
+    resin_data = data.get("resin", {}) if isinstance(data.get("resin", {}), dict) else {}
+    fiber_data = data.get("fiber", {}) if isinstance(data.get("fiber", {}), dict) else {}
+    if "first_layer_feed_mm_s" not in resin_data:
+        merged["resin"]["first_layer_feed_mm_s"] = merged["resin"]["feed_mm_s"]
+    if "first_layer_feed_mm_s" not in fiber_data:
+        merged["fiber"]["first_layer_feed_mm_s"] = merged["fiber"]["feed_mm_s"]
+    if "first_layer_travel_feed_mm_s" not in data:
+        merged["first_layer_travel_feed_mm_s"] = merged["travel_feed_mm_s"]
     if (
         "spline_max_error_mm" not in data
         and float(merged.get("corner_angle_deg", defaults["corner_angle_deg"])) == 10.0
@@ -64,6 +72,12 @@ def process_params_from_dict(data: dict[str, Any]) -> ProcessParams:
         resin=ResinProcessParams(**_known_fields(ResinProcessParams, merged.get("resin", {}))),
         fiber=FiberProcessParams(**_known_fields(FiberProcessParams, merged.get("fiber", {}))),
         travel_feed_mm_s=float(merged.get("travel_feed_mm_s", defaults["travel_feed_mm_s"])),
+        first_layer_travel_feed_mm_s=float(
+            merged.get(
+                "first_layer_travel_feed_mm_s",
+                defaults["first_layer_travel_feed_mm_s"],
+            )
+        ),
         default_a=float(merged.get("default_a", defaults["default_a"])),
         default_b=float(merged.get("default_b", defaults["default_b"])),
         default_c=float(merged.get("default_c", defaults["default_c"])),

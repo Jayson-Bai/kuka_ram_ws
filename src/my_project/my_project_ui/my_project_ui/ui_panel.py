@@ -538,9 +538,19 @@ class _NoWheelDoubleSpinBox(QtWidgets.QDoubleSpinBox):
 class _PanelDialog(QtWidgets.QDialog):
     """Project-styled popup dialog with an in-window title."""
 
-    def __init__(self, title, parent=None, minimum_width=360):
+    def __init__(self, title, parent=None, minimum_width=360, native_frame=False):
         super().__init__(parent)
-        self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
+        self.setWindowTitle(title)
+        if native_frame:
+            self.setWindowFlags(
+                QtCore.Qt.Dialog
+                | QtCore.Qt.WindowTitleHint
+                | QtCore.Qt.WindowSystemMenuHint
+                | QtCore.Qt.WindowMinMaxButtonsHint
+                | QtCore.Qt.WindowCloseButtonHint
+            )
+        else:
+            self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
         self.setModal(False)
         self.setMinimumWidth(minimum_width)
         self.setStyleSheet(
@@ -1941,12 +1951,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
         export_layout.addWidget(planner_toggle)
 
-        planner_container = _PanelDialog("导出设置", self, 560)
-        planner_container.setMinimumSize(560, 420)
-        planner_container.resize(720, 620)
+        planner_container = _PanelDialog("导出设置", self, 640, native_frame=True)
+        planner_container.setMinimumSize(640, 500)
+        planner_container.resize(920, 720)
         planner_container.setSizeGripEnabled(True)
         settings_scroll = QtWidgets.QScrollArea()
         settings_scroll.setWidgetResizable(True)
+        settings_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)
         settings_scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
         settings_tabs = QtWidgets.QTabWidget()
 
@@ -1999,6 +2010,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "resin_layer_height_mm": 0.5,
             "resin_extrusion_scale": 1.0,
             "resin_feed_mm_s": 10.0,
+            "first_layer_resin_feed_mm_s": 10.0,
             "resin_temperature_c": 250.0,
             "resin_prime_length_mm": 18.0,
             "resin_prime_speed_mm_s": 15.0,
@@ -2008,6 +2020,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "fiber_layer_height_mm": 0.1,
             "fiber_extrusion_scale": 1.0,
             "fiber_feed_mm_s": 10.0,
+            "first_layer_fiber_feed_mm_s": 10.0,
             "fiber_start_accel_s": 2.0,
             "fiber_temperature_c": 250.0,
             "fiber_prime_length_mm": 12.0,
@@ -2018,6 +2031,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "external_cut_lift_mm": 20.0,
             "external_cut_wait_s": 15.0,
             "travel_feed_mm_s": 10.0,
+            "first_layer_travel_feed_mm_s": 10.0,
             "prime_settle_s": 0.5,
             "default_a": 0.0,
             "default_b": 0.0,
@@ -2048,6 +2062,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "resin_layer_height_mm": saved_params.resin.layer_height_mm,
                 "resin_extrusion_scale": saved_params.resin.extrusion_scale,
                 "resin_feed_mm_s": saved_params.resin.feed_mm_s,
+                "first_layer_resin_feed_mm_s": saved_params.resin.first_layer_feed_mm_s,
                 "resin_temperature_c": saved_params.resin.temperature_c,
                 "resin_prime_length_mm": saved_params.resin.prime_length_mm,
                 "resin_prime_speed_mm_s": saved_params.resin.prime_speed_mm_s,
@@ -2057,6 +2072,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "fiber_layer_height_mm": saved_params.fiber.layer_height_mm,
                 "fiber_extrusion_scale": saved_params.fiber.extrusion_scale,
                 "fiber_feed_mm_s": saved_params.fiber.feed_mm_s,
+                "first_layer_fiber_feed_mm_s": saved_params.fiber.first_layer_feed_mm_s,
                 "fiber_start_accel_s": saved_params.fiber.start_accel_s,
                 "fiber_temperature_c": saved_params.fiber.temperature_c,
                 "fiber_prime_length_mm": saved_params.fiber.prime_length_mm,
@@ -2065,6 +2081,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "fiber_retract_speed_mm_s": saved_params.fiber.retract_speed_mm_s,
                 "fiber_fan_enabled": saved_params.fiber.fan_enabled,
                 "travel_feed_mm_s": saved_params.travel_feed_mm_s,
+                "first_layer_travel_feed_mm_s": saved_params.first_layer_travel_feed_mm_s,
                 "prime_settle_s": saved_params.prime_settle_s,
                 "default_a": saved_params.default_a,
                 "default_b": saved_params.default_b,
@@ -2137,6 +2154,38 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_fan = QtWidgets.QCheckBox()
         fiber_fan.setChecked(bool(external_defaults["fiber_fan_enabled"]))
 
+        first_layer_group, first_layer_grid = _external_param_group("首层速度")
+        _add_external_rows(
+            first_layer_grid,
+            [
+                (
+                    "first_layer_resin_feed_mm_s",
+                    "首层树脂打印速度 mm/s",
+                    _external_spin(
+                        external_defaults["first_layer_resin_feed_mm_s"],
+                        minimum=0.001,
+                    ),
+                    "first_layer_fiber_feed_mm_s",
+                    "首层纤维打印速度 mm/s",
+                    _external_spin(
+                        external_defaults["first_layer_fiber_feed_mm_s"],
+                        minimum=0.001,
+                    ),
+                ),
+                (
+                    "first_layer_travel_feed_mm_s",
+                    "首层空走速度 mm/s",
+                    _external_spin(
+                        external_defaults["first_layer_travel_feed_mm_s"],
+                        minimum=0.001,
+                    ),
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
+                ),
+            ],
+        )
+
         resin_group, resin_grid = _external_param_group("树脂材料")
         _add_external_rows(
             resin_grid,
@@ -2151,7 +2200,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 ),
                 (
                     "resin_feed_mm_s",
-                    "速度 mm/s",
+                    "非首层打印速度 mm/s",
                     _external_spin(external_defaults["resin_feed_mm_s"]),
                     "resin_temperature_c",
                     "温度 C",
@@ -2198,7 +2247,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 ),
                 (
                     "fiber_feed_mm_s",
-                    "速度 mm/s",
+                    "非首层打印速度 mm/s",
                     _external_spin(external_defaults["fiber_feed_mm_s"]),
                     "fiber_start_accel_s",
                     "起步加速时间 s",
@@ -2259,7 +2308,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 ),
                 (
                     "travel_feed_mm_s",
-                    "空走速度 mm/s",
+                    "非首层空走速度 mm/s",
                     _external_spin(external_defaults["travel_feed_mm_s"]),
                     "start_x_mm",
                     "左下角 X mm",
@@ -2392,13 +2441,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ],
         )
 
-        material_layout = QtWidgets.QHBoxLayout()
+        external_group_layout.addWidget(first_layer_group)
+
+        material_layout = QtWidgets.QVBoxLayout()
         material_layout.setSpacing(8)
         material_layout.addWidget(resin_group, 1)
         material_layout.addWidget(fiber_group, 1)
         external_group_layout.addLayout(material_layout)
 
-        path_layout = QtWidgets.QHBoxLayout()
+        path_layout = QtWidgets.QVBoxLayout()
         path_layout.setSpacing(8)
         path_layout.addWidget(motion_group, 1)
         path_layout.addWidget(primeline_group, 1)
@@ -4936,6 +4987,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 layer_height_mm=values["resin_layer_height_mm"].value(),
                 extrusion_scale=values["resin_extrusion_scale"].value(),
                 feed_mm_s=values["resin_feed_mm_s"].value(),
+                first_layer_feed_mm_s=values["first_layer_resin_feed_mm_s"].value(),
                 temperature_c=values["resin_temperature_c"].value(),
                 fan_enabled=values["resin_fan_enabled"].isChecked(),
                 prime_length_mm=values["resin_prime_length_mm"].value(),
@@ -4947,6 +4999,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 layer_height_mm=values["fiber_layer_height_mm"].value(),
                 extrusion_scale=values["fiber_extrusion_scale"].value(),
                 feed_mm_s=values["fiber_feed_mm_s"].value(),
+                first_layer_feed_mm_s=values["first_layer_fiber_feed_mm_s"].value(),
                 start_accel_s=values["fiber_start_accel_s"].value(),
                 temperature_c=values["fiber_temperature_c"].value(),
                 fan_enabled=values["fiber_fan_enabled"].isChecked(),
@@ -4956,6 +5009,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 retract_speed_mm_s=values["fiber_retract_speed_mm_s"].value(),
             ),
             travel_feed_mm_s=values["travel_feed_mm_s"].value(),
+            first_layer_travel_feed_mm_s=values["first_layer_travel_feed_mm_s"].value(),
             prime_settle_s=values["prime_settle_s"].value(),
             default_a=values["default_a"].value(),
             default_b=values["default_b"].value(),

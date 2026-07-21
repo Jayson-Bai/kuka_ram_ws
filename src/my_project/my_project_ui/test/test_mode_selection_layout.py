@@ -134,9 +134,13 @@ def test_formal_print_export_settings_include_external_npz_process_params():
         "# ======== Print Test 区域 ========", 1
     )[0]
     assert 'QtWidgets.QPushButton("导出设置")' in export_section
-    assert '_PanelDialog("导出设置", self, 560)' in export_section
+    assert '_PanelDialog("导出设置", self, 640, native_frame=True)' in export_section
     assert "settings_scroll = QtWidgets.QScrollArea()" in export_section
     assert "settings_scroll.setWidgetResizable(True)" in export_section
+    assert (
+        "settings_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOff)"
+        in export_section
+    )
     assert "planner_container.setSizeGripEnabled(True)" in export_section
     assert 'QtWidgets.QGroupBox("外部 NPZ 工艺参数")' in export_section
     assert export_section.index("external_defaults = {") < export_section.index(
@@ -147,6 +151,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )
     assert '_external_param_group("树脂材料")' in export_section
     assert '_external_param_group("纤维材料")' in export_section
+    assert '_external_param_group("首层速度")' in export_section
     assert '_external_param_group("运动与坐标")' in export_section
     assert '_external_param_group("路径平滑")' in export_section
     assert '_external_param_group("起始擦料线")' in export_section
@@ -164,6 +169,14 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"start_y_mm"' in export_section
     assert '"左下角 Y mm"' in export_section
     assert '"prime_settle_s": 0.5,' in export_section
+    assert '"first_layer_resin_feed_mm_s": 10.0,' in export_section
+    assert '"first_layer_fiber_feed_mm_s": 10.0,' in export_section
+    assert '"first_layer_travel_feed_mm_s": 10.0,' in export_section
+    assert '"首层树脂打印速度 mm/s"' in export_section
+    assert '"首层纤维打印速度 mm/s"' in export_section
+    assert '"首层空走速度 mm/s"' in export_section
+    assert '"非首层打印速度 mm/s"' in export_section
+    assert '"非首层空走速度 mm/s"' in export_section
     assert '"prime_settle_s"' in export_section
     assert '"预挤出稳定等待 s"' in export_section
     assert '_external_spin(external_defaults["prime_settle_s"])' in export_section
@@ -208,11 +221,17 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert "external_process_params =" in export_method
     assert "self._external_npz_process_params(params)" in export_method
     assert 'start_accel_s=values["fiber_start_accel_s"].value()' in src
+    assert 'first_layer_feed_mm_s=values["first_layer_resin_feed_mm_s"].value()' in src
+    assert 'first_layer_feed_mm_s=values["first_layer_fiber_feed_mm_s"].value()' in src
+    assert 'first_layer_travel_feed_mm_s=values["first_layer_travel_feed_mm_s"].value()' in src
     assert 'primeline_x_mm=values["primeline_x_mm"].value()' in src
     assert 'primeline_y_mm=values["primeline_y_mm"].value()' in src
     assert 'primeline_length_mm=values["primeline_length_mm"].value()' in src
     assert 'prime_settle_s=values["prime_settle_s"].value()' in src
     assert '"fiber_start_accel_s": saved_params.fiber.start_accel_s' in src
+    assert '"first_layer_resin_feed_mm_s": saved_params.resin.first_layer_feed_mm_s' in src
+    assert '"first_layer_fiber_feed_mm_s": saved_params.fiber.first_layer_feed_mm_s' in src
+    assert '"first_layer_travel_feed_mm_s": saved_params.first_layer_travel_feed_mm_s' in src
     assert '"primeline_x_mm": saved_params.primeline_x_mm' in src
     assert '"prime_settle_s": saved_params.prime_settle_s' in src
     assert 'external_cut_lift_mm = params["cut_lift_mm"]' in src

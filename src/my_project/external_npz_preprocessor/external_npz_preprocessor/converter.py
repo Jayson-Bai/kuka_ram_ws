@@ -47,6 +47,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
 
     line = _append_startup_head_events(commands, params, line, job)
     source_min_x, source_min_y = _job_source_xy_min(job)
+    first_layer_indexes = _first_material_layer_indexes(job)
 
     initial_travel_added = False
     initial_print_prepare_done = False
@@ -71,6 +72,14 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             )
             primeline_inserted = True
         for material_path in ordered_paths:
+            is_primeline = _is_primeline_path(material_path)
+            is_first_material_layer = (
+                is_primeline
+                or layer.index == first_layer_indexes.get(material_path.material)
+            )
+            destination_travel_feed_mm_s = _travel_feed_mm_s_for_destination(
+                params, first_layer=is_first_material_layer
+            )
             is_fiber = material_path.material == "F"
             is_first_fiber_in_layer = is_fiber and fiber_path_number == 0
             is_last_fiber_in_layer = (
@@ -86,7 +95,12 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
             )
             if not initial_travel_added:
                 line = _append_initial_start_xy_travel(
-                    commands, params, first_pose, line, layer.index
+                    commands,
+                    params,
+                    first_pose,
+                    line,
+                    layer.index,
+                    feed_mm_s=destination_travel_feed_mm_s,
                 )
                 initial_travel_added = True
                 current_pose = first_pose
@@ -126,7 +140,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                         pos=first_pose,
                         e_val=current_e,
                         delta_e=0.0,
-                        feedrate=float(params.travel_feed_mm_s) * 60.0,
+                        feedrate=destination_travel_feed_mm_s * 60.0,
                         line=line,
                         layer=layer.index,
                         subtype="TRAVEL",
@@ -136,7 +150,11 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 line += 1
 
             e_per_mm = _e_per_mm_for_material(material_path.material, params)
-            feedrate = _feed_mm_s_for_material(material_path.material, params) * 60.0
+            feedrate = _feed_mm_s_for_material(
+                material_path.material,
+                params,
+                first_layer=is_first_material_layer,
+            ) * 60.0
             source_positions = [
                 _offset_source_position(
                     _position_from_row(row),
@@ -235,7 +253,7 @@ def source_job_to_parsed_commands(job: SourceJob, params: ProcessParams) -> Pars
                 subtype=subtype,
             )
             curve = _validated_spline_or_polyline(print_moves, source_positions, params)
-            if _is_primeline_path(material_path):
+            if is_primeline:
                 curve.raw = "external_npz_primeline"
             curve.time_acc_s = _time_acc_s_for_material(
                 material_path.material, params
@@ -1092,6 +1110,8 @@ def _append_initial_start_xy_travel(
     first_pose: Position,
     line: int,
     layer: int,
+    *,
+    feed_mm_s: float,
 ) -> int:
     start_pose = Position(
         x=0.0,
@@ -1111,7 +1131,7 @@ def _append_initial_start_xy_travel(
             pos=first_pose,
             e_val=0.0,
             delta_e=0.0,
-            feedrate=float(params.travel_feed_mm_s) * 60.0,
+            feedrate=float(feed_mm_s) * 60.0,
             line=line,
             layer=layer,
             subtype="TRAVEL",
@@ -1169,12 +1189,36 @@ def _e_per_mm_for_material(material: str, params: ProcessParams) -> float:
     raise ValueError(f"unknown material: {material}")
 
 
-def _feed_mm_s_for_material(material: str, params: ProcessParams) -> float:
-    if material == "R":
-        return float(params.resin.feed_mm_s)
-    if material == "F":
-        return float(params.fiber.feed_mm_s)
-    raise ValueError(f"unknown material: {material}")
+def _feed_mm_s_for_material(
+    material: str,
+    params: ProcessParams,
+    *,
+    first_layer: bool,
+) -> float:
+    process = _process_params_for_material(material, params)
+    if first_layer:
+        return float(process.first_layer_feed_mm_s)
+    return float(process.feed_mm_s)
+
+
+def _travel_feed_mm_s_for_destination(
+    params: ProcessParams,
+    *,
+    first_layer: bool,
+) -> float:
+    if first_layer:
+        return float(params.first_layer_travel_feed_mm_s)
+    return float(params.travel_feed_mm_s)
+
+
+def _first_material_layer_indexes(job: SourceJob) -> dict[str, int]:
+    indexes: dict[str, int] = {}
+    for layer in job.layers:
+        if layer.resin_paths and "R" not in indexes:
+            indexes["R"] = layer.index
+        if layer.fiber_paths and "F" not in indexes:
+            indexes["F"] = layer.index
+    return indexes
 
 
 def _job_materials(job: SourceJob) -> set[str]:

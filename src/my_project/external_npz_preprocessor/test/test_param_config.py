@@ -24,6 +24,7 @@ def test_save_and_load_print_params_round_trip(tmp_path):
             prime_speed_mm_s=16.0,
             retract_length_mm=14.0,
             retract_speed_mm_s=28.0,
+            first_layer_feed_mm_s=4.0,
         ),
         fiber=FiberProcessParams(
             layer_height_mm=0.12,
@@ -36,8 +37,10 @@ def test_save_and_load_print_params_round_trip(tmp_path):
             retract_length_mm=9.0,
             retract_speed_mm_s=4.0,
             start_accel_s=4.5,
+            first_layer_feed_mm_s=3.0,
         ),
         travel_feed_mm_s=12.0,
+        first_layer_travel_feed_mm_s=8.0,
         default_a=1.0,
         default_b=2.0,
         default_c=3.0,
@@ -142,6 +145,24 @@ def test_legacy_print_params_without_prime_settle_s_uses_default(tmp_path):
     assert params.start_x_mm == pytest.approx(30.0)
     assert params.start_y_mm == pytest.approx(40.0)
     assert params.prime_settle_s == pytest.approx(0.5)
+
+
+def test_legacy_print_speeds_become_first_layer_defaults(tmp_path):
+    path = tmp_path / "legacy_first_layer_speeds.json"
+    path.write_text(
+        '{"params":{"resin":{"feed_mm_s":7.5},"fiber":{"feed_mm_s":6.5},'
+        '"travel_feed_mm_s":9.5}}',
+        encoding="utf-8",
+    )
+
+    params = load_print_params(path)
+
+    assert params.resin.feed_mm_s == pytest.approx(7.5)
+    assert params.resin.first_layer_feed_mm_s == pytest.approx(7.5)
+    assert params.fiber.feed_mm_s == pytest.approx(6.5)
+    assert params.fiber.first_layer_feed_mm_s == pytest.approx(6.5)
+    assert params.travel_feed_mm_s == pytest.approx(9.5)
+    assert params.first_layer_travel_feed_mm_s == pytest.approx(9.5)
 
 
 def test_negative_prime_settle_s_in_json_is_rejected(tmp_path):

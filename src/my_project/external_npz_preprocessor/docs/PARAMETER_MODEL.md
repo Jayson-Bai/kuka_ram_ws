@@ -10,19 +10,22 @@ The source NPZ provides geometry only. Extrusion is derived from material proces
 - Resin filament diameter: fixed `1.75 mm` for volume-to-filament-length conversion
 - Resin layer height: `0.5 mm`
 - Resin extrusion scale: `1.0`
-- Resin print speed: `10 mm/s`
+- First-layer resin print speed: `10 mm/s`
+- Later-layer resin print speed: `10 mm/s`
 - Resin temperature: `250 C`
 - Resin prime: `18 mm @ 15 mm/s`
 - Resin retract: `15 mm @ 30 mm/s`
 - Fiber layer height: `0.1 mm`
 - Fiber extrusion scale: `1.0`
-- Fiber print speed: `10 mm/s`
+- First-layer fiber print speed: `10 mm/s`
+- Later-layer fiber print speed: `10 mm/s`
 - Fiber start acceleration time: `2.0 s`
 - Fiber temperature: `250 C`
 - Fiber prime: `12 mm @ 5 mm/s`
 - Fiber retract: `10 mm @ 5 mm/s`
 - Resin and fiber fans: always on by default
-- Travel speed: `10 mm/s`
+- First-layer shared travel speed: `10 mm/s`
+- Later-layer travel speed: `10 mm/s`
 - Global prime settle: `0.5 s`
 - Default ABC: `0, 0, 0`
 
@@ -67,7 +70,9 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 
 ## Shared Parameters
 
-- `travel_feed_mm_s`: feed speed for non-print travel moves; external-NPZ conversion requires a finite value greater than zero.
+- `resin.first_layer_feed_mm_s` and `fiber.first_layer_feed_mm_s`: print speeds for the independently detected first material-bearing layer. The generated primeline uses the first-layer resin speed.
+- `first_layer_travel_feed_mm_s`: shared travel speed when the destination belongs to a material-specific first layer.
+- `travel_feed_mm_s`: feed speed when the destination belongs to a later material layer; it remains the exporter default feed for cut lift and tool-offset safety moves. External-NPZ conversion requires both travel values to be finite and greater than zero.
 - `prime_settle_s`: global stationary wait after every non-zero prime; default `0.5 s`, and `0` disables only the settle.
 - `default_a/default_b/default_c`: pose values appended to Nx3 source paths.
 - `dt`: sample period forwarded to `npz_exporter`.
@@ -107,7 +112,7 @@ The UI has a `保存打印参数json文件` button. It writes the current print 
 data/external_npz_preprocessor/print_params.json
 ```
 
-The directory is created automatically before saving. When the UI starts, it automatically reads this file if it exists and applies the latest saved print parameters. Resin line width is not stored as a parameter; legacy JSON files containing `bead_width_mm` are accepted but that value is ignored.
+The directory is created automatically before saving. When the UI starts, it automatically reads this file if it exists and applies the latest saved print parameters. Resin line width is not stored as a parameter; legacy JSON files containing `bead_width_mm` are accepted but that value is ignored. Legacy JSON without first-layer speed fields inherits the saved resin, fiber, and travel speeds so existing output timing remains unchanged.
 
 ## Shared Head Offsets
 

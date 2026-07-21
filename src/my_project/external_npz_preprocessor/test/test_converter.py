@@ -38,7 +38,11 @@ def _params():
             extrusion_scale=2.0,
             feed_mm_s=10.0,
         ),
-        fiber=FiberProcessParams(extrusion_scale=0.25, feed_mm_s=6.0),
+        fiber=FiberProcessParams(
+            extrusion_scale=0.25,
+            feed_mm_s=6.0,
+            first_layer_feed_mm_s=6.0,
+        ),
         travel_feed_mm_s=20.0,
     )
 
@@ -159,6 +163,64 @@ def test_converts_ordered_resin_and_fiber_paths_to_planner_commands_without_over
     assert travel_moves[-1].pos.z == pytest.approx(3.1)
     assert curves[0].layer == 0
     assert curves[1].layer == 0
+
+
+def test_first_material_layers_and_destination_travels_use_dedicated_speeds():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[_straight_path("R", 0, 0.0, 10.0)],
+                fiber_paths=[],
+            ),
+            LayerPaths(
+                index=1,
+                resin_paths=[_straight_path("R", 0, 20.0, 30.0, z=1.0)],
+                fiber_paths=[_straight_path("F", 0, 40.0, 50.0, z=1.1)],
+            ),
+            LayerPaths(
+                index=2,
+                resin_paths=[],
+                fiber_paths=[_straight_path("F", 0, 60.0, 70.0, z=1.6)],
+            ),
+        ],
+    )
+    params = ProcessParams(
+        resin=ResinProcessParams(
+            feed_mm_s=11.0,
+            first_layer_feed_mm_s=2.0,
+        ),
+        fiber=FiberProcessParams(
+            feed_mm_s=12.0,
+            first_layer_feed_mm_s=3.0,
+        ),
+        travel_feed_mm_s=13.0,
+        first_layer_travel_feed_mm_s=4.0,
+    )
+
+    commands = source_job_to_parsed_commands(job, params)
+
+    curves = [cmd for cmd in commands if isinstance(cmd, GlobalCurveCommand)]
+    travels = [
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand) and cmd.type == "TRAVEL"
+    ]
+    assert [curve.feedrate for curve in curves] == [
+        120.0,  # primeline uses first-layer resin speed
+        120.0,  # first resin-bearing layer
+        660.0,  # later resin layer
+        180.0,  # first fiber-bearing layer, independently detected
+        720.0,  # later fiber layer
+    ]
+    assert [travel.feedrate for travel in travels] == [
+        240.0,  # initial positioning to the primeline
+        240.0,  # primeline to first resin layer
+        780.0,  # destination is a later resin layer
+        240.0,  # destination is the first fiber layer
+        780.0,  # destination is a later fiber layer
+    ]
 
 
 def test_marks_only_fiber_curves_with_custom_start_acceleration_time():

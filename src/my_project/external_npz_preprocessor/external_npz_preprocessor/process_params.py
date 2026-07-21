@@ -18,6 +18,7 @@ class ResinProcessParams:
     layer_height_mm: float = 0.5
     extrusion_scale: float = 1.0
     feed_mm_s: float = 10.0
+    first_layer_feed_mm_s: float = field(default=10.0, kw_only=True)
     temperature_c: float = 250.0
     fan_enabled: bool = True
     prime_length_mm: float = 18.0
@@ -42,6 +43,7 @@ class FiberProcessParams:
     layer_height_mm: float = 0.1
     extrusion_scale: float = 1.0
     feed_mm_s: float = 10.0
+    first_layer_feed_mm_s: float = field(default=10.0, kw_only=True)
     temperature_c: float = 250.0
     fan_enabled: bool = True
     prime_length_mm: float = 12.0
@@ -60,6 +62,7 @@ class ProcessParams:
     resin: ResinProcessParams = field(default_factory=ResinProcessParams)
     fiber: FiberProcessParams = field(default_factory=FiberProcessParams)
     travel_feed_mm_s: float = 10.0
+    first_layer_travel_feed_mm_s: float = field(default=10.0, kw_only=True)
     default_a: float = 0.0
     default_b: float = 0.0
     default_c: float = 0.0
@@ -82,6 +85,16 @@ class ProcessParams:
     max_fit_points_per_segment: int = 20000
 
     def __post_init__(self) -> None:
+        first_layer_speeds = {
+            "resin.first_layer_feed_mm_s": self.resin.first_layer_feed_mm_s,
+            "fiber.first_layer_feed_mm_s": self.fiber.first_layer_feed_mm_s,
+            "first_layer_travel_feed_mm_s": self.first_layer_travel_feed_mm_s,
+        }
+        for name, value in first_layer_speeds.items():
+            speed = float(value)
+            if not math.isfinite(speed) or speed <= 0.0:
+                raise ValueError(f"{name} must be finite and > 0")
+
         prime_settle_s = float(self.prime_settle_s)
         if not math.isfinite(prime_settle_s) or prime_settle_s < 0.0:
             raise ValueError("prime_settle_s must be >= 0")
