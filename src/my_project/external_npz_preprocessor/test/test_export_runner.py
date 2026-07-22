@@ -167,6 +167,165 @@ def _next_src_line_group(src_lines, after_index):
     return list(range(start, end))
 
 
+def test_final_resin_layer_end_travel_is_last_runtime_trajectory_before_auto_abort(
+    tmp_path,
+):
+    import json
+    import numpy as np
+
+    from external_npz_preprocessor.converter import source_job_to_parsed_commands
+    from external_npz_preprocessor.export_runner import convert_external_npz
+    from external_npz_preprocessor.process_params import ProcessParams
+    from external_npz_preprocessor.source_npz import load_source_npz
+    from path_processing_core.types import MoveCommand
+
+    source = tmp_path / "final_resin_layer.npz"
+    np.savez(
+        source,
+        meta=np.array(json.dumps({"format": "external_layer_paths_v1"})),
+        layer_0000_R=np.array(
+            [[[0.0, 0.0, 0.5], [10.0, 0.0, 0.5]]],
+            dtype=np.float32,
+        ),
+    )
+    calibration_path = tmp_path / "head_offsets.json"
+    calibration_path.write_text(
+        json.dumps(
+            {
+                "resin": {"z_print_compensation_mm": 0.0},
+                "fiber": {
+                    "x_print_compensation_mm": 0.0,
+                    "y_print_compensation_mm": 0.0,
+                    "z_offset_mm": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    params = ProcessParams()
+    commands = source_job_to_parsed_commands(
+        load_source_npz(source, default_abc=params.default_abc),
+        params,
+    )
+    layer_end_travel = next(
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.raw == "external_npz_resin_layer_end_travel"
+    )
+
+    output = tmp_path / "out.npz"
+    convert_external_npz(
+        source,
+        output,
+        params,
+        calibration_path=calibration_path,
+    )
+
+    with np.load(output) as data:
+        src_lines = _decoded_src_lines(data)
+        travel_rows = [
+            index
+            for index, src_line in enumerate(src_lines)
+            if src_line == str(layer_end_travel.line)
+        ]
+
+        assert travel_rows
+        assert travel_rows[-1] == len(data["seq"]) - 1
+        assert np.isclose(data["x"][travel_rows[-1]], 30.0)
+        assert np.isclose(data["y"][travel_rows[-1]], 0.0)
+        assert np.allclose(data["z"][travel_rows], 0.5)
+        assert np.allclose(data["e"][travel_rows], 0.0)
+
+
+def test_resin_layer_end_travel_is_exported_before_tool_change_safe_lift(tmp_path):
+    import json
+    import numpy as np
+
+    from external_npz_preprocessor.converter import source_job_to_parsed_commands
+    from external_npz_preprocessor.export_runner import convert_external_npz
+    from external_npz_preprocessor.process_params import ProcessParams
+    from external_npz_preprocessor.source_npz import load_source_npz
+    from path_processing_core.types import MoveCommand, ToolChangeCommand
+
+    source = tmp_path / "source.npz"
+    np.savez(
+        source,
+        meta=np.array(json.dumps({"format": "external_layer_paths_v1"})),
+        layer_0000_R=np.array(
+            [[[0.0, 0.0, 0.5], [10.0, 0.0, 0.5]]],
+            dtype=np.float32,
+        ),
+        layer_0000_F=np.array(
+            [[[2.0, 1.0, 0.6], [8.0, 1.0, 0.6]]],
+            dtype=np.float32,
+        ),
+    )
+    calibration_path = tmp_path / "head_offsets.json"
+    calibration_path.write_text(
+        json.dumps(
+            {
+                "resin": {"z_print_compensation_mm": 0.0},
+                "fiber": {
+                    "x_print_compensation_mm": 1.0,
+                    "y_print_compensation_mm": 0.0,
+                    "z_offset_mm": 0.0,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    params = ProcessParams()
+    commands = source_job_to_parsed_commands(
+        load_source_npz(source, default_abc=params.default_abc),
+        params,
+    )
+    layer_end_travel = next(
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.raw == "external_npz_resin_layer_end_travel"
+    )
+    travel_command_index = commands.index(layer_end_travel)
+    fiber_tool_change = next(
+        cmd
+        for cmd in commands[travel_command_index + 1:]
+        if isinstance(cmd, ToolChangeCommand) and cmd.tool == 0
+    )
+
+    output = tmp_path / "out.npz"
+    convert_external_npz(
+        source,
+        output,
+        params,
+        calibration_path=calibration_path,
+    )
+
+    with np.load(output) as data:
+        src_lines = _decoded_src_lines(data)
+        events = _decoded_event_types(data)
+        travel_rows = [
+            index
+            for index, src_line in enumerate(src_lines)
+            if src_line == str(layer_end_travel.line)
+        ]
+        tool_change_rows = [
+            index
+            for index, src_line in enumerate(src_lines)
+            if src_line == str(fiber_tool_change.line)
+        ]
+
+        assert travel_rows
+        assert tool_change_rows
+        assert max(travel_rows) < min(tool_change_rows)
+        assert np.isclose(data["x"][travel_rows[-1]], 30.0)
+        assert np.isclose(data["y"][travel_rows[-1]], 0.0)
+        assert np.allclose(data["z"][travel_rows], 0.5)
+        assert np.allclose(data["e"][travel_rows], 0.0)
+        assert np.isclose(np.max(data["z"][tool_change_rows]), 20.5)
+        assert events.index("tool_change_cf") in tool_change_rows
+
+
 def test_external_npz_reset_anchor_starts_at_zero_without_changing_ordinary_holds(
     tmp_path,
 ):

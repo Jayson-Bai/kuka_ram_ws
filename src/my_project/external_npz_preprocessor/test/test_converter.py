@@ -205,7 +205,15 @@ def test_first_material_layers_and_destination_travels_use_dedicated_speeds():
     travels = [
         cmd
         for cmd in commands
-        if isinstance(cmd, MoveCommand) and cmd.type == "TRAVEL"
+        if isinstance(cmd, MoveCommand)
+        and cmd.type == "TRAVEL"
+        and cmd.raw != "external_npz_resin_layer_end_travel"
+    ]
+    layer_end_travels = [
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.raw == "external_npz_resin_layer_end_travel"
     ]
     assert [curve.feedrate for curve in curves] == [
         120.0,  # primeline uses first-layer resin speed
@@ -220,6 +228,10 @@ def test_first_material_layers_and_destination_travels_use_dedicated_speeds():
         780.0,  # destination is a later resin layer
         240.0,  # destination is the first fiber layer
         780.0,  # destination is a later fiber layer
+    ]
+    assert [travel.feedrate for travel in layer_end_travels] == [
+        240.0,  # first resin-bearing layer
+        780.0,  # later resin layer
     ]
 
 
@@ -414,6 +426,125 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
         2.4,
         2.0,
     ]
+
+
+def test_final_resin_path_travels_20mm_outward_before_tool_change():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[
+                    MaterialPath(
+                        "R",
+                        0,
+                        np.array(
+                            [
+                                [0.0, 0.0, 2.5, 1.0, 2.0, 3.0],
+                                [0.0, 10.0, 2.5, 1.0, 2.0, 3.0],
+                            ],
+                            dtype=np.float32,
+                        ),
+                    ),
+                    MaterialPath(
+                        "R",
+                        1,
+                        np.array(
+                            [
+                                [10.0, 0.0, 2.5, 1.0, 2.0, 3.0],
+                                [10.0, 10.0, 2.5, 1.0, 2.0, 3.0],
+                            ],
+                            dtype=np.float32,
+                        ),
+                    ),
+                ],
+                fiber_paths=[_straight_path("F", 0, 4.0, 6.0, y=5.0, z=2.6)],
+            )
+        ],
+    )
+    params = ProcessParams(first_layer_travel_feed_mm_s=4.0)
+
+    commands = source_job_to_parsed_commands(job, params)
+    resin_curves = [
+        curve
+        for curve in _source_curves(commands)
+        if curve.subtype == "RESIN_PRINT"
+    ]
+    layer_end_travels = [
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.raw == "external_npz_resin_layer_end_travel"
+    ]
+
+    assert len(layer_end_travels) == 1
+    final_curve = resin_curves[-1]
+    final_index = commands.index(final_curve)
+    curve, retract, reset, anchor, travel = commands[final_index:final_index + 5]
+    assert curve is final_curve
+    assert isinstance(retract, ExtrudeWait)
+    assert retract.raw == "external_npz_retract"
+    assert isinstance(reset, ResetECommand)
+    assert reset.raw == "external_npz_path_reset"
+    assert isinstance(anchor, ExtrudeWait)
+    assert anchor.raw == "external_npz_reset_anchor"
+    assert travel is layer_end_travels[0]
+    assert travel.e_val == pytest.approx(0.0)
+    assert travel.delta_e == pytest.approx(0.0)
+    assert travel.feedrate == pytest.approx(240.0)
+    assert travel.start_pos == final_curve.control_points[-1]
+    assert travel.pos.x == pytest.approx(10.0 + 20.0 / np.sqrt(2.0))
+    assert travel.pos.y == pytest.approx(10.0 + 20.0 / np.sqrt(2.0))
+    assert travel.pos.z == pytest.approx(2.5)
+    assert (travel.pos.a, travel.pos.b, travel.pos.c) == pytest.approx((1.0, 2.0, 3.0))
+
+    fiber_tool_change_index = next(
+        index
+        for index, cmd in enumerate(commands)
+        if isinstance(cmd, ToolChangeCommand) and cmd.tool == 0
+    )
+    assert commands.index(travel) < fiber_tool_change_index
+
+
+def test_layer_end_outward_travel_is_added_only_to_resin_bearing_layers():
+    job = SourceJob(
+        meta={},
+        layers=[
+            LayerPaths(
+                index=0,
+                resin_paths=[_straight_path("R", 0, 0.0, 10.0)],
+                fiber_paths=[],
+            ),
+            LayerPaths(
+                index=1,
+                resin_paths=[],
+                fiber_paths=[_straight_path("F", 0, 0.0, 10.0, y=5.0, z=1.0)],
+            ),
+            LayerPaths(
+                index=2,
+                resin_paths=[_straight_path("R", 0, 20.0, 30.0, z=1.5)],
+                fiber_paths=[],
+            ),
+        ],
+    )
+
+    commands = source_job_to_parsed_commands(job, ProcessParams())
+    layer_end_travels = [
+        cmd
+        for cmd in commands
+        if isinstance(cmd, MoveCommand)
+        and cmd.raw == "external_npz_resin_layer_end_travel"
+    ]
+
+    assert [travel.layer for travel in layer_end_travels] == [0, 2]
+    assert all(
+        np.hypot(
+            travel.pos.x - travel.start_pos.x,
+            travel.pos.y - travel.start_pos.y,
+        )
+        == pytest.approx(20.0)
+        for travel in layer_end_travels
+    )
 
 
 def test_resin_path_end_resets_then_anchors_before_travel_with_zero_e():
@@ -881,7 +1012,12 @@ def test_start_xy_offsets_source_paths_and_inserts_initial_travel_without_z_over
         cmd for cmd in source_job_to_parsed_commands(job, params)
         if isinstance(cmd, MoveCommand)
     ]
-    travel_moves = [cmd for cmd in moves if cmd.type == "TRAVEL"]
+    travel_moves = [
+        cmd
+        for cmd in moves
+        if cmd.type == "TRAVEL"
+        and cmd.raw != "external_npz_resin_layer_end_travel"
+    ]
     print_curves = _source_curves(source_job_to_parsed_commands(job, params))
 
     assert len(travel_moves) == 2
