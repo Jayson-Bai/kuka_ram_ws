@@ -232,7 +232,7 @@ def test_final_resin_layer_end_travel_is_last_runtime_trajectory_before_auto_abo
 
         assert travel_rows
         assert travel_rows[-1] == len(data["seq"]) - 1
-        assert np.isclose(data["x"][travel_rows[-1]], 30.0)
+        assert np.isclose(data["x"][travel_rows[-1]], -10.0)
         assert np.isclose(data["y"][travel_rows[-1]], 0.0)
         assert np.allclose(data["z"][travel_rows], 0.5)
         assert np.allclose(data["e"][travel_rows], 0.0)
@@ -318,7 +318,7 @@ def test_resin_layer_end_travel_is_exported_before_tool_change_safe_lift(tmp_pat
         assert travel_rows
         assert tool_change_rows
         assert max(travel_rows) < min(tool_change_rows)
-        assert np.isclose(data["x"][travel_rows[-1]], 30.0)
+        assert np.isclose(data["x"][travel_rows[-1]], -10.0)
         assert np.isclose(data["y"][travel_rows[-1]], 0.0)
         assert np.allclose(data["z"][travel_rows], 0.5)
         assert np.allclose(data["e"][travel_rows], 0.0)

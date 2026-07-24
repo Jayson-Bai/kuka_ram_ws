@@ -194,7 +194,7 @@ SourceJob
 
 每条源路径会转成独立打印段。整件第一条可打印路径在 prime 前保留一次初始回抽；每条路径到达起点后执行 `prime -> 可选 prime_settle -> PRINT`。
 
-树脂路径结束顺序为 `PRINT -> retract -> path reset -> one-cycle E=0 anchor`。每层最后一条源树脂路径还会在 anchor 后、任何换刀或抬升前，保持当前 Z 和姿态，沿该层树脂 XY 包围盒中心指向路径终点的方向向外 travel 20 mm；primeline 和纯纤维层不触发该动作。若它位于整件最后一层，该 travel 的终点就是运行时 NPZ 的最终轨迹点；`center_node` 等待 RSI 确认该最终序号后才触发 `ABORT`，因此现有安全抬升从外移终点开始。纤维路径先插入语义级 `CUT`；`path_processing_core.npz_exporter.export_npz()` 在 CUT 前建立 E=0 基准，再展开非阻塞 cut 事件、同步抬升/挤出、3 秒高位保持、独立 reset、等量回抽、3 秒高位保持、最终 reset 和剩余等待，之后才执行原有 `path reset -> one-cycle E=0 anchor`。如果还有下一条路径，travel 在 anchor 之后执行并保持 `E=0`。
+树脂路径结束顺序为 `PRINT -> retract -> path reset -> one-cycle E=0 anchor`。每层最后一条源树脂路径还会在 anchor 后、任何换刀或抬升前，保持当前 Z 和姿态，沿路径终点指向该层树脂 XY 包围盒中心的方向向内 travel 20 mm；primeline 和纯纤维层不触发该动作。若它位于整件最后一层，该 travel 的终点就是运行时 NPZ 的最终轨迹点；`center_node` 等待 RSI 确认该最终序号后才触发 `ABORT`，因此现有安全抬升从内移终点开始。纤维路径先插入语义级 `CUT`；`path_processing_core.npz_exporter.export_npz()` 在 CUT 前建立 E=0 基准，再展开非阻塞 cut 事件、同步抬升/挤出、3 秒高位保持、独立 reset、等量回抽、3 秒高位保持、最终 reset 和剩余等待，之后才执行原有 `path reset -> one-cycle E=0 anchor`。如果还有下一条路径，travel 在 anchor 之后执行并保持 `E=0`。
 
 该边界覆盖 converter 生成的 primeline、所有源路径和最终路径。路径 reset 与工具切换 reset 同时保留；reset 事件行仍是旧 E，只有精确内部 `external_npz_reset_anchor` 行从 `E=0` 导出。
 

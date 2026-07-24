@@ -1158,13 +1158,13 @@ def _resin_layer_end_travel_target(
     *,
     fallback_start: Position,
 ) -> Position:
-    """Move 20 mm away from the layer center without changing Z or orientation."""
+    """Move 20 mm toward the layer center without changing Z or orientation."""
     dx = end_pose.x - layer_center_xy[0]
     dy = end_pose.y - layer_center_xy[1]
     xy_norm = math.hypot(dx, dy)
     if xy_norm <= _EPS:
-        # A center endpoint has no radial direction; retain deterministic outward
-        # motion by falling back to the final printed segment direction.
+        # A center endpoint has no radial direction; use the final printed
+        # segment as a deterministic direction, then reverse it below.
         dx = end_pose.x - fallback_start.x
         dy = end_pose.y - fallback_start.y
         xy_norm = math.hypot(dx, dy)
@@ -1172,7 +1172,7 @@ def _resin_layer_end_travel_target(
         dx = 1.0
         dy = 0.0
         xy_norm = 1.0
-    scale = _RESIN_LAYER_END_TRAVEL_MM / xy_norm
+    scale = -_RESIN_LAYER_END_TRAVEL_MM / xy_norm
     return Position(
         x=end_pose.x + dx * scale,
         y=end_pose.y + dy * scale,

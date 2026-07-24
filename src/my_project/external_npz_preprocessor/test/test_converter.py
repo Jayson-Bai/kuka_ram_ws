@@ -428,7 +428,7 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
     ]
 
 
-def test_final_resin_path_travels_20mm_outward_before_tool_change():
+def test_final_resin_path_travels_20mm_inward_before_tool_change():
     job = SourceJob(
         meta={},
         layers=[
@@ -493,8 +493,8 @@ def test_final_resin_path_travels_20mm_outward_before_tool_change():
     assert travel.delta_e == pytest.approx(0.0)
     assert travel.feedrate == pytest.approx(240.0)
     assert travel.start_pos == final_curve.control_points[-1]
-    assert travel.pos.x == pytest.approx(10.0 + 20.0 / np.sqrt(2.0))
-    assert travel.pos.y == pytest.approx(10.0 + 20.0 / np.sqrt(2.0))
+    assert travel.pos.x == pytest.approx(10.0 - 20.0 / np.sqrt(2.0))
+    assert travel.pos.y == pytest.approx(10.0 - 20.0 / np.sqrt(2.0))
     assert travel.pos.z == pytest.approx(2.5)
     assert (travel.pos.a, travel.pos.b, travel.pos.c) == pytest.approx((1.0, 2.0, 3.0))
 
@@ -506,7 +506,7 @@ def test_final_resin_path_travels_20mm_outward_before_tool_change():
     assert commands.index(travel) < fiber_tool_change_index
 
 
-def test_layer_end_outward_travel_is_added_only_to_resin_bearing_layers():
+def test_layer_end_inward_travel_is_added_only_to_resin_bearing_layers():
     job = SourceJob(
         meta={},
         layers=[
