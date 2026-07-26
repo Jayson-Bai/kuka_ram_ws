@@ -54,6 +54,8 @@ class CsvRow:
     path_id: int = 0
     path_end_flag: int = 0
     planned_time_s: float = 0.0
+    core_injection_block_id: int = -1
+    core_injection_role: int = 0
 
 
 @dataclass
@@ -178,6 +180,20 @@ def export_npz(
     move_type_vals = np.array(list(move_type_map.values()), dtype=np.uint8)
     event_type_keys = np.array(list(event_type_map.keys()), dtype="S32")
     event_type_vals = np.array(list(event_type_map.values()), dtype=np.uint8)
+    injection_role_map = {
+        "none": 0,
+        "tool_change_pre": 1,
+        "tool_change_event": 2,
+        "tool_change_post": 3,
+        "cut_event": 4,
+        "cut_action": 5,
+        "cut_post": 6,
+        "post_anchor": 7,
+        "resin_z_compensation": 8,
+    }
+    injection_role_keys = np.array(list(injection_role_map.keys()), dtype="S32")
+    injection_role_vals = np.array(list(injection_role_map.values()), dtype=np.uint8)
+    manifest_json = ""
 
     def _sanitize(s: str) -> str:
         out = []
@@ -261,6 +277,10 @@ def export_npz(
             path_end_flag = np.array([r.path_end_flag for r in chunk], dtype=np.uint8)
             planned_time_s = np.array(
                 [r.planned_time_s for r in chunk], dtype=np.float32)
+            core_injection_block_id = np.array(
+                [r.core_injection_block_id for r in chunk], dtype=np.int32)
+            core_injection_role = np.array(
+                [r.core_injection_role for r in chunk], dtype=np.uint8)
 
             np.savez_compressed(
                 out_path,
@@ -285,6 +305,11 @@ def export_npz(
                 path_id=path_id,
                 path_end_flag=path_end_flag,
                 planned_time_s=planned_time_s,
+                core_injection_manifest=np.array(manifest_json),
+                core_injection_block_id=core_injection_block_id,
+                core_injection_role=core_injection_role,
+                core_injection_role_vocab_keys=injection_role_keys,
+                core_injection_role_vocab_vals=injection_role_vals,
                 move_type_vocab_keys=move_type_keys,
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
@@ -316,6 +341,8 @@ def export_npz(
     flat_preview_last_e = {}
     flat_preview_needs_break = {}
     flat_preview_stride = max(1, int(plot_stride))
+    active_injection_block_id = -1
+    active_injection_kind = ""
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
         if not split_by_layer_type:
@@ -472,8 +499,11 @@ def export_npz(
         ys.append(row.y)
 
     def _append_sample(
-            gc: GlobalCurveCommand, layer: int, subtype: str, occ: int, mark_path_end: bool = True):
+            gc: GlobalCurveCommand, layer: int, subtype: str, occ: int,
+            mark_path_end: bool = True, marker_block_id: int = -1,
+            marker_role: int = 0):
         nonlocal seq, last_feedrate_mm_min, processed_rows, last_pose_map, last_pose
+        nonlocal active_injection_block_id, active_injection_kind
         t0 = time.perf_counter()
         sample_profile = {
             "sample_arc_map_s": 0.0,
@@ -514,6 +544,24 @@ def export_npz(
                 timing.start_segment(path_id=path_id, move_type=gc.type, start_seq=seq)
             has_any = True
             planned_time_s = timing.append_trajectory_time()
+            row_marker_id = int(marker_block_id)
+            row_marker_role = int(marker_role)
+            if row_marker_id < 0 and active_injection_block_id >= 0:
+                row_marker_id = active_injection_block_id
+                if gc.type in ("PRINT", "PRINT_FIT"):
+                    row_marker_role = (
+                        injection_role_map["post_anchor"] if not sampled_rows
+                        else injection_role_map["none"]
+                    )
+                elif active_injection_kind == "tool_change":
+                    row_marker_role = injection_role_map["tool_change_post"]
+                elif active_injection_kind == "cut":
+                    row_marker_role = injection_role_map["cut_post"]
+                elif active_injection_kind == "resin":
+                    row_marker_role = injection_role_map["none"]
+            if gc.type in ("PRINT", "PRINT_FIT") and marker_block_id < 0 and active_injection_block_id >= 0:
+                row_marker_id = active_injection_block_id if not sampled_rows else -1
+                row_marker_role = injection_role_map["post_anchor"] if not sampled_rows else injection_role_map["none"]
             row = CsvRow(
                 seq=seq,
                 x=pt.pos.x,
@@ -532,6 +580,8 @@ def export_npz(
                 trigger_seq=None,
                 path_id=path_id,
                 planned_time_s=planned_time_s,
+                core_injection_block_id=row_marker_id,
+                core_injection_role=row_marker_role,
             )
             sampled_rows.append(_with_layer_progress(row, layer))
             seq += 1
@@ -553,6 +603,9 @@ def export_npz(
                 last_pose = row
             if mark_path_end:
                 _mark_path_end(layer, subtype, occ)
+            if active_injection_block_id >= 0 and marker_block_id < 0 and gc.type in ("PRINT", "PRINT_FIT"):
+                active_injection_block_id = -1
+                active_injection_kind = ""
         timings["sample_s"] += time.perf_counter() - t0
         timings["sample_arc_map_s"] += sample_profile["sample_arc_map_s"]
         timings["sample_lookup_s"] += sample_profile["sample_lookup_s"]
@@ -1132,10 +1185,13 @@ def export_npz(
 
     def _append_resin_z_print_compensation(layer: int, line: int):
         nonlocal resin_z_compensation_appended, resin_z_offset
+        nonlocal active_injection_block_id, active_injection_kind
         if resin_z_compensation_appended:
             return
         resin_z_compensation_appended = True
         if abs(resin_z_print_compensation_mm) <= 1e-9:
+            active_injection_block_id = 1
+            active_injection_kind = "resin"
             return
         base = last_pose
         if base is None:
@@ -1159,12 +1215,19 @@ def export_npz(
             constraints=[],
             original_moves=[],
         )
-        _append_sample(gc, layer, "TRAVEL", occ)
+        _append_sample(
+            gc, layer, "TRAVEL", occ,
+            marker_block_id=1,
+            marker_role=injection_role_map["resin_z_compensation"],
+        )
+        active_injection_block_id = 1
+        active_injection_kind = "resin"
         resin_z_offset = resin_z_print_compensation_mm
 
     def _append_extrude_wait(
             cmd: ExtrudeWait, layer: int, subtype: str, occ: int, mark_path_end: bool = True):
         nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
+        nonlocal active_injection_block_id, active_injection_kind
         hold_row = last_pose or CsvRow(
             seq=seq,
             x=0.0,
@@ -1193,6 +1256,15 @@ def export_npz(
         for i in range(1, steps + 1):
             ratio = i / steps
             planned_time_s = timing.append_trajectory_time()
+            wait_marker_id = active_injection_block_id
+            if active_injection_kind == "cut":
+                wait_marker_role = injection_role_map["cut_action"]
+            elif active_injection_kind == "tool_change":
+                wait_marker_role = injection_role_map["tool_change_post"]
+            elif active_injection_kind == "resin":
+                wait_marker_role = injection_role_map["none"]
+            else:
+                wait_marker_role = injection_role_map["none"]
             row = CsvRow(
                 seq=seq,
                 x=hold_row.x,
@@ -1211,6 +1283,8 @@ def export_npz(
                 trigger_seq=None,
                 path_id=_path_id_for(layer, subtype, occ),
                 planned_time_s=planned_time_s,
+                core_injection_block_id=wait_marker_id,
+                core_injection_role=wait_marker_role,
             )
             row = _with_layer_progress(row, layer)
             writer.add(row)
@@ -1291,7 +1365,7 @@ def export_npz(
                 ), layer, subtype, occ, mark_path_end=mark_path_end)
 
             _append_cut_reset_anchor()
-            _emit_event(ev, layer, subtype, occ)
+            _emit_event(ev, layer, subtype, occ, marker_role=injection_role_map["cut_event"])
 
             if lift_mm > 1e-9:
                 hold_row = last_pose or CsvRow(
@@ -1498,7 +1572,9 @@ def export_npz(
             raw="cut_safety_retract",
         ), layer, subtype, occ, mark_path_end=True)
 
-    def _emit_event(ev: _PendingEvent, layer: int, subtype: str, occ: int):
+    def _emit_event(
+            ev: _PendingEvent, layer: int, subtype: str, occ: int,
+            marker_role: int = 0):
         nonlocal seq, processed_rows, last_pose_map, last_pose
         hold_row = last_pose or CsvRow(
             seq=seq,
@@ -1519,6 +1595,15 @@ def export_npz(
             path_id=_path_id_for(layer, subtype, occ),
         )
         planned_time_s = timing.append_event_time()
+        event_marker_id = active_injection_block_id
+        if marker_role:
+            event_marker_role = marker_role
+        elif active_injection_kind == "cut":
+            event_marker_role = injection_role_map["cut_action"]
+        elif active_injection_kind == "tool_change":
+            event_marker_role = injection_role_map["tool_change_post"]
+        else:
+            event_marker_role = injection_role_map["none"]
         row = CsvRow(
             seq=seq,
             x=hold_row.x,
@@ -1537,6 +1622,8 @@ def export_npz(
             trigger_seq=seq,
             path_id=_path_id_for(layer, subtype, occ),
             planned_time_s=planned_time_s,
+            core_injection_block_id=event_marker_id,
+            core_injection_role=event_marker_role,
         )
         _writer_for(layer, subtype, occ).add(_with_layer_progress(row, layer))
         processed_rows += 1
@@ -1549,6 +1636,85 @@ def export_npz(
         parsed_commands = _overlap_extrude_waits_on_travel(parsed_commands)
 
     total_cmds = len(parsed_commands)
+
+    injection_blocks = [{
+        "id": 1,
+        "kind": "resin_z_compensation",
+        "command_index": None,
+        "source_line": -1,
+        "layer": 0,
+        "subtype": "TRAVEL",
+        "roles": ["resin_z_compensation", "post_anchor"],
+        "anchor": "before_first_effective_print_path",
+        "injectable_parameters": ["resin_z_print_compensation_mm"],
+    }]
+    block_id_by_command_index = {}
+    scan_tool = int(initial_tool_id)
+    next_block_id = 2
+    for command_index, command in enumerate(parsed_commands):
+        if isinstance(command, ToolChangeCommand):
+            mapped = _map_gcode_tool(command.tool)
+            if mapped != scan_tool:
+                block_id_by_command_index[command_index] = next_block_id
+                injection_blocks.append({
+                    "id": next_block_id,
+                    "kind": "tool_change",
+                    "command_index": command_index,
+                    "source_line": int(command.line or -1),
+                    "layer": int(getattr(command, "layer", 0) or 0),
+                    "subtype": str(getattr(command, "subtype", "TRAVEL") or "TRAVEL"),
+                    "roles": ["tool_change_pre", "tool_change_event", "tool_change_post", "post_anchor"],
+                    "anchor": "next_effective_print_path",
+                    "injectable_parameters": ["tool_offset", "tool_change_safe_lift_mm"],
+                    "target_tool_id": int(mapped),
+                })
+                next_block_id += 1
+                scan_tool = mapped
+        elif isinstance(command, MCommand) and command.code.upper() == "CUT":
+            block_id_by_command_index[command_index] = next_block_id
+            injection_blocks.append({
+                "id": next_block_id,
+                "kind": "cut",
+                "command_index": command_index,
+                "source_line": int(command.line or -1),
+                "layer": int(getattr(command, "layer", 0) or 0),
+                "subtype": str(getattr(command, "subtype", "TRAVEL") or "TRAVEL"),
+                "roles": ["cut_event", "cut_action", "cut_post", "post_anchor"],
+                "anchor": "next_effective_print_path",
+                "injectable_parameters": ["cut_lift_mm", "cut_wait_s"],
+            })
+            next_block_id += 1
+    manifest_json = json.dumps({
+        "format": "core_npz_local_injection_v1",
+        "schema_version": 1,
+        "description": "Embedded local-injection catalog. Row markers are metadata only; they do not change motion, E, seq, or RSI timing.",
+        "sample_period_s": float(dt),
+        "replacement_policy": "atomic_region_rebuild_same_npz_path",
+        "base_parameters": {
+            "tool_offset": [float(v) for v in tool_offset],
+            "resin_z_print_compensation_mm": float(resin_z_print_compensation_mm),
+            "tool_change_safe_lift_mm": float(tool_change_safe_lift_mm),
+            "cut_lift_mm": float(cut_lift_mm),
+            "cut_wait_s": float(cut_wait_s),
+            "fiber_retract_length_mm": None if fiber_retract_length_mm is None else float(fiber_retract_length_mm),
+            "default_feed_mm_s": float(default_feed_mm_s),
+        },
+        "overrideable_parameters": [
+            "tool_offset", "resin_z_print_compensation_mm",
+            "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
+        ],
+        "row_marker_fields": {
+            "block_id": "core_injection_block_id",
+            "role": "core_injection_role",
+            "role_vocab_keys": "core_injection_role_vocab_keys",
+            "role_vocab_vals": "core_injection_role_vocab_vals",
+        },
+        "global_transform_rules": [
+            {"parameter": "tool_offset", "selection": "tool_id == 1", "operation": "translate_xyz_by_delta_from_base", "exclude_role": "tool_change_pre"},
+            {"parameter": "resin_z_print_compensation_mm", "selection": "all trajectory rows after resin_z_compensation anchor", "operation": "translate_z_by_delta_from_base", "exclude_role": "resin_z_compensation"},
+        ],
+        "blocks": injection_blocks,
+    }, ensure_ascii=False, separators=(",", ":"))
 
     def _is_external_npz_start_xy_travel(cmd) -> bool:
         return (
@@ -1622,6 +1788,8 @@ def export_npz(
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
 
                 if mapped_tool != current_tool:
+                    active_injection_block_id = block_id_by_command_index.get(idx, -1)
+                    active_injection_kind = "tool_change"
                     # ---- 偏置补偿：在 tool_change 事件前注入安全抬升和 TRAVEL 段 ----
                     ox, oy, oz = tool_offset
                     has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
@@ -1649,7 +1817,11 @@ def export_npz(
                                     constraints=[],
                                     original_moves=[],
                                 )
-                                _append_sample(lift_gc, cmd.layer, cmd.subtype, occ)
+                                _append_sample(
+                                    lift_gc, cmd.layer, cmd.subtype, occ,
+                                    marker_block_id=active_injection_block_id,
+                                    marker_role=injection_role_map["tool_change_pre"],
+                                )
                                 offset_start_p = lifted_p
                             if mapped_tool == 1:
                                 end_p = _Pos(offset_start_p.x + ox, offset_start_p.y + oy,
@@ -1672,16 +1844,23 @@ def export_npz(
                                 constraints=[],
                                 original_moves=[],
                             )
-                            _append_sample(offset_gc, cmd.layer, cmd.subtype, occ)
+                            _append_sample(
+                                offset_gc, cmd.layer, cmd.subtype, occ,
+                                marker_block_id=active_injection_block_id,
+                                marker_role=injection_role_map["tool_change_pre"],
+                            )
                     # ---- 偏置补偿结束 ----
 
                     current_tool = mapped_tool
-                    _emit_event(_PendingEvent(
-                        event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
-                        payload=str(mapped_tool),
-                        src_line=cmd.line,
-                        tool_id=mapped_tool,
-                    ), cmd.layer, cmd.subtype, occ)
+                    _emit_event(
+                        _PendingEvent(
+                            event_type="tool_change_cf" if mapped_tool == 1 else "tool_change_resin",
+                            payload=str(mapped_tool),
+                            src_line=cmd.line,
+                            tool_id=mapped_tool,
+                        ), cmd.layer, cmd.subtype, occ,
+                        marker_role=injection_role_map["tool_change_event"],
+                    )
             elif isinstance(cmd, ResetECommand):
                 if last_pose is None and cmd.pose is not None:
                     last_pose = CsvRow(
@@ -1715,6 +1894,8 @@ def export_npz(
                 if occ == 0:
                     occ = _ensure_segment(cmd.layer, cmd.subtype)
                 if isinstance(cmd, MCommand) and cmd.code.upper() == "CUT":
+                    active_injection_block_id = block_id_by_command_index.get(idx, -1)
+                    active_injection_kind = "cut"
                     _append_cut_sequence(cmd, cmd.layer, cmd.subtype, occ, idx)
                 else:
                     ev = _mcommand_to_event(cmd, current_tool)

@@ -56,6 +56,18 @@ def _format_print_duration(seconds):
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _has_core_injection_manifest(path):
+    """Return whether an NPZ is a final Core export for local injection."""
+    try:
+        import numpy as np
+        with np.load(path, allow_pickle=False) as data:
+            if "core_injection_manifest" not in data.files:
+                return False
+            return "core_npz_local_injection_v1" in str(data["core_injection_manifest"].item())
+    except Exception:
+        return False
+
+
 LAUNCH_PARAMS = [
     # (param_name, default_value, description, group)
     ("center_start_delay_s", "1.0", "中心节点启动延迟（秒）", "中心节点"),
@@ -1906,6 +1918,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
             spin.valueChanged.connect(self._on_offset_changed)
         export_layout.addLayout(offset_grid)
 
+        local_group = QtWidgets.QGroupBox("现场局部注入参数")
+        local_form = QtWidgets.QFormLayout(local_group)
+        local_form.setHorizontalSpacing(8)
+        local_form.setVerticalSpacing(4)
+        self._local_injection_inputs = {}
+        local_defaults = {
+            "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
+            "cut_lift_mm": 20.0,
+            "cut_wait_s": 15.0,
+        }
+        for key, label in (
+            ("tool_change_safe_lift_mm", "换头安全抬升 mm"),
+            ("cut_lift_mm", "CUT 抬升 mm"),
+            ("cut_wait_s", "CUT 等待 s"),
+        ):
+            inp = QtWidgets.QLineEdit(f"{local_defaults[key]:.3f}")
+            inp.setValidator(QtGui.QDoubleValidator(0.0, 100000.0, 4, inp))
+            inp.setMaximumWidth(120)
+            local_form.addRow(label, inp)
+            self._local_injection_inputs[key] = inp
+        local_hint = QtWidgets.QLabel(
+            "选择带 core_injection_manifest 的最终 Core NPZ 时，只做局部数组注入；"
+            "不重新读取源 NPZ、不重新拟合路径。"
+        )
+        local_hint.setObjectName("fieldLabel")
+        local_hint.setWordWrap(True)
+        local_group.layout().addWidget(local_hint)
+        export_layout.addWidget(local_group)
+
         self._offset_status = QtWidgets.QLabel("已加载配置。")
         self._offset_status.setObjectName("fieldLabel")
         export_layout.addWidget(self._offset_status)
@@ -1949,6 +1990,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         planner_toggle.setObjectName("btnPlannerToggle")
         planner_toggle.setMinimumHeight(28)
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
+        self._planner_toggle = planner_toggle
         export_layout.addWidget(planner_toggle)
 
         planner_container = _PanelDialog("导出设置", self, 640, native_frame=True)
@@ -2466,7 +2508,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
         external_layout.addWidget(self._btn_save_external_npz_params)
         external_layout.addStretch(1)
-        settings_tabs.addTab(external_tab, "外部 NPZ")
+        self._external_tab_index = settings_tabs.addTab(external_tab, "外部 NPZ")
 
         settings_scroll.setWidget(settings_tabs)
         planner_container.body_layout().addWidget(settings_scroll, 1)
@@ -4971,6 +5013,28 @@ class _UiStatusWidget(QtWidgets.QWidget):
         base = os.path.splitext(os.path.basename(text))[0]
         data_root = _DEFAULT_NPZ_OUTPUT_DIR
         self._npz_out_input.setText(os.path.join(data_root, base, base + ".npz"))
+        is_core = os.path.splitext(text)[1].lower() == ".npz" and _has_core_injection_manifest(text)
+        if hasattr(self, "_external_tab_index"):
+            self._planner_container.findChild(QtWidgets.QTabWidget).setTabVisible(
+                self._external_tab_index, not is_core
+            )
+        if hasattr(self, "_planner_toggle"):
+            self._planner_toggle.setVisible(not is_core)
+
+    def _local_injection_values(self):
+        values = {
+            "tool_offset": tuple(float(v) for v in self.get_tool_offset()),
+            "resin_z_print_compensation_mm": float(self.current_resin_z_print_compensation()),
+        }
+        for key, inp in self._local_injection_inputs.items():
+            try:
+                value = float(inp.text())
+            except ValueError as exc:
+                raise ValueError(f"{key} 不是有效数字") from exc
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{key} 必须是非负有限数字")
+            values[key] = value
+        return values
 
     def _external_npz_process_params(self, planner_params=None):
         from dataclasses import replace
@@ -5056,6 +5120,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
 
         source_ext = os.path.splitext(source_path)[1].lower()
+        is_core_injection_source = source_ext == ".npz" and _has_core_injection_manifest(source_path)
 
         # Gather export params
         try:
@@ -5079,7 +5144,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             }
             external_cut_lift_mm = params["cut_lift_mm"]
             external_cut_wait_s = params["cut_wait_s"]
-            if source_ext == ".npz":
+            if source_ext == ".npz" and not is_core_injection_source:
                 external_process_params = self._external_npz_process_params(params)
                 external_cut_lift_mm = (
                     self._external_npz_inputs["external_cut_lift_mm"].value()
@@ -5089,6 +5154,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 )
             else:
                 external_process_params = None
+            local_injection_values = self._local_injection_values() if is_core_injection_source else None
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
                 and source_ext in (".gcode", ".gc", ".g")
@@ -5117,7 +5183,19 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 if out_dir:
                     os.makedirs(out_dir, exist_ok=True)
 
-                if source_ext == ".npz":
+                if source_ext == ".npz" and is_core_injection_source:
+                    self.export_progress.emit("读取最终 Core NPZ，执行局部注入...")
+                    from path_processing_core.local_injector import inject_npz
+                    stats = inject_npz(
+                        source_path,
+                        npz_out,
+                        tool_offset=local_injection_values["tool_offset"],
+                        resin_z_print_compensation_mm=local_injection_values["resin_z_print_compensation_mm"],
+                        tool_change_safe_lift_mm=local_injection_values["tool_change_safe_lift_mm"],
+                        cut_lift_mm=local_injection_values["cut_lift_mm"],
+                        cut_wait_s=local_injection_values["cut_wait_s"],
+                    )
+                elif source_ext == ".npz":
                     self.export_progress.emit("读取约定格式 NPZ...")
                     from external_npz_preprocessor.export_runner import convert_external_npz
 
@@ -5167,11 +5245,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 else:
                     raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")
                 rows = stats.get("rows", 0)
-                parts = stats.get("parts", 0)
+                parts = stats.get("parts", stats.get("output_parts", 0))
                 total_s = stats.get("total_s", 0.0)
                 msg = (
                     f"完成: {rows} 行, {parts} 分块, {total_s:.1f}秒\n"
                     f"偏移: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
+                    + ("\n模式: Core NPZ 局部注入" if is_core_injection_source else "")
                 )
                 self.export_finished.emit(True, msg)
             except Exception as exc:
