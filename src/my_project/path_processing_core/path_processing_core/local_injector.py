@@ -261,7 +261,10 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     start_index = int(indices[0]) - 1
     if start_index < 0:
         raise ValueError("resin compensation block has no preceding pose")
-    insert_at = int(comp[0]) if len(comp) else int(effective[0])
+    # When the source had zero compensation, the first block row may be
+    # the path's reset event.  Insert before that event so the event remains
+    # anchored at the end of the new compensation travel, matching Core.
+    insert_at = int(comp[0]) if len(comp) else int(indices[0])
     remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
     start_pose = np.array([arrays[k][start_index] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
     end_pose = start_pose.copy()
@@ -271,6 +274,9 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     if abs(float(new_value)) > 1e-9:
         samples = _sample_segment(start_pose, end_pose, 0.0, 0.0, raw="resin_z_print_compensation", feed_mm_s=feed, dt=dt)
         rows = _motion_rows(arrays, template, samples, bid, comp_code, _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]))
+        compensation_path_id = int(np.max(arrays["path_id"])) + 1
+        for row in rows:
+            row["path_id"] = compensation_path_id
         rows[-1]["path_end_flag"] = 1
     _replace(arrays, insert_at, remove_end, rows)
 
@@ -342,33 +348,33 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     anchor = int(anchor_candidates[-1]) if len(anchor_candidates) else int(np.flatnonzero(mask)[-1])
     post_indices = [int(i) for i in np.flatnonzero(mask) if event_index < int(i) <= anchor and arrays["event_flag"][i] == 0]
     if post_indices:
-        end = np.array([arrays[k][anchor] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
-        connector_samples = _sample_segment(
-            target, end, float(arrays["e"][post_indices[0]]), 0.0,
-            raw="tool_change_post_connector", feed_mm_s=feed, dt=dt,
-        )
-        # Keep all original post rows and event rows.  The Core sampler defines
-        # the new connector trajectory; its samples are projected onto the
-        # existing non-event slots so reset/event payloads and path E remain
-        # untouched.
-        sample_index = np.linspace(0.0, len(connector_samples) - 1, len(post_indices))
-        for rank, index in enumerate(post_indices):
-            position = sample_index[rank]
-            lo = int(math.floor(position))
-            hi = min(lo + 1, len(connector_samples) - 1)
-            ratio = position - lo
-            p0 = connector_samples[lo].pos
-            p1 = connector_samples[hi].pos
-            pose = np.array([
-                p0.x + ratio * (p1.x - p0.x),
-                p0.y + ratio * (p1.y - p0.y),
-                p0.z + ratio * (p1.z - p0.z),
-                p0.a + ratio * (p1.a - p0.a),
-                p0.b + ratio * (p1.b - p0.b),
-                p0.c + ratio * (p1.c - p0.c),
-            ], dtype=float)
-            for key, value in zip(("x", "y", "z", "a", "b", "c"), pose):
-                arrays[key][index] = value
+        end_pose = np.array([arrays[k][anchor] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+        block_events = [int(i) for i in np.flatnonzero(mask & (arrays["event_flag"] != 0)) if int(i) > event_index]
+        # The first reset is emitted at the tool-change pose.  The next reset
+        # begins the fiber preparation handshake at the post anchor.
+        hold_index = block_events[1] if len(block_events) > 1 else anchor
+        connector_indices = [index for index in post_indices if index < hold_index]
+        if connector_indices:
+            connector_samples = _sample_segment(
+                target, end_pose, float(arrays["e"][connector_indices[0]]), 0.0,
+                raw="tool_change_post_connector", feed_mm_s=feed, dt=dt,
+            )
+            connector_rows = _motion_rows(
+                arrays, connector_indices[0], connector_samples, bid, post_code,
+                _code(move_types, "TRAVEL"), int(arrays["tool_id"][connector_indices[0]]),
+            )
+            if any(int(arrays["path_end_flag"][index]) != 0 for index in connector_indices):
+                connector_rows[-1]["path_end_flag"] = 1
+            _replace(arrays, connector_indices[0], hold_index, connector_rows)
+            mask = arrays["core_injection_block_id"] == bid
+            anchor_candidates = np.flatnonzero(mask & (arrays["core_injection_role"] == _code(roles, "post_anchor")))
+            anchor = int(anchor_candidates[-1]) if len(anchor_candidates) else int(np.flatnonzero(mask)[-1])
+            block_events = [int(i) for i in np.flatnonzero(mask & (arrays["event_flag"] != 0)) if int(i) > event_index]
+            hold_index = block_events[1] if len(block_events) > 1 else anchor
+        for index in np.flatnonzero(mask):
+            if hold_index <= int(index) <= anchor and arrays["event_flag"][index] == 0:
+                for key, value in zip(("x", "y", "z", "a", "b", "c"), end_pose):
+                    arrays[key][index] = value
 
 
 def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, new_wait, dt, feed):
@@ -410,15 +416,27 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     remaining = max(0.0, float(new_wait) - 2.0 * lift_time - 6.0)
     rows.extend(_wait_rows(arrays, template, pose_high, 0.0, 0.0, remaining, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
     rows.append(_row(arrays, resets[2]))
+    # A final layer-retract/reset can remain in the same marker block after
+    # the canonical CUT resets.  Preserve its intervening wait rows and E
+    # ramp; dropping them would make the final reset lose its retract value.
+    previous_reset = resets[2]
     for extra_reset in resets[3:]:
-        rows.append(_row(arrays, extra_reset))
+        for index in old_indices:
+            if previous_reset < int(index) <= extra_reset:
+                tail_row = _row(arrays, int(index))
+                if int(tail_row["event_flag"]) == 0:
+                    _set_pose(tail_row, pose_high)
+                rows.append(tail_row)
+        previous_reset = extra_reset
     # Reconnect the post-CUT rows. Their old E/path metadata is retained.
     last_reset = resets[-1]
     post = [int(i) for i in old_indices if int(i) > last_reset]
-    anchor_candidates = [i for i in post if int(arrays["core_injection_role"][i]) == _code(roles, "post_anchor")]
+    post_code = _code(roles, "cut_post")
+    anchor_code = _code(roles, "post_anchor")
+    anchor_candidates = [i for i in post if int(arrays["core_injection_role"][i]) == anchor_code]
+    connector = [i for i in post if int(arrays["core_injection_role"][i]) == post_code]
     if anchor_candidates:
         anchor_pose = np.array([arrays[k][anchor_candidates[-1]] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
-        connector = post
         if connector:
             connector_samples = _sample_segment(
                 pose_high, anchor_pose, 0.0, 0.0, raw="fallback_linear",
@@ -590,7 +608,11 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     for path in files:
         with np.load(path, allow_pickle=False) as data:
             sizes.append(len(data["seq"]))
-    if len(sizes) > 1:
+    if len(sizes) == 1:
+        # A local block may add/remove rows even when the source is one
+        # chunk; never truncate the rebuilt tail to the source length.
+        sizes = [len(arrays["seq"])]
+    elif len(sizes) > 1:
         sizes[-1] = len(arrays["seq"]) - sum(sizes[:-1])
         if sizes[-1] <= 0:
             sizes = []
