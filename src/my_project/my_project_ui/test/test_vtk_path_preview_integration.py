@@ -523,3 +523,16 @@ def test_vtk_path_preview_filters_origin_to_first_print_bridge():
 
     assert _filter_origin_bridge_artifacts([bridge, real_print]) == [real_print]
     assert real_print.order_index == 0
+
+
+def test_layer_image_preview_loads_large_npz_in_background():
+    src = UI_PANEL.read_text(encoding="utf-8")
+
+    dialog = src.split("class _LayerViewerDialog", 1)[1].split(
+        "class _UiStatusWidget", 1
+    )[0]
+    assert "_images_loaded = _SIGNAL(object, object)" in dialog
+    assert "QtCore.QTimer.singleShot(0, self._load_images)" in dialog
+    assert "threading.Thread(target=target, daemon=True)" in dialog
+    assert "ensure_layer_preview_images" in dialog
+    assert "self._images_loaded.emit(files, None)" in dialog

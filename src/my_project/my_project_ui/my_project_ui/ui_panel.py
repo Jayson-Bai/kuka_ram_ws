@@ -1,4 +1,5 @@
 from python_qt_binding import QtCore, QtWidgets, QtGui
+_SIGNAL = getattr(QtCore, "pyqtSignal", None) or getattr(QtCore, "Signal")
 from rqt_gui_py.plugin import Plugin
 import rclpy
 from rclpy.parameter import Parameter
@@ -735,6 +736,8 @@ class _LogDetailDialog(QtWidgets.QDialog):
 
 
 class _LayerViewerDialog(QtWidgets.QDialog):
+    _images_loaded = _SIGNAL(object, object)
+
     def __init__(self, npz_dir: str, parent=None):
         super().__init__(parent)
         self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
@@ -743,13 +746,45 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self._layer_numbers: list[int] = []
         self._index = 0
         self._zoom = 1.0
+        self._closing = False
 
         self.setWindowTitle(f"层预览 - {Path(npz_dir).name}")
         self.resize(900, 700)
 
-        self._scan_images()
+        # Do not scan or render a large injected NPZ in the Qt constructor.
+        # The dialog must enter its event loop first so it remains responsive
+        # while missing layer images are generated in the worker thread.
         self._build_ui()
-        self._show_current()
+        self._images_loaded.connect(self._on_images_loaded)
+        self._label_index.setText("正在读取/生成层图像...")
+        self._btn_prev.setEnabled(False)
+        self._btn_next.setEnabled(False)
+        QtCore.QTimer.singleShot(0, self._load_images)
+
+    def closeEvent(self, event):
+        self._closing = True
+        super().closeEvent(event)
+
+    def done(self, result):
+        self._closing = True
+        super().done(result)
+
+    def _run_background(self, target):
+        thread = threading.Thread(target=target, daemon=True)
+        thread.start()
+
+    def _load_images(self):
+        if self._closing:
+            return
+
+        def worker():
+            try:
+                files = self._scan_images()
+                self._images_loaded.emit(files, None)
+            except Exception as exc:
+                self._images_loaded.emit([], str(exc))
+
+        self._run_background(worker)
 
     def _scan_images(self):
         from gcode_planner.path_preview import (
@@ -770,8 +805,20 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             if match:
                 parsed.append((int(match.group(1)), path))
         parsed.sort(key=lambda item: item[0])
+        return parsed
+
+    def _on_images_loaded(self, parsed, error):
+        if self._closing:
+            return
+        if error:
+            self._label_index.setText("层图像加载失败")
+            self._label_zoom.setText(str(error))
+            self._btn_prev.setEnabled(False)
+            self._btn_next.setEnabled(False)
+            return
         self._images = [item[1] for item in parsed]
         self._layer_numbers = [item[0] for item in parsed]
+        self._show_current()
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
