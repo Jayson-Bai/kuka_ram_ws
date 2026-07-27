@@ -25,9 +25,9 @@ _ROW_CONTINUITY_GAP_LIMIT = 1000
 
 # Shared low-resource preview policy used by both 2-D and VTK previews.
 PREVIEW_MAX_PATHS = 1000
-PREVIEW_MAX_ROWS = 60000
-PREVIEW_RENDER_POINTS = 12000
-PREVIEW_BEAD_SEGMENTS = 6000
+PREVIEW_MAX_ROWS = 30000
+PREVIEW_RENDER_POINTS = 10000
+PREVIEW_BEAD_SEGMENTS = 5000
 
 
 @dataclass
@@ -448,53 +448,21 @@ def _rows_from_npz(
             move_vocab = _vocab(data, "move_type")
             event_vocab = _vocab(data, "event_type")
 
-            x_arr = data["x"]
-            y_arr = data["y"]
-            z_arr = data["z"]
-            a_arr = data["a"] if "a" in data.files else np.zeros(count)
-            b_arr = data["b"] if "b" in data.files else np.zeros(count)
-            c_arr = data["c"] if "c" in data.files else np.zeros(count)
-            e_arr = data["e"] if "e" in data.files else np.zeros(count)
-            tool_id_arr = data["tool_id"]
-            move_type_arr = data["move_type"]
-
             if "preview_layer_index" in data:
-                preview_layer = data["preview_layer_index"]
-                mask = np.asarray(preview_layer, dtype=np.int64) == int(layer)
+                preview_layer = np.asarray(data["preview_layer_index"], dtype=np.int64)
+                mask = preview_layer == int(layer)
             elif "layer_index" in data:
-                layer_index = data["layer_index"]
-                mask = (
-                    np.asarray(layer_index, dtype=np.int64)
-                    == int(layer)
-                )
+                layer_index = np.asarray(data["layer_index"], dtype=np.int64)
+                mask = layer_index == int(layer)
             elif layer_z_map:
                 mask = _legacy_row_mask_for_physical_layer(
-                    z_arr,
-                    int(layer),
-                    layer_z_map,
+                    np.asarray(data["z"]), int(layer), layer_z_map
                 )
             else:
                 inferred_layer = _infer_layer_from_path(path)
                 if inferred_layer is not None and inferred_layer != int(layer):
                     return []
                 mask = np.ones(count, dtype=bool)
-            has_seq = "seq" in data.files
-            x_arr = np.asarray(x_arr)
-            y_arr = np.asarray(y_arr)
-            z_arr = np.asarray(z_arr)
-            a_arr = np.asarray(a_arr)
-            b_arr = np.asarray(b_arr)
-            c_arr = np.asarray(c_arr)
-            e_arr = np.asarray(e_arr)
-            tool_id_arr = np.asarray(tool_id_arr)
-            move_type_arr = np.asarray(move_type_arr)
-            src_line = _optional_array(data, "src_line", count, "")
-            event_flag = _optional_array(data, "event_flag", count, 0)
-            event_type = _optional_array(data, "event_type", count, 0)
-            payload = _optional_array(data, "payload", count, "")
-            seq = _optional_array(data, "seq", count, 0)
-            path_id = _optional_array(data, "path_id", count, 0)
-            path_end_flag = _optional_array(data, "path_end_flag", count, 0)
 
             row_indices = np.nonzero(mask)[0]
             if max_rows is not None and len(row_indices) > int(max_rows):
@@ -506,34 +474,71 @@ def _rows_from_npz(
                 )
                 row_indices = row_indices[np.unique(sample_positions)]
 
+            def selected_array(name, default):
+                if name in data.files:
+                    return np.asarray(data[name])[row_indices]
+                return np.full(len(row_indices), default)
+
+            # Only retain selected rows. NpzFile decompresses an array when it
+            # is indexed, so slicing immediately prevents a full layer-sized
+            # copy from staying alive while the row dictionaries are built.
+            x_arr = selected_array("x", 0.0)
+            y_arr = selected_array("y", 0.0)
+            z_arr = selected_array("z", 0.0)
+            a_arr = selected_array("a", 0.0)
+            b_arr = selected_array("b", 0.0)
+            c_arr = selected_array("c", 0.0)
+            e_arr = selected_array("e", 0.0)
+            tool_id_arr = selected_array("tool_id", 0)
+            move_type_arr = selected_array("move_type", 0)
+            event_flag = selected_array("event_flag", 0)
+            event_type = selected_array("event_type", 0)
+            seq = selected_array("seq", 0)
+            path_id = selected_array("path_id", 0)
+            path_end_flag = selected_array("path_end_flag", 0)
+
+            # Source-line and payload strings are metadata for diagnostics,
+            # not geometry. They are only retained for the unrestricted API;
+            # low-resource previews deliberately omit them.
+            preview_metadata = max_rows is None
+            src_line = selected_array("src_line", "") if preview_metadata else None
+            payload = selected_array("payload", "") if preview_metadata else None
+            has_seq = "seq" in data.files
+
             rows = []
-            for idx in row_indices:
-                move_type_value = int(move_type_arr[idx])
-                event_type_value = int(event_type[idx])
+            for local_index, global_index in enumerate(row_indices):
+                move_type_value = int(move_type_arr[local_index])
+                event_type_value = int(event_type[local_index])
                 rows.append(
                     {
-                        "seq": int(seq[idx]) if has_seq else idx,
-                        "x": float(x_arr[idx]),
-                        "y": float(y_arr[idx]),
-                        "z": float(z_arr[idx]),
-                        "a": float(a_arr[idx]),
-                        "b": float(b_arr[idx]),
-                        "c": float(c_arr[idx]),
-                        "e": float(e_arr[idx]),
-                        "tool_id": int(tool_id_arr[idx]),
+                        "seq": int(seq[local_index]) if has_seq else int(global_index),
+                        "x": float(x_arr[local_index]),
+                        "y": float(y_arr[local_index]),
+                        "z": float(z_arr[local_index]),
+                        "a": float(a_arr[local_index]),
+                        "b": float(b_arr[local_index]),
+                        "c": float(c_arr[local_index]),
+                        "e": float(e_arr[local_index]),
+                        "tool_id": int(tool_id_arr[local_index]),
                         "move_type": move_vocab.get(
                             move_type_value,
                             str(move_type_value),
                         ),
-                        "src_line": _decode_value(src_line[idx]),
-                        "event_flag": int(event_flag[idx]),
+                        "src_line": (
+                            _decode_value(src_line[local_index])
+                            if src_line is not None else ""
+                        ),
+                        "event_flag": int(event_flag[local_index]),
                         "event_type": event_vocab.get(
                             event_type_value,
-                            _decode_value(event_type[idx]),
+                            _decode_value(event_type[local_index]),
                         ),
-                        "payload": _decode_value(payload[idx]),
-                        "path_id": int(path_id[idx]),
-                        "path_end_flag": int(path_end_flag[idx]),
+                        "payload": (
+                            _decode_value(payload[local_index])
+                            if payload is not None else ""
+                        ),
+                        "path_id": int(path_id[local_index]),
+                        "path_end_flag": int(path_end_flag[local_index]),
                     }
                 )
             return rows
