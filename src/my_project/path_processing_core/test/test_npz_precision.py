@@ -62,3 +62,44 @@ def test_local_injector_updates_high_precision_and_public_fields(tmp_path):
         assert np.all(np.isfinite(data["z64"]))
         assert np.allclose(data["z"], data["z64"].astype(np.float32))
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
+
+
+def test_local_injector_uses_manifest_anchor_without_zero_resin_marker_rows(tmp_path):
+    source = tmp_path / "zero_resin_source.npz"
+    unmarked = tmp_path / "zero_resin_unmarked.npz"
+    output = tmp_path / "zero_resin_injected.npz"
+    export_npz(_commands(), str(source), dt=0.004, resin_z_print_compensation_mm=0.0)
+
+    with np.load(source, allow_pickle=False) as data:
+        payload = {key: data[key].copy() for key in data.files}
+    resin_mask = payload["core_injection_block_id"] == 1
+    payload["core_injection_block_id"][resin_mask] = -1
+    payload["core_injection_role"][resin_mask] = 0
+    np.savez_compressed(unmarked, **payload)
+
+    inject_npz(unmarked, output, resin_z_print_compensation_mm=0.1)
+
+    with np.load(output, allow_pickle=False) as data:
+        move_codes = {
+            key.decode().rstrip("\x00"): int(value)
+            for key, value in zip(
+                data["move_type_vocab_keys"], data["move_type_vocab_vals"]
+            )
+        }
+        role_codes = {
+            key.decode().rstrip("\x00"): int(value)
+            for key, value in zip(
+                data["core_injection_role_vocab_keys"],
+                data["core_injection_role_vocab_vals"],
+            )
+        }
+        effective = np.flatnonzero(
+            (data["event_flag"] == 0)
+            & np.isin(data["move_type"], [move_codes["PRINT"], move_codes["PRINT_FIT"]])
+        )
+        compensation = np.flatnonzero(
+            data["core_injection_role"] == role_codes["resin_z_compensation"]
+        )
+        assert len(compensation) > 0
+        assert int(compensation[-1]) < int(effective[0])
+        assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)

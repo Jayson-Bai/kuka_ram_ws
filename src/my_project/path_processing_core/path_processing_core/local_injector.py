@@ -310,26 +310,44 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     bid = int(block["id"])
     mask = arrays["core_injection_block_id"] == bid
     indices = np.flatnonzero(mask)
-    if not len(indices):
-        raise ValueError("resin compensation block has no anchor rows")
     comp_code = _code(roles, "resin_z_compensation")
     print_codes = {_code(move_types, name) for name in ("PRINT", "PRINT_FIT") if name in move_types.values()}
-    comp = np.flatnonzero(mask & (arrays["core_injection_role"] == comp_code))
-    effective = np.flatnonzero(mask & (arrays["event_flag"] == 0) & np.isin(arrays["move_type"], list(print_codes)))
+    effective = np.flatnonzero(
+        (arrays["event_flag"] == 0)
+        & np.isin(arrays["move_type"], list(print_codes))
+    )
     if not len(effective):
-        raise ValueError("resin compensation block has no effective print anchor")
-    start_index = int(indices[0]) - 1
+        raise ValueError("cannot locate first effective print path for resin compensation")
+
+    comp = np.flatnonzero(mask & (arrays["core_injection_role"] == comp_code))
+    if len(indices):
+        block_effective = np.flatnonzero(
+            mask
+            & (arrays["event_flag"] == 0)
+            & np.isin(arrays["move_type"], list(print_codes))
+        )
+        # Normal Core output: use the explicit block rows and replace only
+        # the existing compensation travel.
+        anchor_index = int(block_effective[0]) if len(block_effective) else int(effective[0])
+        start_index = int(indices[0]) - 1
+        insert_at = int(comp[0]) if len(comp) else int(indices[0])
+        remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
+    else:
+        # Core deliberately emits no marker rows when the exported resin Z
+        # compensation is zero. The manifest still defines the semantic
+        # anchor as before_first_effective_print_path, so fall back to the
+        # first effective print row and insert before it.
+        anchor_index = int(effective[0])
+        start_index = anchor_index - 1
+        insert_at = anchor_index
+        remove_end = anchor_index
+
     if start_index < 0:
-        raise ValueError("resin compensation block has no preceding pose")
-    # When the source had zero compensation, the first block row may be
-    # the path's reset event.  Insert before that event so the event remains
-    # anchored at the end of the new compensation travel, matching Core.
-    insert_at = int(comp[0]) if len(comp) else int(indices[0])
-    remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
+        raise ValueError("resin compensation anchor has no preceding pose")
     start_pose = _pose_from_arrays(arrays, start_index)
     end_pose = start_pose.copy()
     end_pose[2] += float(new_value)
-    template = int(effective[0])
+    template = int(anchor_index)
     rows = []
     if abs(float(new_value)) > 1e-9:
         samples = _sample_segment(start_pose, end_pose, 0.0, 0.0, raw="resin_z_print_compensation", feed_mm_s=feed, dt=dt)
@@ -358,6 +376,12 @@ def _apply_global_transforms(arrays, manifest, roles, move_types, delta_tool, de
         (arrays["core_injection_block_id"] == bid)
         & non_event & np.isin(arrays["move_type"], list(print_codes))
     )
+    if not len(candidates):
+        # Zero exported compensation has no row marker. Use the manifest's
+        # semantic anchor instead of requiring a synthetic marker row.
+        candidates = np.flatnonzero(
+            non_event & np.isin(arrays["move_type"], list(print_codes))
+        )
     if not len(candidates):
         raise ValueError("cannot locate first effective print path for resin compensation")
     anchor = int(candidates[0])
