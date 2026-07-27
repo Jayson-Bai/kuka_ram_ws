@@ -23,6 +23,12 @@ Pose6 = tuple[float, float, float, float, float, float]
 
 _ROW_CONTINUITY_GAP_LIMIT = 1000
 
+# Shared low-resource preview policy used by both 2-D and VTK previews.
+PREVIEW_MAX_PATHS = 1000
+PREVIEW_MAX_ROWS = 60000
+PREVIEW_RENDER_POINTS = 12000
+PREVIEW_BEAD_SEGMENTS = 6000
+
 
 @dataclass
 class PreviewPath:
@@ -220,21 +226,27 @@ def _cluster_z_heights(values: Sequence[float]) -> list[float]:
     return [float(np.median(cluster)) for cluster in clusters]
 
 
-def preview_image_paths(npz_root: str | Path) -> list[Path]:
-    """Return cached layer images across all supported export layouts."""
+def preview_image_paths(
+    npz_root: str | Path,
+    image_dir: str | Path | None = None,
+) -> list[Path]:
+    """Return cached layer images across supported export layouts."""
     root = Path(npz_root).expanduser()
-    bases = [root.parent] if (root.is_file() or root.suffix.lower() == ".npz") else [root]
     found: dict[int, Path] = {}
     pattern = re.compile(r"layer_(-?\d+)\.png$")
-    for base in bases:
+    if image_dir is not None:
+        candidates = Path(image_dir).expanduser().glob("layer_*.png")
+    else:
+        bases = [root.parent] if (root.is_file() or root.suffix.lower() == ".npz") else [root]
         candidates = []
-        candidates.extend((base / "layer_previews").glob("layer_*.png"))
-        candidates.extend(base.glob("layer_*/*.png"))
-        candidates.extend(base.glob("layer_*.png"))
-        for path in sorted(candidates):
-            match = pattern.fullmatch(path.name)
-            if match:
-                found.setdefault(int(match.group(1)), path)
+        for base in bases:
+            candidates.extend((base / "layer_previews").glob("layer_*.png"))
+            candidates.extend(base.glob("layer_*/*.png"))
+            candidates.extend(base.glob("layer_*.png"))
+    for path in sorted(candidates):
+        match = pattern.fullmatch(path.name)
+        if match:
+            found.setdefault(int(match.group(1)), path)
     return [found[layer] for layer in sorted(found)]
 
 
@@ -254,6 +266,10 @@ def ensure_layer_preview_images(
     npz_root: str | Path,
     layers: Sequence[int] | None = None,
     stride: int = 5,
+    max_paths: int = PREVIEW_MAX_PATHS,
+    max_rows: int = PREVIEW_MAX_ROWS,
+    dpi: int = 100,
+    output_dir: str | Path | None = None,
 ) -> list[Path]:
     """Create missing XY layer images directly from final NPZ data.
 
@@ -261,7 +277,8 @@ def ensure_layer_preview_images(
     invoke the path-processing Core or modify trajectory NPZ files.
     """
     root = Path(npz_root).expanduser()
-    existing = preview_image_paths(root)
+    cache_dir = None if output_dir is None else Path(output_dir).expanduser()
+    existing = preview_image_paths(root, image_dir=cache_dir) if cache_dir else preview_image_paths(root)
     existing_layers = {
         int(match.group(1))
         for path in existing
@@ -284,14 +301,20 @@ def ensure_layer_preview_images(
         return existing
 
     preview_dir = (
-        root.parent / "layer_previews"
-        if (root.is_file() or root.suffix.lower() == ".npz")
-        else root / "layer_previews"
+        cache_dir
+        if cache_dir is not None
+        else (
+            root.parent / "layer_previews"
+            if (root.is_file() or root.suffix.lower() == ".npz")
+            else root / "layer_previews"
+        )
     )
     preview_dir.mkdir(parents=True, exist_ok=True)
     step = max(1, int(stride))
     for layer in missing:
-        paths = extract_layer_preview_paths(root, layer)
+        paths = extract_layer_preview_paths(
+            root, layer, max_paths=max_paths, max_rows=max_rows
+        )
         xs_all: list[np.ndarray] = []
         ys_all: list[np.ndarray] = []
         for preview in paths:
@@ -311,7 +334,7 @@ def ensure_layer_preview_images(
             continue
         x = np.concatenate(xs_all)
         y = np.concatenate(ys_all)
-        fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+        fig, ax = plt.subplots(figsize=(8, 8), dpi=max(60, int(dpi)))
         ax.plot(x, y, linewidth=0.8, color="#2b2b2b")
         ax.set_aspect("equal", adjustable="box")
         ax.set_xlabel("X (mm)")
@@ -324,7 +347,7 @@ def ensure_layer_preview_images(
         )
         plt.close(fig)
 
-    return preview_image_paths(root)
+    return preview_image_paths(root, image_dir=cache_dir) if cache_dir else preview_image_paths(root)
 
 
 def _legacy_flat_layer0_z_map(data, preview_layers: list[int]):

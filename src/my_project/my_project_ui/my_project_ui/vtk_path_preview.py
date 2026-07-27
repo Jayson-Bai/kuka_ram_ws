@@ -14,6 +14,10 @@ except ImportError:
         from PySide6 import QtCore, QtWidgets
 
 from gcode_planner.path_preview import (
+    PREVIEW_BEAD_SEGMENTS,
+    PREVIEW_MAX_PATHS,
+    PREVIEW_MAX_ROWS,
+    PREVIEW_RENDER_POINTS,
     PathType,
     PreviewPath,
     extract_layer_preview_paths,
@@ -24,8 +28,8 @@ from gcode_planner.path_preview import (
 _MAX_POINTS_PER_PATH = 1000
 _MAX_STEP_REVIEW_POINTS_PER_PATH = 600
 _MAX_STEP_REVIEW_LENGTH_MM = 25.0
-_MAX_RENDER_POINTS_PER_ACTOR = 18000
-_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = 9000
+_MAX_RENDER_POINTS_PER_ACTOR = PREVIEW_RENDER_POINTS
+_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = PREVIEW_BEAD_SEGMENTS
 _FIXED_PLANE_SIZE_MM = 500.0
 _FIXED_PLANE_GRID_STEP_MM = 100.0
 _BEAD_DIMENSIONS_MM = {
@@ -519,8 +523,8 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                 paths = extract_layer_preview_paths(
                     self._npz_root,
                     layer,
-                    max_paths=2000,
-                    max_rows=120000,
+                    max_paths=PREVIEW_MAX_PATHS,
+                    max_rows=PREVIEW_MAX_ROWS,
                 )
                 self._paths_loaded.emit(layer, paths, None)
             except Exception as exc:

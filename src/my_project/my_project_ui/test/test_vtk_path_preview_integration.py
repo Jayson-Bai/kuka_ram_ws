@@ -145,8 +145,8 @@ def test_vtk_path_preview_loads_npz_data_on_background_threads():
     assert "list_preview_layers(self._npz_root)" in src
     assert (
         "extract_layer_preview_paths(" in src
-        and "max_paths=2000" in src
-        and "max_rows=120000" in src
+        and "max_paths=PREVIEW_MAX_PATHS" in src
+        and "max_rows=PREVIEW_MAX_ROWS" in src
     )
 
 
@@ -389,7 +389,7 @@ def test_vtk_print_paths_keep_bead_dimensions_for_optional_detail_mode():
 def test_vtk_default_lightweight_preview_uses_lines_and_low_density_grid():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
-    assert "_MAX_RENDER_POINTS_PER_ACTOR = 18000" in src
+    assert "_MAX_RENDER_POINTS_PER_ACTOR = PREVIEW_RENDER_POINTS" in src
     assert "_FIXED_PLANE_GRID_STEP_MM = 100.0" in src
     assert "self._show_grid = QtWidgets.QCheckBox" in src
     assert "self._show_grid.setChecked(False)" in src
@@ -405,7 +405,7 @@ def test_vtk_bead_preview_uses_lightweight_closed_solids():
         "    def _line_actor_for_paths", 1
     )[0]
 
-    assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = 9000" in src
+    assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR = PREVIEW_BEAD_SEGMENTS" in src
     assert "PathType.FIBER_PRINT: 1.0" in src
     assert "PathType.RESIN_PRINT: 1.0" in src
     assert "_BEAD_PREVIEW_MIN_HEIGHT_MM" not in src

@@ -737,13 +737,23 @@ class _LogDetailDialog(QtWidgets.QDialog):
 
 class _LayerViewerDialog(QtWidgets.QDialog):
     _images_loaded = _SIGNAL(object, object)
+    _image_loaded = _SIGNAL(int, object, object)
 
     def __init__(self, npz_dir: str, parent=None):
         super().__init__(parent)
         self.setWindowFlags(QtCore.Qt.Dialog | QtCore.Qt.FramelessWindowHint)
         self._npz_dir = npz_dir
-        self._images: list[Path] = []
+        self._images: list[Path | None] = []
         self._layer_numbers: list[int] = []
+        root = Path(npz_dir).expanduser()
+        preview_base = (
+            root.parent
+            if (root.is_file() or root.suffix.lower() == ".npz")
+            else root
+        )
+        self._preview_cache_dir = (
+            preview_base / ".preview_cache" / "layer_previews"
+        )
         self._index = 0
         self._zoom = 1.0
         self._closing = False
@@ -756,6 +766,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         # while missing layer images are generated in the worker thread.
         self._build_ui()
         self._images_loaded.connect(self._on_images_loaded)
+        self._image_loaded.connect(self._on_image_loaded)
         self._label_index.setText("正在读取/生成层图像...")
         self._btn_prev.setEnabled(False)
         self._btn_next.setEnabled(False)
@@ -788,24 +799,25 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
     def _scan_images(self):
         from gcode_planner.path_preview import (
-            ensure_layer_preview_images,
+            list_preview_layers,
             preview_image_paths,
         )
 
-        # Existing exports use both root/layer_previews/layer_*.png and
-        # layer_XXXX/layer_XXXX.png. If neither exists (for example after a
-        # local injection), build the cached layer images from final NPZ rows.
-        files = preview_image_paths(self._npz_dir)
-        if not files:
-            files = ensure_layer_preview_images(self._npz_dir)
+        # Only discover layers here. Missing images are generated lazily for
+        # the currently selected layer, so opening a large NPZ stays cheap.
+        files = preview_image_paths(
+            self._npz_dir, image_dir=self._preview_cache_dir
+        )
+        by_layer = {}
         pattern = re.compile(r"layer_(-?\d+)\.png$")
-        parsed = []
         for path in files:
             match = pattern.fullmatch(path.name)
             if match:
-                parsed.append((int(match.group(1)), path))
-        parsed.sort(key=lambda item: item[0])
-        return parsed
+                by_layer[int(match.group(1))] = path
+        layers = list_preview_layers(self._npz_dir)
+        if not layers:
+            layers = sorted(by_layer)
+        return [(layer, by_layer.get(layer)) for layer in layers]
 
     def _on_images_loaded(self, parsed, error):
         if self._closing:
@@ -819,6 +831,57 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self._images = [item[1] for item in parsed]
         self._layer_numbers = [item[0] for item in parsed]
         self._show_current()
+
+    def _load_current_image(self, layer):
+        if self._closing or getattr(self, "_loading_image_layer", None) is not None:
+            return
+        self._loading_image_layer = layer
+
+        def worker():
+            try:
+                from gcode_planner.path_preview import (
+                    PREVIEW_MAX_PATHS,
+                    PREVIEW_MAX_ROWS,
+                    ensure_layer_preview_images,
+                )
+
+                files = ensure_layer_preview_images(
+                    self._npz_dir,
+                    layers=[layer],
+                    max_paths=PREVIEW_MAX_PATHS,
+                    max_rows=PREVIEW_MAX_ROWS,
+                    dpi=100,
+                    output_dir=self._preview_cache_dir,
+                )
+                path = next(
+                    (item for item in files if item.name == f"layer_{layer:04d}.png"),
+                    None,
+                )
+                if path is None:
+                    raise RuntimeError("当前层没有可显示的打印路径")
+                self._image_loaded.emit(layer, path, None)
+            except Exception as exc:
+                self._image_loaded.emit(layer, None, str(exc))
+
+        self._run_background(worker)
+
+    def _on_image_loaded(self, layer, path, error):
+        if self._closing:
+            return
+        if getattr(self, "_loading_image_layer", None) == layer:
+            self._loading_image_layer = None
+        if layer not in self._layer_numbers:
+            return
+        index = self._layer_numbers.index(layer)
+        if error:
+            self._label_index.setText(f"层 {layer} 加载失败")
+            self._label_zoom.setText(str(error))
+            self._btn_prev.setEnabled(index > 0)
+            self._btn_next.setEnabled(index < len(self._images) - 1)
+            return
+        self._images[index] = Path(path)
+        if index == self._index:
+            self._show_current()
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
@@ -884,18 +947,28 @@ class _LayerViewerDialog(QtWidgets.QDialog):
 
     def _show_current(self):
         if not self._images:
-            self._label_index.setText("未找到图像")
+            self._label_index.setText("未找到可预览层")
             self._btn_prev.setEnabled(False)
             self._btn_next.setEnabled(False)
             return
         total = len(self._images)
         layer_no = self._layer_numbers[self._index] if self._index < len(
             self._layer_numbers) else self._index
-        self._label_index.setText(f"G-code层 {layer_no} ({self._index + 1} / {total})")
         self._btn_prev.setEnabled(self._index > 0)
         self._btn_next.setEnabled(self._index < total - 1)
+        image = self._images[self._index]
+        if image is None:
+            self._label_index.setText(
+                f"G-code层 {layer_no} ({self._index + 1} / {total})：正在生成低资源预览..."
+            )
+            self._btn_prev.setEnabled(False)
+            self._btn_next.setEnabled(False)
+            self._scene.clear()
+            self._load_current_image(layer_no)
+            return
+        self._label_index.setText(f"G-code层 {layer_no} ({self._index + 1} / {total})")
 
-        pixmap = QtGui.QPixmap(str(self._images[self._index]))
+        pixmap = QtGui.QPixmap(str(image))
         if pixmap.isNull():
             self._label_index.setText("图像加载失败")
             return
