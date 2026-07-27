@@ -1750,7 +1750,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         # Wait to add control_box until after launch_box
 
         # ======== GCode Export 区域 ========
-        export_box = QtWidgets.QGroupBox("GCode 导出")
+        export_box = QtWidgets.QGroupBox("正式打印 / NPZ 文件")
         export_box.setObjectName("groupExport")
         export_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Maximum)
         export_layout = QtWidgets.QVBoxLayout(export_box)
@@ -1919,32 +1919,60 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addLayout(offset_grid)
 
         local_group = QtWidgets.QGroupBox("现场局部注入参数")
-        local_form = QtWidgets.QFormLayout(local_group)
-        local_form.setHorizontalSpacing(8)
-        local_form.setVerticalSpacing(4)
+        local_group.setObjectName("groupLocalInjection")
+        local_layout = QtWidgets.QVBoxLayout(local_group)
+        local_layout.setContentsMargins(8, 8, 8, 8)
+        local_layout.setSpacing(6)
+
+        local_hint = QtWidgets.QLabel(
+            "仅修改最终 Core NPZ 的局部块；不重新切片、不重新拟合整条路径。"
+        )
+        local_hint.setObjectName("fieldLabel")
+        local_hint.setWordWrap(True)
+        local_layout.addWidget(local_hint)
+
+        local_grid = QtWidgets.QGridLayout()
+        local_grid.setHorizontalSpacing(8)
+        local_grid.setVerticalSpacing(4)
         self._local_injection_inputs = {}
         local_defaults = {
             "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
             "cut_lift_mm": 20.0,
             "cut_wait_s": 15.0,
         }
-        for key, label in (
-            ("tool_change_safe_lift_mm", "换头安全抬升 mm"),
-            ("cut_lift_mm", "CUT 抬升 mm"),
-            ("cut_wait_s", "CUT 等待 s"),
-        ):
-            inp = QtWidgets.QLineEdit(f"{local_defaults[key]:.3f}")
-            inp.setValidator(QtGui.QDoubleValidator(0.0, 100000.0, 4, inp))
-            inp.setMaximumWidth(120)
-            local_form.addRow(label, inp)
-            self._local_injection_inputs[key] = inp
-        local_hint = QtWidgets.QLabel(
-            "选择带 core_injection_manifest 的最终 Core NPZ 时，只做局部数组注入；"
-            "不重新读取源 NPZ、不重新拟合路径。"
+        local_fields = (
+            ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
+            ("cut_lift_mm", "CUT 抬升", "mm", "CUT 阶段的局部抬升距离。"),
+            ("cut_wait_s", "CUT 等待", "s", "CUT 阶段的局部等待时间。"),
         )
-        local_hint.setObjectName("fieldLabel")
-        local_hint.setWordWrap(True)
-        local_group.layout().addWidget(local_hint)
+        for column, (key, label_text, unit, tip) in enumerate(local_fields):
+            card = QtWidgets.QWidget()
+            card_layout = QtWidgets.QVBoxLayout(card)
+            card_layout.setContentsMargins(0, 0, 0, 0)
+            card_layout.setSpacing(2)
+
+            label = QtWidgets.QLabel(f"{label_text} ({unit})")
+            label.setObjectName("fieldLabel")
+            label.setAlignment(QtCore.Qt.AlignCenter)
+            label.setToolTip(tip)
+
+            inp = _NoWheelDoubleSpinBox()
+            inp.setRange(0.0, 100000.0)
+            inp.setDecimals(3)
+            inp.setSingleStep(0.1)
+            inp.setValue(float(local_defaults[key]))
+            inp.setMinimumHeight(28)
+            inp.setToolTip(tip)
+            self._local_injection_inputs[key] = inp
+
+            card_layout.addWidget(label)
+            card_layout.addWidget(inp)
+            local_grid.addWidget(card, 0, column)
+
+        local_grid.setColumnStretch(0, 1)
+        local_grid.setColumnStretch(1, 1)
+        local_grid.setColumnStretch(2, 1)
+        local_layout.addLayout(local_grid)
         export_layout.addWidget(local_group)
 
         self._offset_status = QtWidgets.QLabel("已加载配置。")
@@ -1990,6 +2018,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         planner_toggle.setObjectName("btnPlannerToggle")
         planner_toggle.setMinimumHeight(28)
         planner_toggle.setCursor(QtCore.Qt.PointingHandCursor)
+        planner_toggle.setVisible(False)
         self._planner_toggle = planner_toggle
         export_layout.addWidget(planner_toggle)
 
@@ -3334,6 +3363,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "  border-color: #1a73e8;"
             "}"
             "QGroupBox#groupExport::title { color: #1a73e8; }"
+            "QGroupBox#groupLocalInjection::title { color: #1a73e8; }"
             "QGroupBox#groupExport QLineEdit {"
             "  border: 1px solid #d0d0d0;"
             "  border-radius: 4px;"
@@ -5019,7 +5049,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 self._external_tab_index, not is_core
             )
         if hasattr(self, "_planner_toggle"):
-            self._planner_toggle.setVisible(not is_core)
+            # Core/外部 NPZ 的内部导出参数保留为代码默认值，但不再向正式打印用户暴露。
+            self._planner_toggle.setVisible(False)
 
     def _local_injection_values(self):
         values = {
@@ -5028,8 +5059,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         }
         for key, inp in self._local_injection_inputs.items():
             try:
-                value = float(inp.text())
-            except ValueError as exc:
+                value = float(inp.value()) if hasattr(inp, "value") else float(inp.text())
+            except (TypeError, ValueError) as exc:
                 raise ValueError(f"{key} 不是有效数字") from exc
             if not math.isfinite(value) or value < 0.0:
                 raise ValueError(f"{key} 必须是非负有限数字")

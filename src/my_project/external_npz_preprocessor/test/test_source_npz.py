@@ -52,7 +52,7 @@ def test_two_layer_template_contains_numeric_xyz_resin_and_fiber_paths_per_layer
     source = write_two_layer_template_npz(tmp_path / "template.npz")
 
     with np.load(source, allow_pickle=False) as raw:
-        assert raw["layer_0000_R"].dtype == np.float32
+        assert raw["layer_0000_R"].dtype == np.float64
         assert raw["layer_0000_R"].ndim == 3
         assert raw["layer_0000_R"].shape[2] == 3
 

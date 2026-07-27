@@ -110,7 +110,9 @@ def _iter_raw_paths(raw_paths):
             f"layer material arrays must be a 3D numeric array or legacy object array, got shape {arr.shape}"
         )
     for raw_path in arr:
-        path = np.asarray(raw_path, dtype=np.float32)
+        path = np.asarray(raw_path)
+        if not np.issubdtype(path.dtype, np.floating):
+            raise ValueError("path arrays must use a floating-point dtype")
         valid_rows = ~np.isnan(path).all(axis=1)
         path = path[valid_rows]
         if np.isnan(path).any():
@@ -119,13 +121,15 @@ def _iter_raw_paths(raw_paths):
 
 
 def _normalize_points(raw_path, default_abc: tuple[float, float, float]) -> np.ndarray:
-    points = np.asarray(raw_path, dtype=np.float32)
+    points = np.asarray(raw_path)
+    if not np.issubdtype(points.dtype, np.floating):
+        raise ValueError("path arrays must use a floating-point dtype")
     if points.ndim != 2 or points.shape[0] < 2 or points.shape[1] not in (3, 6):
         raise ValueError(
             f"path arrays must be Nx3 or Nx6 with at least 2 rows, got shape {points.shape}"
         )
     if points.shape[1] == 6:
-        return points.astype(np.float32, copy=False)
-    abc = np.tile(np.asarray(default_abc, dtype=np.float32), (points.shape[0], 1))
-    return np.hstack((points, abc)).astype(np.float32, copy=False)
+        return np.array(points, dtype=points.dtype, copy=True)
+    abc = np.tile(np.asarray(default_abc, dtype=points.dtype), (points.shape[0], 1))
+    return np.concatenate((points, abc), axis=1)
 

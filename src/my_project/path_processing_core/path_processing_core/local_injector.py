@@ -21,6 +21,18 @@ from .polynomial_interpolator import sample_global_curve_iter
 from .types import GlobalCurveCommand, Position
 
 _PART_RE = re.compile(r"^(?P<base>.+)_part(?P<part>\d{4})$")
+_HIGH_PRECISION_MAP = {
+    "x": "x64",
+    "y": "y64",
+    "z": "z64",
+    "a": "a64",
+    "b": "b64",
+    "c": "c64",
+    "e": "e64",
+}
+_HIGH_PRECISION_FIELDS = tuple(_HIGH_PRECISION_MAP.values())
+_HIGH_PRECISION_POSE_FIELDS = _HIGH_PRECISION_FIELDS[:6]
+
 _REQUIRED = {
     "seq", "x", "y", "z", "a", "b", "c", "e", "tool_id", "move_type",
     "event_flag", "event_type", "payload", "trigger_seq", "layer_index",
@@ -110,7 +122,44 @@ def _read_parts(files: list[Path]) -> tuple[dict[str, np.ndarray], dict[str, np.
             if not np.array_equal(value, chunk[key]):
                 raise ValueError(f"NPZ part {part_index} static field differs: {key}")
     arrays = {key: np.concatenate([chunk[key] for chunk in chunks]) for key in row_keys}
+    present_precision = [key for key in _HIGH_PRECISION_FIELDS if key in arrays]
+    if present_precision and len(present_precision) != len(_HIGH_PRECISION_FIELDS):
+        raise ValueError("NPZ high-precision fields must be provided as a complete x64..e64 set")
+    for key in present_precision:
+        if arrays[key].dtype != np.float64:
+            raise ValueError(f"{key} must use float64")
     return arrays, static
+
+
+def _has_high_precision(arrays: dict[str, np.ndarray]) -> bool:
+    return all(key in arrays for key in _HIGH_PRECISION_FIELDS)
+
+
+def _pose_from_arrays(arrays: dict[str, np.ndarray], index: int) -> np.ndarray:
+    keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else (
+        "x", "y", "z", "a", "b", "c"
+    )
+    return np.asarray([arrays[key][index] for key in keys], dtype=np.float64)
+
+
+def _sync_public_pose(arrays: dict[str, np.ndarray]) -> None:
+    if not _has_high_precision(arrays):
+        return
+    for public, precise in _HIGH_PRECISION_MAP.items():
+        arrays[public] = arrays[precise].astype(arrays[public].dtype, copy=False)
+
+
+def _set_array_pose(arrays: dict[str, np.ndarray], index: int, pose: np.ndarray, e: float | None = None) -> None:
+    values = tuple(float(value) for value in pose[:6])
+    for public, value in zip(("x", "y", "z", "a", "b", "c"), values):
+        arrays[public][index] = value
+        precise = _HIGH_PRECISION_MAP.get(public)
+        if precise is not None and precise in arrays:
+            arrays[precise][index] = value
+    if e is not None:
+        arrays["e"][index] = float(e)
+        if "e64" in arrays:
+            arrays["e64"][index] = float(e)
 
 
 def _json_manifest(value: np.ndarray) -> dict[str, Any]:
@@ -181,9 +230,14 @@ def _motion_rows(arrays, template, samples, block_id, role_code, move_type_code,
     rows = []
     for sample in samples:
         row = _row(arrays, template)
-        row["x"], row["y"], row["z"] = sample.pos.x, sample.pos.y, sample.pos.z
-        row["a"], row["b"], row["c"] = sample.pos.a, sample.pos.b, sample.pos.c
-        row["e"] = sample.e
+        _set_pose(
+            row,
+            np.asarray([
+                sample.pos.x, sample.pos.y, sample.pos.z,
+                sample.pos.a, sample.pos.b, sample.pos.c,
+            ], dtype=np.float64),
+            e=sample.e,
+        )
         row["move_type"] = move_type_code
         row["event_flag"] = 0
         row["event_type"] = 0
@@ -205,10 +259,8 @@ def _wait_rows(arrays, template, pose, e_start, delta_e, duration, *, block_id, 
     rows = []
     for index in range(1, count + 1):
         row = _row(arrays, template)
-        row["x"], row["y"], row["z"] = [float(v) for v in pose[:3]]
-        if len(pose) >= 6:
-            row["a"], row["b"], row["c"] = [float(v) for v in pose[3:6]]
-        row["e"] = float(e_start + delta_e * index / count)
+        row_e = float(e_start + delta_e * index / count)
+        _set_pose(row, np.asarray(pose, dtype=np.float64), e=row_e)
         row["move_type"] = print_code
         row["event_flag"] = 0
         row["event_type"] = 0
@@ -223,11 +275,16 @@ def _wait_rows(arrays, template, pose, e_start, delta_e, duration, *, block_id, 
 
 
 def _set_pose(row: dict[str, Any], pose: np.ndarray, e: float | None = None) -> None:
-    row["x"], row["y"], row["z"] = [float(v) for v in pose[:3]]
-    if len(pose) >= 6:
-        row["a"], row["b"], row["c"] = [float(v) for v in pose[3:6]]
+    values = tuple(float(value) for value in pose[:6])
+    for public, value in zip(("x", "y", "z", "a", "b", "c"), values):
+        row[public] = value
+        precise = _HIGH_PRECISION_MAP.get(public)
+        if precise is not None and precise in row:
+            row[precise] = np.float64(value)
     if e is not None:
         row["e"] = float(e)
+        if "e64" in row:
+            row["e64"] = np.float64(e)
 
 
 def _finite_and_lengths(arrays: dict[str, np.ndarray]) -> None:
@@ -235,7 +292,10 @@ def _finite_and_lengths(arrays: dict[str, np.ndarray]) -> None:
     for key, value in arrays.items():
         if value.ndim == 1 and len(value) != n:
             raise ValueError(f"NPZ field length mismatch: {key}")
-    for key in ("x", "y", "z", "a", "b", "c", "e", "planned_time_s"):
+    finite_keys = ("x", "y", "z", "a", "b", "c", "e", "planned_time_s")
+    if _has_high_precision(arrays):
+        finite_keys += _HIGH_PRECISION_FIELDS
+    for key in finite_keys:
         if not np.all(np.isfinite(arrays[key])):
             raise ValueError(f"NPZ field contains non-finite values: {key}")
     seq = arrays["seq"].astype(np.int64, copy=False)
@@ -266,7 +326,7 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     # anchored at the end of the new compensation travel, matching Core.
     insert_at = int(comp[0]) if len(comp) else int(indices[0])
     remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
-    start_pose = np.array([arrays[k][start_index] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+    start_pose = _pose_from_arrays(arrays, start_index)
     end_pose = start_pose.copy()
     end_pose[2] += float(new_value)
     template = int(effective[0])
@@ -285,9 +345,11 @@ def _apply_global_transforms(arrays, manifest, roles, move_types, delta_tool, de
     role_names = np.array([roles[int(v)] for v in arrays["core_injection_role"]], dtype=object)
     non_event = arrays["event_flag"] == 0
     tool_mask = (arrays["tool_id"] == 1) & non_event & (role_names != "tool_change_pre")
-    for key, delta in zip(("x", "y", "z"), delta_tool):
-        arrays[key][tool_mask] += np.asarray(delta, dtype=arrays[key].dtype)
+    for public, delta in zip(("x", "y", "z"), delta_tool):
+        precise = _HIGH_PRECISION_MAP.get(public) if _has_high_precision(arrays) else public
+        arrays[precise][tool_mask] += float(delta)
     if abs(delta_resin) <= 1e-12:
+        _sync_public_pose(arrays)
         return
     resin = next(item for item in manifest.get("blocks", []) if item.get("kind") == "resin_z_compensation")
     bid = int(resin["id"])
@@ -301,7 +363,9 @@ def _apply_global_transforms(arrays, manifest, roles, move_types, delta_tool, de
     anchor = int(candidates[0])
     index = np.arange(len(arrays["z"]))
     zmask = (index >= anchor) & non_event & (role_names != "resin_z_compensation") & (role_names != "tool_change_pre")
-    arrays["z"][zmask] += np.asarray(delta_resin, dtype=arrays["z"].dtype)
+    z_key = "z64" if _has_high_precision(arrays) else "z"
+    arrays[z_key][zmask] += float(delta_resin)
+    _sync_public_pose(arrays)
 
 
 def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_lift, dt, feed):
@@ -319,7 +383,7 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     start_index = int(indices[0]) - 1
     if start_index < 0:
         raise ValueError(f"tool block {bid} has no preceding pose")
-    start = np.array([arrays[k][start_index] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+    start = _pose_from_arrays(arrays, start_index)
     target_tool = int(block.get("target_tool_id", 1))
     sign = 1.0 if target_tool == 1 else -1.0
     has_offset = bool(np.any(np.abs(new_offset) > 1e-9))
@@ -348,7 +412,7 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     anchor = int(anchor_candidates[-1]) if len(anchor_candidates) else int(np.flatnonzero(mask)[-1])
     post_indices = [int(i) for i in np.flatnonzero(mask) if event_index < int(i) <= anchor and arrays["event_flag"][i] == 0]
     if post_indices:
-        end_pose = np.array([arrays[k][anchor] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+        end_pose = _pose_from_arrays(arrays, anchor)
         block_events = [int(i) for i in np.flatnonzero(mask & (arrays["event_flag"] != 0)) if int(i) > event_index]
         # The first reset is emitted at the tool-change pose.  The next reset
         # begins the fiber preparation handshake at the post anchor.
@@ -383,6 +447,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     indices = np.flatnonzero(mask)
     cut_code = _code(roles, "cut_event")
     action_code = _code(roles, "cut_action")
+    cut_post_code = _code(roles, "cut_post")
     cut_event = np.flatnonzero(mask & (arrays["core_injection_role"] == cut_code))
     if not len(indices) or not len(cut_event):
         raise ValueError(f"CUT block {bid} is incomplete")
@@ -395,7 +460,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     base_lift = float(manifest.get("base_parameters", {}).get("cut_lift_mm", 20.0))
     old_indices = [int(i) for i in indices]
     pose_index = max(0, event_index - 1)
-    low = np.array([arrays[k][pose_index] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+    low = _pose_from_arrays(arrays, pose_index)
     low_e = float(arrays["e"][pose_index])
     high = low.copy()
     high[2] += float(new_lift)
@@ -405,15 +470,40 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     template = event_index
     if new_lift > 1e-9:
         samples = _sample_segment(low, high, low_e, float(new_lift), raw="fallback_linear", feed_mm_s=feed, dt=dt)
-        rows.extend(_motion_rows(arrays, template, samples, bid, action_code, travel_code, int(arrays["tool_id"][event_index])))
+        rows.extend(_motion_rows(arrays, template, samples, bid, cut_post_code, travel_code, int(arrays["tool_id"][event_index])))
     pose_high = high
     rows.extend(_wait_rows(arrays, template, pose_high, low_e + new_lift, 0.0, 3.0, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
     rows.append(_row(arrays, resets[0]))
+    # Core emits a one-sample EXTRUDE_WAIT anchor immediately after this
+    # reset before starting the safety retract.
+    rows.extend(_wait_rows(
+        arrays, template, pose_high, 0.0, 0.0, dt,
+        block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+    ))
     lift_time = float(new_lift) / max(feed, 1e-9)
-    rows.extend(_wait_rows(arrays, template, pose_high, float(new_lift), -2.0 * float(new_lift), lift_time, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
+    rows.extend(_wait_rows(arrays, template, pose_high, 0.0, -float(new_lift), lift_time, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
     rows.extend(_wait_rows(arrays, template, pose_high, -float(new_lift), 0.0, 3.0, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
     rows.append(_row(arrays, resets[1]))
-    remaining = max(0.0, float(new_wait) - 2.0 * lift_time - 6.0)
+    # Core emits a one-sample EXTRUDE_WAIT anchor after each reset.  The
+    # initial anchor is already present before the CUT event; reproduce the
+    # two anchors after reset[0] and reset[1] here as well.
+    rows.extend(_wait_rows(
+        arrays, template, pose_high, 0.0, 0.0, dt,
+        block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+    ))
+    # Keep the same left-to-right floating-point operation order as Core's
+    # remaining_wait_s calculation.  This matters when the duration is an
+    # exact multiple of dt mathematically but lies just above it in binary.
+    lift_duration_s = float(new_lift) / max(feed, 1e-9)
+    retract_duration_s = float(new_lift) / max(feed, 1e-9)
+    remaining = max(
+        0.0,
+        float(new_wait)
+        - lift_duration_s
+        - 3.0
+        - retract_duration_s
+        - 3.0,
+    )
     rows.extend(_wait_rows(arrays, template, pose_high, 0.0, 0.0, remaining, block_id=bid, role_code=action_code, print_code=print_code, dt=dt))
     rows.append(_row(arrays, resets[2]))
     # A final layer-retract/reset can remain in the same marker block after
@@ -431,13 +521,25 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     # Reconnect the post-CUT rows. Their old E/path metadata is retained.
     last_reset = resets[-1]
     post = [int(i) for i in old_indices if int(i) > last_reset]
-    post_code = _code(roles, "cut_post")
+    post_code = cut_post_code
     anchor_code = _code(roles, "post_anchor")
     anchor_candidates = [i for i in post if int(arrays["core_injection_role"][i]) == anchor_code]
     connector = [i for i in post if int(arrays["core_injection_role"][i]) == post_code]
+    connector_path_end = bool(any(int(arrays["path_end_flag"][index]) != 0 for index in connector))
     if anchor_candidates:
-        anchor_pose = np.array([arrays[k][anchor_candidates[-1]] for k in ("x", "y", "z", "a", "b", "c")], dtype=float)
+        anchor_pose = _pose_from_arrays(arrays, anchor_candidates[-1])
         if connector:
+            # Preserve fixed post-CUT rows before/after the resampled
+            # connector. Core keeps a separate cut_action anchor before the
+            # connector and a separate post_anchor after it.
+            connector_start = connector[0]
+            connector_end = connector[-1]
+            for index in post:
+                if index < connector_start:
+                    row = _row(arrays, index)
+                    if int(arrays["event_flag"][index]) == 0:
+                        _set_pose(row, pose_high)
+                    rows.append(row)
             connector_samples = _sample_segment(
                 pose_high, anchor_pose, 0.0, 0.0, raw="fallback_linear",
                 feed_mm_s=feed, dt=dt,
@@ -447,11 +549,21 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
                 _code(roles, "cut_post"), _code(move_types, "TRAVEL"),
                 int(arrays["tool_id"][connector[0]]),
             )
-            if any(int(arrays["path_end_flag"][index]) != 0 for index in connector):
+            if connector_path_end:
                 connector_rows[-1]["path_end_flag"] = 1
-            if anchor_candidates:
-                connector_rows[-1]["core_injection_role"] = _code(roles, "post_anchor")
             rows.extend(connector_rows)
+            for index in post:
+                if index > connector_end:
+                    row = _row(arrays, index)
+                    if int(arrays["event_flag"][index]) == 0:
+                        _set_pose(row, anchor_pose)
+                    rows.append(row)
+        else:
+            for index in post:
+                row = _row(arrays, index)
+                if int(arrays["event_flag"][index]) == 0:
+                    _set_pose(row, anchor_pose)
+                rows.append(row)
     else:
         for index in post:
             row = _row(arrays, index)
@@ -461,10 +573,18 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     if any(int(arrays["path_end_flag"][index]) != 0 for index in old_indices):
         for row in rows:
             row["path_end_flag"] = 0
-        for row in reversed(rows):
-            if int(row["event_flag"]) == 0:
-                row["path_end_flag"] = 1
-                break
+        if connector and connector_path_end:
+            # Core marks the last connector sample as path end; the following
+            # post_anchor is a separate non-ending row.
+            for row in reversed(rows):
+                if int(row["core_injection_role"]) == post_code and int(row["event_flag"]) == 0:
+                    row["path_end_flag"] = 1
+                    break
+        else:
+            for row in reversed(rows):
+                if int(row["event_flag"]) == 0:
+                    row["path_end_flag"] = 1
+                    break
     _replace(arrays, int(indices[0]), int(indices[-1]) + 1, rows)
 
 
@@ -473,13 +593,9 @@ def _repair(arrays, dt):
     event_mask = arrays["event_flag"] != 0
     for index in np.flatnonzero(event_mask):
         if index > 0:
-            arrays["x"][index] = arrays["x"][index - 1]
-            arrays["y"][index] = arrays["y"][index - 1]
-            arrays["z"][index] = arrays["z"][index - 1]
-            arrays["a"][index] = arrays["a"][index - 1]
-            arrays["b"][index] = arrays["b"][index - 1]
-            arrays["c"][index] = arrays["c"][index - 1]
-            arrays["e"][index] = arrays["e"][index - 1]
+            _set_array_pose(arrays, index, _pose_from_arrays(arrays, index - 1), e=float(
+                arrays["e64"][index - 1] if "e64" in arrays else arrays["e"][index - 1]
+            ))
     values = np.zeros(len(arrays["seq"]), dtype=arrays["planned_time_s"].dtype)
     trajectory_count = 0
     for index in range(len(values)):
@@ -491,6 +607,7 @@ def _repair(arrays, dt):
             trajectory_count += 1
     arrays["planned_time_s"] = values
     arrays["trigger_seq"] = np.where(event_mask, arrays["seq"], -1).astype(arrays["trigger_seq"].dtype)
+    _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
     if not np.all(np.diff(arrays["planned_time_s"]) >= -1e-6):
         raise ValueError("planned_time_s is not monotonic")
@@ -564,6 +681,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                cut_wait_s: float | None = None) -> dict[str, Any]:
     files = _part_files(Path(input_path).expanduser())
     arrays, static = _read_parts(files)
+    _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
     manifest = _json_manifest(static["core_injection_manifest"])
     overrides = (params or LocalInjectionParams(

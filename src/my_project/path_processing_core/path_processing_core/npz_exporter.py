@@ -255,6 +255,13 @@ def export_npz(
             b = np.array([r.b for r in chunk], dtype=np.float32)
             c = np.array([r.c for r in chunk], dtype=np.float32)
             e = np.array([r.e for r in chunk], dtype=np.float32)
+            x64 = np.array([r.x for r in chunk], dtype=np.float64)
+            y64 = np.array([r.y for r in chunk], dtype=np.float64)
+            z64 = np.array([r.z for r in chunk], dtype=np.float64)
+            a64 = np.array([r.a for r in chunk], dtype=np.float64)
+            b64 = np.array([r.b for r in chunk], dtype=np.float64)
+            c64 = np.array([r.c for r in chunk], dtype=np.float64)
+            e64 = np.array([r.e for r in chunk], dtype=np.float64)
             tool_id = np.array([r.tool_id for r in chunk], dtype=np.uint8)
             move_type = np.array([move_type_map.get(r.move_type, 255)
                                  for r in chunk], dtype=np.uint8)
@@ -292,6 +299,13 @@ def export_npz(
                 b=b,
                 c=c,
                 e=e,
+                x64=x64,
+                y64=y64,
+                z64=z64,
+                a64=a64,
+                b64=b64,
+                c64=c64,
+                e64=e64,
                 tool_id=tool_id,
                 move_type=move_type,
                 src_line=src_line,
@@ -1703,6 +1717,10 @@ def export_npz(
             "tool_offset", "resin_z_print_compensation_mm",
             "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
         ],
+        "precision_fields": {
+            "consumer_float32": ["x", "y", "z", "a", "b", "c", "e", "planned_time_s"],
+            "injection_float64": ["x64", "y64", "z64", "a64", "b64", "c64", "e64"],
+        },
         "row_marker_fields": {
             "block_id": "core_injection_block_id",
             "role": "core_injection_role",
@@ -2168,6 +2186,13 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
         b = np.array([r.b for r in chunk], dtype=np.float32)
         c = np.array([r.c for r in chunk], dtype=np.float32)
         e = np.array([r.e for r in chunk], dtype=np.float32)
+        x64 = np.array([r.x for r in chunk], dtype=np.float64)
+        y64 = np.array([r.y for r in chunk], dtype=np.float64)
+        z64 = np.array([r.z for r in chunk], dtype=np.float64)
+        a64 = np.array([r.a for r in chunk], dtype=np.float64)
+        b64 = np.array([r.b for r in chunk], dtype=np.float64)
+        c64 = np.array([r.c for r in chunk], dtype=np.float64)
+        e64 = np.array([r.e for r in chunk], dtype=np.float64)
         tool_id = np.array([r.tool_id for r in chunk], dtype=np.uint8)
         move_type = np.array([move_type_map.get(r.move_type, 255) for r in chunk], dtype=np.uint8)
         src_line = np.array([r.src_line for r in chunk], dtype="S32")
@@ -2201,6 +2226,13 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
             b=b,
             c=c,
             e=e,
+            x64=x64,
+            y64=y64,
+            z64=z64,
+            a64=a64,
+            b64=b64,
+            c64=c64,
+            e64=e64,
             tool_id=tool_id,
             move_type=move_type,
             src_line=src_line,

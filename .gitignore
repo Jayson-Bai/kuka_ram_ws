@@ -35,5 +35,9 @@
 # Output NPZ data
 /data/output_npz/
 
+# User-provided input paths and handoff docs
+/data/input_gcode/
+/docs/
+
 # Head calibration offsets
 /data/head_calibration_offsets/

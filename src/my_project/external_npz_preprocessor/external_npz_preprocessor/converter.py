@@ -380,7 +380,7 @@ def _make_resin_primeline_path(
             [x, y, z, a, b, c],
             [x + length, y, z, a, b, c],
         ],
-        dtype=np.float32,
+        dtype=np.float64,
     )
     return MaterialPath(material="R", order=_PRIMELINE_ORDER, points=points)
 
@@ -1117,7 +1117,7 @@ def _job_source_xy_min(job: SourceJob) -> tuple[float, float]:
     min_y: float | None = None
     for layer in job.layers:
         for material_path in [*layer.resin_paths, *layer.fiber_paths]:
-            points = np.asarray(material_path.points, dtype=np.float32)
+            points = np.asarray(material_path.points, dtype=np.float64)
             if points.size == 0:
                 continue
             path_min_x = float(np.min(points[:, 0]))
@@ -1136,7 +1136,7 @@ def _layer_resin_xy_center(
     min_y: float | None = None
     max_y: float | None = None
     for material_path in resin_paths:
-        points = np.asarray(material_path.points, dtype=np.float32)
+        points = np.asarray(material_path.points, dtype=np.float64)
         if points.size == 0:
             continue
         path_min_x = float(np.min(points[:, 0]))
