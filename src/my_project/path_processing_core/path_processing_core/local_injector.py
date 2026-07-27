@@ -612,7 +612,20 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     _replace(arrays, int(indices[0]), int(indices[-1]) + 1, rows)
 
 
-def _repair(arrays, dt):
+def _max_xyz_step(arrays: dict[str, np.ndarray]) -> float:
+    if len(arrays["seq"]) < 2:
+        return 0.0
+    pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else (
+        "x", "y", "z"
+    )
+    xyz = np.column_stack([
+        np.asarray(arrays[key], dtype=np.float64)
+        for key in pose_keys[:3]
+    ])
+    return float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max())
+
+
+def _repair(arrays, dt, *, baseline_max_step=0.0, expected_sample_step=0.0):
     arrays["seq"] = np.arange(len(arrays["seq"]), dtype=arrays["seq"].dtype)
     event_mask = arrays["event_flag"] != 0
     for index in np.flatnonzero(event_mask):
@@ -635,11 +648,20 @@ def _repair(arrays, dt):
     _finite_and_lengths(arrays)
     if not np.all(np.diff(arrays["planned_time_s"]) >= -1e-6):
         raise ValueError("planned_time_s is not monotonic")
-    xyz = np.column_stack((arrays["x"], arrays["y"], arrays["z"]))
-    if len(xyz) > 1:
-        max_step = float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max())
-        if max_step > 0.05 + 1e-9:
-            raise ValueError(f"local injection created an unsafe XYZ jump: {max_step:.6f} mm")
+    max_step = _max_xyz_step(arrays)
+    if max_step > 0.0:
+        # Core exports may legitimately contain a larger ordinary sampling
+        # step than 0.05 mm (for example, 20 mm/s * 0.004 s). Reject only a
+        # newly created step beyond the source Core baseline or the expected
+        # step of the same Core sampler, with a small numerical margin.
+        allowed_step = max(float(baseline_max_step), float(expected_sample_step))
+        tolerance = max(1e-6, allowed_step * 1e-6)
+        if max_step > allowed_step + tolerance:
+            raise ValueError(
+                "local injection created a new unsafe XYZ jump: "
+                f"{max_step:.6f} mm (source/ sampler limit "
+                f"{allowed_step:.6f} mm)"
+            )
 
 
 def _output_parts(output: Path, count: int) -> list[Path]:
@@ -707,6 +729,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     arrays, static = _read_parts(files)
     _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
+    baseline_max_step = _max_xyz_step(arrays)
     manifest = _json_manifest(static["core_injection_manifest"])
     overrides = (params or LocalInjectionParams(
         tool_offset=tool_offset,
@@ -740,7 +763,13 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     for block in manifest.get("blocks", []):
         if block.get("kind") == "cut" and ("cut_lift_mm" in overrides or "cut_wait_s" in overrides):
             _rebuild_cut(arrays, static, manifest, roles, move_types, block, lift, wait, dt, feed)
-    _repair(arrays, dt)
+    expected_sample_step = float(feed) * float(dt) * 1.10
+    _repair(
+        arrays,
+        dt,
+        baseline_max_step=baseline_max_step,
+        expected_sample_step=expected_sample_step,
+    )
     manifest["base_parameters"] = dict(base)
     manifest["base_parameters"].update(overrides)
     static["core_injection_manifest"] = np.array(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")))

@@ -5,7 +5,7 @@ from path_processing_core.npz_exporter import export_npz
 from path_processing_core.types import GlobalCurveCommand, MoveCommand, Position
 
 
-def _commands():
+def _commands(feedrate=600.0):
     start = Position(0.1234567890123, 0.2345678901234, 0.5000000000001, 0.0, 0.0, 0.0)
     end = Position(2.3456789012345, 0.3456789012345, 0.5000000000002, 0.0, 0.0, 0.0)
     return [
@@ -16,7 +16,7 @@ def _commands():
             pos=start,
             e_val=0.0,
             delta_e=0.0,
-            feedrate=600.0,
+            feedrate=feedrate,
             line=0,
             layer=0,
             subtype="TRAVEL",
@@ -29,7 +29,7 @@ def _commands():
             control_points=[end],
             e_val=1.0,
             delta_e=1.0,
-            feedrate=600.0,
+            feedrate=feedrate,
             line=1,
             raw="precision_test",
         )
@@ -102,4 +102,35 @@ def test_local_injector_uses_manifest_anchor_without_zero_resin_marker_rows(tmp_
         )
         assert len(compensation) > 0
         assert int(compensation[-1]) < int(effective[0])
+        assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
+
+
+def test_local_injector_accepts_existing_core_sampling_step_above_005_mm(tmp_path):
+    source = tmp_path / "high_feed_source.npz"
+    output = tmp_path / "high_feed_injected.npz"
+    commands = _commands(feedrate=1200.0)
+    start = Position(0.0, 0.0, 0.5, 0.0, 0.0, 0.0)
+    end = Position(100.0, 0.0, 0.5, 0.0, 0.0, 0.0)
+    commands[0].start_pos = start
+    commands[0].pos = start
+    commands[1].start_pos = start
+    commands[1].control_points = [end]
+    export_npz(
+        commands,
+        str(source),
+        dt=0.004,
+        default_feed_mm_s=20.0,
+    )
+
+    with np.load(source, allow_pickle=False) as data:
+        xyz = np.column_stack([
+            data[key].astype(np.float64) for key in ("x", "y", "z")
+        ])
+        source_max_step = float(
+            np.linalg.norm(np.diff(xyz, axis=0), axis=1).max()
+        )
+    assert source_max_step > 0.05
+
+    inject_npz(source, output, resin_z_print_compensation_mm=0.1)
+    with np.load(output, allow_pickle=False) as data:
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
