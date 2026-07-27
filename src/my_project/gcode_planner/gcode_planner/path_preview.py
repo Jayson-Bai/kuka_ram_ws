@@ -125,8 +125,22 @@ def _candidate_npz_files(
     layer: int | None,
     include_legacy_cross_layer: bool = False,
 ) -> list[Path]:
-    if root.is_file() and root.suffix.lower() == ".npz":
-        return [root]
+    # A selected _part0000 file is only an entry point. Always read its
+    # siblings so preview and 3-D view see the complete trajectory. The same
+    # applies to a normalized base path whose flat NPZ was replaced by parts.
+    if root.suffix.lower() == ".npz":
+        if root.is_file():
+            part_match = re.search(r"_part\d+$", root.stem)
+            if part_match:
+                base_stem = re.sub(r"_part\d+$", "", root.stem)
+                parts = sorted(root.parent.glob(f"{base_stem}_part*.npz"))
+                return parts or [root]
+            return [root]
+        base_stem = re.sub(r"_part\d+$", "", root.stem)
+        parts = sorted(root.parent.glob(f"{base_stem}_part*.npz"))
+        if parts:
+            return parts
+        return []
 
     if layer is not None:
         layer_dir = root / f"layer_{int(layer):04d}"
@@ -206,26 +220,111 @@ def _cluster_z_heights(values: Sequence[float]) -> list[float]:
     return [float(np.median(cluster)) for cluster in clusters]
 
 
+def preview_image_paths(npz_root: str | Path) -> list[Path]:
+    """Return cached layer images across all supported export layouts."""
+    root = Path(npz_root).expanduser()
+    bases = [root.parent] if (root.is_file() or root.suffix.lower() == ".npz") else [root]
+    found: dict[int, Path] = {}
+    pattern = re.compile(r"layer_(-?\d+)\.png$")
+    for base in bases:
+        candidates = []
+        candidates.extend((base / "layer_previews").glob("layer_*.png"))
+        candidates.extend(base.glob("layer_*/*.png"))
+        candidates.extend(base.glob("layer_*.png"))
+        for path in sorted(candidates):
+            match = pattern.fullmatch(path.name)
+            if match:
+                found.setdefault(int(match.group(1)), path)
+    return [found[layer] for layer in sorted(found)]
+
+
 def _preview_image_layers(root: Path) -> list[int]:
-    preview_dir = root / "layer_previews"
-    if not preview_dir.is_dir():
-        return []
-    layers = []
-    for path in preview_dir.glob("layer_*.png"):
-        match = re.match(r"layer_(-?\d+)\.png$", path.name)
-        if match:
-            layers.append(int(match.group(1)))
-    return sorted(set(layers))
+    return [
+        int(match.group(1))
+        for path in preview_image_paths(root)
+        if (match := re.fullmatch(r"layer_(-?\d+)\.png", path.name))
+    ]
 
 
 def _flat_preview_layers(root: Path) -> list[int]:
-    if root.is_file():
-        preview_layers = _preview_image_layers(root.parent)
-    elif root.is_dir():
-        preview_layers = _preview_image_layers(root)
-    else:
-        preview_layers = []
-    return preview_layers
+    return _preview_image_layers(root)
+
+
+def ensure_layer_preview_images(
+    npz_root: str | Path,
+    layers: Sequence[int] | None = None,
+    stride: int = 5,
+) -> list[Path]:
+    """Create missing XY layer images directly from final NPZ data.
+
+    This is intentionally a preview-only read/plot operation. It does not
+    invoke the path-processing Core or modify trajectory NPZ files.
+    """
+    root = Path(npz_root).expanduser()
+    existing = preview_image_paths(root)
+    existing_layers = {
+        int(match.group(1))
+        for path in existing
+        if (match := re.fullmatch(r"layer_(-?\d+)\.png", path.name))
+    }
+    target_layers = (
+        list_preview_layers(root)
+        if layers is None
+        else [int(v) for v in layers]
+    )
+    missing = [layer for layer in target_layers if layer not in existing_layers]
+    if not missing:
+        return existing
+
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except Exception:
+        return existing
+
+    preview_dir = (
+        root.parent / "layer_previews"
+        if (root.is_file() or root.suffix.lower() == ".npz")
+        else root / "layer_previews"
+    )
+    preview_dir.mkdir(parents=True, exist_ok=True)
+    step = max(1, int(stride))
+    for layer in missing:
+        paths = extract_layer_preview_paths(root, layer)
+        xs_all: list[np.ndarray] = []
+        ys_all: list[np.ndarray] = []
+        for preview in paths:
+            if preview.path_type not in (PathType.RESIN_PRINT, PathType.FIBER_PRINT):
+                continue
+            points = np.asarray(preview.points, dtype=np.float64)
+            if len(points) == 0:
+                continue
+            points = points[::step]
+            if len(points) == 0:
+                continue
+            xs_all.append(points[:, 0])
+            ys_all.append(points[:, 1])
+            xs_all.append(np.array([np.nan], dtype=np.float64))
+            ys_all.append(np.array([np.nan], dtype=np.float64))
+        if not xs_all:
+            continue
+        x = np.concatenate(xs_all)
+        y = np.concatenate(ys_all)
+        fig, ax = plt.subplots(figsize=(12, 12), dpi=300)
+        ax.plot(x, y, linewidth=0.8, color="#2b2b2b")
+        ax.set_aspect("equal", adjustable="box")
+        ax.set_xlabel("X (mm)")
+        ax.set_ylabel("Y (mm)")
+        ax.set_title(f"Layer {int(layer):04d} XY Path")
+        ax.grid(True, linewidth=0.3, alpha=0.5)
+        fig.savefig(
+            str(preview_dir / f"layer_{int(layer):04d}.png"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+
+    return preview_image_paths(root)
 
 
 def _legacy_flat_layer0_z_map(data, preview_layers: list[int]):

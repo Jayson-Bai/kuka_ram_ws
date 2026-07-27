@@ -587,3 +587,41 @@ def test_print_rows_without_extrusion_are_treated_as_travel(tmp_path):
     ]
     assert paths[1].start == pytest.approx((2.0, 0.0, 0.2))
     assert paths[1].end == pytest.approx((3.0, 0.0, 0.2))
+
+
+def test_preview_reads_all_sibling_parts_from_normalized_base_path(tmp_path):
+    from gcode_planner.path_preview import extract_layer_preview_paths
+
+    root = tmp_path / "chunked"
+    common = dict(
+        y=[0.0, 0.0, 0.0],
+        z=[0.2, 0.2, 0.2],
+        e=[0.0, 0.5, 1.0],
+        tool_id=[2, 2, 2],
+        move_type=[1, 1, 1],
+        src_line=["1", "2", "3"],
+        layer_index=[0, 0, 0],
+        preview_layer_index=[0, 0, 0],
+    )
+    _write_npz(root / "chunked_part0000.npz", x=[0.0, 1.0, 2.0], **common)
+    _write_npz(root / "chunked_part0001.npz", x=[3.0, 4.0, 5.0], **common)
+
+    paths = extract_layer_preview_paths(root / "chunked.npz", 0)
+
+    assert paths
+    assert paths[-1].end == pytest.approx((5.0, 0.0, 0.2))
+
+
+def test_preview_image_paths_supports_root_and_per_layer_layouts(tmp_path):
+    from gcode_planner.path_preview import preview_image_paths
+
+    root = tmp_path / "images"
+    (root / "layer_previews").mkdir(parents=True)
+    (root / "layer_0001").mkdir(parents=True)
+    (root / "layer_previews" / "layer_0000.png").touch()
+    (root / "layer_0001" / "layer_0001.png").touch()
+
+    images = preview_image_paths(root)
+
+    assert [path.name for path in images] == ["layer_0000.png", "layer_0001.png"]
+    assert images[1].parent.name == "layer_0001"

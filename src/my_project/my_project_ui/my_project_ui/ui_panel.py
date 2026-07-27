@@ -442,17 +442,34 @@ def _npz_layer_dir_from_launch_path(npz_path):
 
 
 def _npz_preview_root_from_path(npz_path):
-    launch_path = _normalize_npz_launch_path(npz_path)
+    """Resolve a preview entry for flat NPZ, chunked NPZ, or layer exports."""
+    raw = Path(npz_path).expanduser()
+    if raw.is_dir():
+        return str(raw)
+    launch_path = _normalize_npz_launch_path(str(raw))
     if not launch_path:
         return None
     p = Path(launch_path)
-    if re.search(r"_part\d+$", Path(npz_path).stem):
-        return str(Path(npz_path).parent)
+
+    # A selected part is an entry point to the complete sibling set.
+    if re.search(r"_part\d+$", raw.stem) and raw.parent.is_dir():
+        return str(raw.parent)
     if p.parent.name == p.stem:
         return str(p.parent)
+
     layer_dir = p.with_suffix("")
     if layer_dir.is_dir():
         return str(layer_dir)
+
+    # If the normalized base file does not exist but its parts do, keep the
+    # directory as the preview root so both layer and VTK readers see all
+    # chunks.
+    part_stem = re.sub(r"_part\d+$", "", p.stem)
+    if p.parent.is_dir() and list(p.parent.glob(f"{part_stem}_part*.npz")):
+        return str(p.parent)
+
+    # VTK/path_preview can consume a single flat file directly. The layer
+    # dialog resolves its sibling layer_previews directory from this file.
     if p.is_file():
         return str(p)
     return str(layer_dir)
@@ -735,18 +752,26 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         self._show_current()
 
     def _scan_images(self):
-        preview_dir = Path(self._npz_dir) / "layer_previews"
-        if not preview_dir.is_dir():
-            return
+        from gcode_planner.path_preview import (
+            ensure_layer_preview_images,
+            preview_image_paths,
+        )
+
+        # Existing exports use both root/layer_previews/layer_*.png and
+        # layer_XXXX/layer_XXXX.png. If neither exists (for example after a
+        # local injection), build the cached layer images from final NPZ rows.
+        files = preview_image_paths(self._npz_dir)
+        if not files:
+            files = ensure_layer_preview_images(self._npz_dir)
         pattern = re.compile(r"layer_(-?\d+)\.png$")
-        files = []
-        for f in sorted(preview_dir.iterdir()):
-            m = pattern.match(f.name)
-            if m:
-                files.append((int(m.group(1)), f))
-        files.sort(key=lambda x: x[0])
-        self._images = [f[1] for f in files]
-        self._layer_numbers = [f[0] for f in files]
+        parsed = []
+        for path in files:
+            match = pattern.fullmatch(path.name)
+            if match:
+                parsed.append((int(match.group(1)), path))
+        parsed.sort(key=lambda item: item[0])
+        self._images = [item[1] for item in parsed]
+        self._layer_numbers = [item[0] for item in parsed]
 
     def _build_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
@@ -5324,12 +5349,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #b42318;")
 
     def _on_view_layers(self):
-        if not self._last_npz_dir or not os.path.isdir(self._last_npz_dir):
-            self._export_status.setText("未找到 NPZ 导出目录。")
+        if not self._last_npz_dir or not os.path.exists(self._last_npz_dir):
+            self._export_status.setText("未找到 NPZ 预览入口。")
             self._export_status.setStyleSheet("color: #b42318;")
             return
-        dlg = _LayerViewerDialog(self._last_npz_dir, self)
-        dlg.exec_()
+        try:
+            dlg = _LayerViewerDialog(self._last_npz_dir, self)
+            dlg.exec_()
+        except Exception as exc:
+            self._export_status.setText(f"层预览启动失败: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
 
     def _on_view_vtk_paths(self):
         preview_root = self._last_npz_dir
