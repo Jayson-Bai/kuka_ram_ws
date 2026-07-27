@@ -536,3 +536,39 @@ def test_layer_image_preview_loads_large_npz_in_background():
     assert "threading.Thread(target=target, daemon=True)" in dialog
     assert "ensure_layer_preview_images" in dialog
     assert "self._images_loaded.emit(files, None)" in dialog
+
+def test_vtk_sampling_preserves_raster_turns_and_allocates_by_path_size():
+    import sys
+
+    sys.path.insert(0, str(UI_PACKAGE))
+    from my_project_ui.vtk_path_preview import (
+        _sample_limit_for_paths,
+        _sample_points,
+    )
+
+    class PathStub:
+        def __init__(self, points):
+            self.points = tuple(points)
+
+    short = PathStub([(0.0, 0.0, 0.0)] * 10)
+    long = PathStub(
+        (
+            (0.0, float(row), 0.0),
+            (100.0, float(row), 0.0),
+        )
+        for row in range(1000)
+    )
+    long.points = tuple(point for pair in long.points for point in pair)
+    paths = [short, long]
+
+    assert _sample_limit_for_paths(paths, 1200, long) > _sample_limit_for_paths(
+        paths, 1200, short
+    )
+
+    sampled = _sample_points(long.points, max_points=120)
+    assert len(sampled) <= 120
+    assert sampled[0] == long.points[0]
+    assert sampled[-1] == long.points[-1]
+    # Every retained raster row must still contain its horizontal turn.
+    retained_rows = {point[1] for point in sampled}
+    assert len(retained_rows) >= 50

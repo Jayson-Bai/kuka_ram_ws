@@ -216,18 +216,67 @@ def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
     max_points = max(2, int(max_points))
     if len(points) <= max_points:
         return points
-    step = max(1, math.ceil(len(points) / max_points))
-    sampled = points[::step]
-    if sampled[-1] != points[-1]:
-        sampled = sampled + (points[-1],)
-    return sampled
+
+    # Uniform decimation destroys the short U-turns of a raster/fill path.
+    # Keep geometric turns first, then use the remaining budget for evenly
+    # distributed points. This keeps the preview lightweight without changing
+    # the source trajectory.
+    turn_indices = [0]
+    for index in range(1, len(points) - 1):
+        previous = points[index - 1]
+        current = points[index]
+        following = points[index + 1]
+        before = (
+            current[0] - previous[0],
+            current[1] - previous[1],
+            current[2] - previous[2],
+        )
+        after = (
+            following[0] - current[0],
+            following[1] - current[1],
+            following[2] - current[2],
+        )
+        before_length = math.sqrt(sum(value * value for value in before))
+        after_length = math.sqrt(sum(value * value for value in after))
+        if before_length <= 1e-9 or after_length <= 1e-9:
+            continue
+        cosine = sum(
+            left * right for left, right in zip(before, after)
+        ) / (before_length * after_length)
+        if cosine < 0.85:
+            turn_indices.append(index)
+    turn_indices.append(len(points) - 1)
+
+    if len(turn_indices) >= max_points:
+        stride = (len(turn_indices) - 1) / (max_points - 1)
+        selected = [
+            turn_indices[round(index * stride)]
+            for index in range(max_points)
+        ]
+        return tuple(points[index] for index in selected)
+
+    selected = set(turn_indices)
+    remaining = max_points - len(turn_indices)
+    if remaining > 0:
+        stride = (len(points) - 1) / (remaining + 1)
+        for index in range(1, remaining + 1):
+            selected.add(round(index * stride))
+    return tuple(points[index] for index in sorted(selected))
 
 
-def _sample_limit_for_paths(paths, total_points):
+def _sample_limit_for_paths(paths, total_points, path=None):
     if not paths:
         return _MAX_POINTS_PER_PATH
-    per_path_budget = int(total_points) // max(1, len(paths))
-    return max(2, min(_MAX_POINTS_PER_PATH, per_path_budget))
+    total_source_points = sum(max(2, len(item.points)) for item in paths)
+    if total_source_points <= 0:
+        return 2
+    if path is None:
+        return max(2, min(total_source_points, int(total_points)))
+    path_points = max(2, len(path.points))
+    proportional_budget = round(
+        int(total_points) * path_points / total_source_points
+    )
+    return max(2, min(path_points, proportional_budget))
 
 
 class VtkPathPreviewDialog(QtWidgets.QDialog):
@@ -764,6 +813,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
             return normals
 
         for path in paths:
+            sample_limit = _sample_limit_for_paths(
+                paths,
+                _MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR,
+                path,
+            )
             points = compact_points([
                 self._display_point_for_path(path, point)
                 for point in _sample_points(path.points, max_points=sample_limit)
@@ -861,6 +915,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         point_index = 0
 
         for path in paths:
+            sample_limit = _sample_limit_for_paths(
+                paths,
+                _MAX_RENDER_POINTS_PER_ACTOR,
+                path,
+            )
             points = _sample_points(path.points, max_points=sample_limit)
             if not points:
                 continue
