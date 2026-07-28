@@ -330,7 +330,9 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
         # Normal Core output: use the explicit block rows and replace only
         # the existing compensation travel.
         anchor_index = int(block_effective[0]) if len(block_effective) else int(effective[0])
-        start_index = int(indices[0]) - 1
+        # A zero-valued Core resin block may contain only a post_anchor at
+        # the first row. Its preceding pose is the effective print anchor.
+        start_index = int(comp[0]) - 1 if len(comp) else int(anchor_index) - 1
         insert_at = int(comp[0]) if len(comp) else int(indices[0])
         remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
     else:
