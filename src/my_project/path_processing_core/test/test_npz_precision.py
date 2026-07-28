@@ -1,6 +1,6 @@
 import numpy as np
 
-from path_processing_core.local_injector import inject_npz
+from path_processing_core.local_injector import _repair, inject_npz
 from path_processing_core.npz_exporter import export_npz
 from path_processing_core.types import (
     GlobalCurveCommand,
@@ -172,3 +172,20 @@ def test_local_injector_rebuilds_safe_lift_without_tool_offset(tmp_path):
         xyz = np.column_stack([data[key].astype(np.float64) for key in ("x", "y", "z")])
         assert float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max()) <= 0.9 + 1e-5
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
+
+
+def test_repair_allows_float32_rounding_after_large_translation():
+    arrays = {
+        "seq": np.arange(2, dtype=np.uint32),
+        "x": np.zeros(2, dtype=np.float32),
+        "y": np.zeros(2, dtype=np.float32),
+        "z": np.asarray([204.9, 205.8], dtype=np.float32),
+        "a": np.zeros(2, dtype=np.float32),
+        "b": np.zeros(2, dtype=np.float32),
+        "c": np.zeros(2, dtype=np.float32),
+        "e": np.zeros(2, dtype=np.float32),
+        "event_flag": np.zeros(2, dtype=np.uint8),
+        "planned_time_s": np.zeros(2, dtype=np.float32),
+        "trigger_seq": np.full(2, -1, dtype=np.int32),
+    }
+    _repair(arrays, 0.004, baseline_max_step=0.9, expected_sample_step=0.088)

@@ -21,6 +21,7 @@ from .polynomial_interpolator import sample_global_curve_iter
 from .types import GlobalCurveCommand, Position
 
 _PART_RE = re.compile(r"^(?P<base>.+)_part(?P<part>\d{4})$")
+_MAX_ESTIMATED_ROWS = 4_000_000
 _HIGH_PRECISION_MAP = {
     "x": "x64",
     "y": "y64",
@@ -781,7 +782,16 @@ def _repair(arrays, dt, *, baseline_max_step=0.0, expected_sample_step=0.0):
         # newly created step beyond the source Core baseline or the expected
         # step of the same Core sampler, with a small numerical margin.
         allowed_step = max(float(baseline_max_step), float(expected_sample_step))
-        tolerance = max(1e-6, allowed_step * 1e-6)
+        pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else ("x", "y", "z")
+        xyz = np.column_stack([np.asarray(arrays[key], dtype=np.float64) for key in pose_keys[:3]])
+        coordinate_scale = max(1.0, float(np.max(np.abs(xyz))))
+        storage_eps = max(float(np.finfo(arrays[key].dtype).eps) for key in pose_keys[:3])
+        # A Core NPZ without x64 fields stores poses as float32. A uniform
+        # translation at large Z can therefore change a 0.9 mm step by several
+        # ulps without creating a physical discontinuity. Allow the storage
+        # representation error, while keeping the absolute jump limit strict.
+        representation_tolerance = 2.0 * np.sqrt(3.0) * storage_eps * coordinate_scale
+        tolerance = max(1e-6, allowed_step * 1e-6, representation_tolerance)
         if max_step > allowed_step + tolerance:
             raise ValueError(
                 "local injection created a new unsafe XYZ jump: "
@@ -844,6 +854,38 @@ def _write_timing(path: Path, arrays: dict[str, np.ndarray], dt: float) -> None:
         temp.unlink(missing_ok=True)
 
 
+def _estimate_injected_rows(
+    arrays, manifest, *, tool_changed, resin_changed, delta_resin,
+    safe, lift, wait, new_offset, feed, dt,
+):
+    estimated = int(len(arrays["seq"]))
+    blocks = manifest.get("blocks", [])
+    if resin_changed:
+        resin_rows = int(math.ceil(
+            max(abs(float(delta_resin)), 0.0) / max(feed * dt, 1e-9)
+        ))
+        estimated += resin_rows * 4
+    if tool_changed:
+        tool_blocks = sum(block.get("kind") == "tool_change" for block in blocks)
+        travel_mm = max(float(safe), 0.0) + float(
+            np.linalg.norm(np.asarray(new_offset, dtype=float))
+        )
+        tool_rows = int(math.ceil(max(travel_mm / max(feed * dt, 1e-9), 1.0) * 4.0))
+        estimated += tool_blocks * tool_rows
+    base_parameters = manifest.get("base_parameters", {})
+    if (
+        lift != float(base_parameters.get("cut_lift_mm", 20.0))
+        or wait != float(base_parameters.get("cut_wait_s", 15.0))
+    ):
+        cut_blocks = sum(block.get("kind") == "cut" for block in blocks)
+        phase_s = max(
+            float(wait), 2.0 * max(float(lift), 0.0) / max(feed, 1e-9) + 9.0
+        )
+        cut_rows = int(math.ceil(max(phase_s, dt) / dt))
+        estimated += cut_blocks * cut_rows
+    return estimated
+
+
 def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                params: LocalInjectionParams | None = None,
                tool_offset: tuple[float, float, float] | None = None,
@@ -898,6 +940,19 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         ("cut_lift_mm" in overrides and abs(lift - base_lift) > 1e-9)
         or ("cut_wait_s" in overrides and abs(wait - base_wait) > 1e-9)
     )
+    estimated_rows = _estimate_injected_rows(
+        arrays, manifest,
+        tool_changed=tool_offset_changed or safe_changed,
+        resin_changed=resin_changed, delta_resin=new_resin - current_resin,
+        safe=safe, lift=lift, wait=wait,
+        new_offset=new_offset, feed=feed, dt=dt,
+    )
+    if estimated_rows > _MAX_ESTIMATED_ROWS:
+        raise ValueError(
+            "local injection exceeds the safe in-memory row budget: "
+            f"estimated {estimated_rows:,} rows > {_MAX_ESTIMATED_ROWS:,}; "
+            "use Core full export for this parameter magnitude"
+        )
     if resin_changed:
         _rebuild_resin(arrays, manifest, roles, move_types, new_resin, current_resin, dt, feed)
     _apply_global_transforms(arrays, manifest, roles, move_types, new_offset - current_offset, new_resin - current_resin)
