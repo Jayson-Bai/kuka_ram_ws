@@ -2,7 +2,12 @@ import numpy as np
 
 from path_processing_core.local_injector import inject_npz
 from path_processing_core.npz_exporter import export_npz
-from path_processing_core.types import GlobalCurveCommand, MoveCommand, Position
+from path_processing_core.types import (
+    GlobalCurveCommand,
+    MoveCommand,
+    Position,
+    ToolChangeCommand,
+)
 
 
 def _commands(feedrate=600.0):
@@ -133,4 +138,37 @@ def test_local_injector_accepts_existing_core_sampling_step_above_005_mm(tmp_pat
 
     inject_npz(source, output, resin_z_print_compensation_mm=0.1)
     with np.load(output, allow_pickle=False) as data:
+        assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
+
+
+def test_local_injector_rebuilds_safe_lift_without_tool_offset(tmp_path):
+    source = tmp_path / "safe_lift_source.npz"
+    output = tmp_path / "safe_lift_injected.npz"
+    start = Position(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    fiber_start = Position(10.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    fiber_end = Position(20.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+    commands = [
+        MoveCommand(
+            type="TRAVEL", cmd="G0", start_pos=start, pos=fiber_start,
+            e_val=0.0, delta_e=0.0, feedrate=600.0, line=1,
+            raw="safe_lift_test_start",
+        ),
+        ToolChangeCommand(type="TOOL_CHANGE", tool=0, line=2),
+        MoveCommand(
+            type="PRINT", cmd="G1", start_pos=fiber_start, pos=fiber_end,
+            e_val=1.0, delta_e=1.0, feedrate=600.0, line=3,
+            raw="safe_lift_test_print",
+        ),
+    ]
+    export_npz(
+        commands, str(source), dt=0.004, default_feed_mm_s=20.0,
+        tool_offset=(0.0, 0.0, 0.0), tool_change_safe_lift_mm=20.0,
+    )
+    inject_npz(
+        source, output, tool_offset=(0.0, 0.0, 0.0),
+        tool_change_safe_lift_mm=10.0,
+    )
+    with np.load(output, allow_pickle=False) as data:
+        xyz = np.column_stack([data[key].astype(np.float64) for key in ("x", "y", "z")])
+        assert float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max()) <= 0.9 + 1e-5
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)

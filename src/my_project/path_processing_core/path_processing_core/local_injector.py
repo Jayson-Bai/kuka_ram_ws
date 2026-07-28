@@ -421,13 +421,18 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     lifted[2] += max(0.0, float(safe_lift))
     target = lifted.copy()
     target[:3] += sign * np.asarray(new_offset, dtype=float)
-    if has_offset:
+    # Rebuild the pre-change lift whenever the requested safe height is
+    # non-zero, even when the tool offset itself is unchanged. Otherwise the
+    # event row remains at start and the post rows begin at lifted, creating a
+    # direct XYZ jump equal to the safe lift.
+    if has_offset or safe_lift > 1e-9:
         template = event_index
         if safe_lift > 1e-9:
             samples = _sample_segment(start, lifted, float(arrays["e"][start_index]), 0.0, raw="tool_change_safe_lift", feed_mm_s=feed, dt=dt)
             rows.extend(_motion_rows(arrays, template, samples, bid, pre_code, _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index])))
-        samples = _sample_segment(lifted, target, float(arrays["e"][start_index]), 0.0, raw="fallback_linear", feed_mm_s=feed, dt=dt)
-        rows.extend(_motion_rows(arrays, template, samples, bid, pre_code, _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index])))
+        if has_offset:
+            samples = _sample_segment(lifted, target, float(arrays["e"][start_index]), 0.0, raw="fallback_linear", feed_mm_s=feed, dt=dt)
+            rows.extend(_motion_rows(arrays, template, samples, bid, pre_code, _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index])))
     if len(pre):
         _replace(arrays, int(pre[0]), int(pre[-1]) + 1, rows)
     else:
