@@ -560,6 +560,19 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
         raise ValueError(f"CUT block {bid} does not contain the full post-CUT reset sequence")
     base_lift = float(manifest.get("base_parameters", {}).get("cut_lift_mm", 20.0))
     old_indices = [int(i) for i in indices]
+    extra_indices = [
+        int(index) for index in range(int(indices[0]), int(indices[-1]) + 1)
+        if int(arrays["core_injection_block_id"][index]) != bid
+    ]
+
+    def _extra_rows_at_high():
+        extra_rows = []
+        for index in extra_indices:
+            row = _row(arrays, index)
+            if int(row["event_flag"]) == 0:
+                _set_pose(row, pose_high)
+            extra_rows.append(row)
+        return extra_rows
     pose_index = max(0, event_index - 1)
     low = _pose_from_arrays(arrays, pose_index)
     low_e = float(arrays["e"][pose_index])
@@ -651,6 +664,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
             )
             if connector_path_end:
                 connector_rows[-1]["path_end_flag"] = 1
+            rows.extend(_extra_rows_at_high())
             rows.extend(connector_rows)
             for index in post:
                 if index > connector_end:
@@ -659,6 +673,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
                         _set_pose(row, anchor_pose)
                     rows.append(row)
         else:
+            rows.extend(_extra_rows_at_high())
             for index in post:
                 row = _row(arrays, index)
                 if int(arrays["event_flag"][index]) == 0:
@@ -688,6 +703,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
             )
             if connector_path_end:
                 connector_rows[-1]["path_end_flag"] = 1
+            rows.extend(_extra_rows_at_high())
             rows.extend(connector_rows)
             for index in post:
                 if index > connector_end:
@@ -696,38 +712,14 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
                         _set_pose(row, anchor_pose)
                     rows.append(row)
         else:
+            rows.extend(_extra_rows_at_high())
             for index in post:
                 row = _row(arrays, index)
                 if int(arrays["event_flag"][index]) == 0:
                     _set_pose(row, pose_high)
                 rows.append(row)
-    # Marker blocks can contain unmarked reset/wait rows from the original
-    # command stream. Merge them back before replacing the marker span; a
-    # contiguous replacement must not drop those upstream state transitions.
-    extra_indices = [
-        int(index) for index in range(int(indices[0]), int(indices[-1]) + 1)
-        if int(arrays["core_injection_block_id"][index]) != bid
-    ]
-    if extra_indices:
-        marker_positions = np.asarray(old_indices, dtype=np.int64)
-        merged = []
-        cursor = 0
-        for extra_index in extra_indices:
-            rank = int(np.searchsorted(marker_positions, extra_index, side="left"))
-            insert_at = int(round(rank * len(rows) / max(len(old_indices), 1)))
-            insert_at = max(cursor, min(insert_at, len(rows)))
-            merged.extend(rows[cursor:insert_at])
-            extra_row = _row(arrays, extra_index)
-            if int(extra_row["event_flag"]) == 0 and merged:
-                previous = merged[-1]
-                _set_pose(extra_row, np.asarray([
-                    previous["x"], previous["y"], previous["z"],
-                    previous["a"], previous["b"], previous["c"],
-                ], dtype=np.float64))
-            merged.append(extra_row)
-            cursor = insert_at
-        merged.extend(rows[cursor:])
-        rows = merged
+    # Unmarked RESET/wait rows are inserted at the semantic high-pose
+    # boundary above, immediately before the post-CUT connector.
     if any(int(arrays["path_end_flag"][index]) != 0 for index in old_indices):
         for row in rows:
             row["path_end_flag"] = 0
