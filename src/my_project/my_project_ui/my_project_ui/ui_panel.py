@@ -752,7 +752,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             else root
         )
         self._preview_cache_dir = (
-            preview_base / ".preview_cache" / "layer_previews_2d_exact_v2"
+            preview_base / ".preview_cache" / "layer_previews_2d_exact_v3"
         )
         self._index = 0
         self._zoom = 1.0
@@ -843,6 +843,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
                     PREVIEW_2D_MAX_PATHS,
                     PREVIEW_2D_MAX_ROWS,
                     PREVIEW_2D_STRIDE,
+                    PREVIEW_2D_DPI,
                     ensure_layer_preview_images,
                 )
 
@@ -852,7 +853,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
                     stride=PREVIEW_2D_STRIDE,
                     max_paths=PREVIEW_2D_MAX_PATHS,
                     max_rows=PREVIEW_2D_MAX_ROWS,
-                    dpi=100,
+                    dpi=PREVIEW_2D_DPI,
                     output_dir=self._preview_cache_dir,
                 )
                 path = next(
@@ -961,7 +962,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         image = self._images[self._index]
         if image is None:
             self._label_index.setText(
-                f"G-code层 {layer_no} ({self._index + 1} / {total})：正在生成低资源预览..."
+                f"G-code层 {layer_no} ({self._index + 1} / {total})：正在生成高分辨率二维预览..."
             )
             self._btn_prev.setEnabled(False)
             self._btn_next.setEnabled(False)

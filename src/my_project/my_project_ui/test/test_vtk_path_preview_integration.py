@@ -538,7 +538,9 @@ def test_layer_image_preview_loads_large_npz_in_background():
     assert "PREVIEW_2D_MAX_PATHS" in dialog
     assert "PREVIEW_2D_MAX_ROWS" in dialog
     assert "stride=PREVIEW_2D_STRIDE" in dialog
-    assert "layer_previews_2d_exact_v2" in dialog
+    assert "PREVIEW_2D_DPI" in dialog
+    assert "dpi=PREVIEW_2D_DPI" in dialog
+    assert "layer_previews_2d_exact_v3" in dialog
     assert "self._images_loaded.emit(files, None)" in dialog
 
 def test_vtk_sampling_preserves_raster_turns_and_allocates_by_path_size():
