@@ -37,9 +37,12 @@ def _event_contract(data):
             event_types[int(data["event_type"][index])],
             data["payload"][index].decode().rstrip("\x00"),
             int(data["tool_id"][index]),
-            round(float(before), 9),
-            round(float(data["e64"][index]), 9),
-            round(float(after), 9),
+            # The public NPZ E field is float32; local injection may rebuild
+            # its float64 mirror from that representation. Compare the
+            # semantic E phase, not sub-micro-unit storage noise.
+            round(float(before), 6),
+            round(float(data["e64"][index]), 6),
+            round(float(after), 6),
         ))
 
     block_events = []
