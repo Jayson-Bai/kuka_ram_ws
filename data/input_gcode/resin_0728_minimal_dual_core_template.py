@@ -72,6 +72,7 @@ def commands():
     b = _p(20.0, 0.0, 0.5)
     c = _p(20.0, 20.0, 0.5)
     d = _p(0.0, 20.0, 0.5)
+    f = _p(10.0, 20.0, 0.5)
     e = _p(0.0, 0.0, 0.5)
     return [
         # This raw marker is the external NPZ convention for the first XY
@@ -92,11 +93,11 @@ def commands():
             raw="external_npz_prime",
         ),
         _travel(8, c, d),
-        _path(9, c, d, 9.0, "FIBER"),
+        _path(9, d, f, 9.0, "FIBER"),
         _cut(10),
-        _travel(11, d, e),
+        _travel(11, f, e),
         ToolChangeCommand(type="TOOL_CHANGE", tool=1, line=12, subtype="TRAVEL"),
-        _path(13, e, a, 6.0, "RESIN"),
+        _path(13, e, b, 6.0, "RESIN"),
     ]
 
 
