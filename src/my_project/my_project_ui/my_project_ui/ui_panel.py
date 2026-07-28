@@ -752,7 +752,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             else root
         )
         self._preview_cache_dir = (
-            preview_base / ".preview_cache" / "layer_previews"
+            preview_base / ".preview_cache" / "layer_previews_2d_exact_v2"
         )
         self._index = 0
         self._zoom = 1.0
@@ -840,16 +840,18 @@ class _LayerViewerDialog(QtWidgets.QDialog):
         def worker():
             try:
                 from gcode_planner.path_preview import (
-                    PREVIEW_MAX_PATHS,
-                    PREVIEW_MAX_ROWS,
+                    PREVIEW_2D_MAX_PATHS,
+                    PREVIEW_2D_MAX_ROWS,
+                    PREVIEW_2D_STRIDE,
                     ensure_layer_preview_images,
                 )
 
                 files = ensure_layer_preview_images(
                     self._npz_dir,
                     layers=[layer],
-                    max_paths=PREVIEW_MAX_PATHS,
-                    max_rows=PREVIEW_MAX_ROWS,
+                    stride=PREVIEW_2D_STRIDE,
+                    max_paths=PREVIEW_2D_MAX_PATHS,
+                    max_rows=PREVIEW_2D_MAX_ROWS,
                     dpi=100,
                     output_dir=self._preview_cache_dir,
                 )

@@ -23,11 +23,19 @@ Pose6 = tuple[float, float, float, float, float, float]
 
 _ROW_CONTINUITY_GAP_LIMIT = 1000
 
-# Shared low-resource preview policy used by both 2-D and VTK previews.
+# Shared low-resource preview policy used by the VTK preview.
 PREVIEW_MAX_PATHS = 1000
 PREVIEW_MAX_ROWS = 30000
 PREVIEW_RENDER_POINTS = 10000
 PREVIEW_BEAD_SEGMENTS = 5000
+
+# The 2-D layer image is generated lazily in a worker thread. Keep the
+# source trajectory intact there: global row sampling can remove turns and
+# short segments, while per-path striding can make straight lines appear to
+# wander. The VTK preview keeps the bounded policy above independently.
+PREVIEW_2D_MAX_PATHS = None
+PREVIEW_2D_MAX_ROWS = None
+PREVIEW_2D_STRIDE = 1
 
 
 @dataclass
@@ -266,8 +274,8 @@ def ensure_layer_preview_images(
     npz_root: str | Path,
     layers: Sequence[int] | None = None,
     stride: int = 5,
-    max_paths: int = PREVIEW_MAX_PATHS,
-    max_rows: int = PREVIEW_MAX_ROWS,
+    max_paths: int | None = PREVIEW_MAX_PATHS,
+    max_rows: int | None = PREVIEW_MAX_ROWS,
     dpi: int = 100,
     output_dir: str | Path | None = None,
 ) -> list[Path]:
