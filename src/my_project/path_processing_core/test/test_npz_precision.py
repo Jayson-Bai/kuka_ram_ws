@@ -176,7 +176,7 @@ def test_local_injector_rebuilds_safe_lift_without_tool_offset(tmp_path):
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
 
 
-def test_repair_allows_float32_rounding_after_large_translation():
+def test_repair_rebuilds_rsi_sequence_and_timing():
     arrays = {
         "seq": np.arange(2, dtype=np.uint32),
         "x": np.zeros(2, dtype=np.float32),
@@ -190,4 +190,7 @@ def test_repair_allows_float32_rounding_after_large_translation():
         "planned_time_s": np.zeros(2, dtype=np.float32),
         "trigger_seq": np.full(2, -1, dtype=np.int32),
     }
-    _repair(arrays, 0.004, baseline_max_step=0.9, expected_sample_step=0.088)
+    _repair(arrays, 0.004)
+
+    assert arrays["seq"].tolist() == [0, 1]
+    assert np.allclose(arrays["planned_time_s"], [0.0, 0.004])

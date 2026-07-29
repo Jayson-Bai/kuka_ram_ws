@@ -2,6 +2,12 @@ from pathlib import Path
 
 
 UI_PANEL = Path(__file__).resolve().parents[1] / "my_project_ui" / "ui_panel.py"
+LOCAL_INJECTOR = (
+    Path(__file__).resolve().parents[2]
+    / "path_processing_core"
+    / "path_processing_core"
+    / "local_injector.py"
+)
 
 
 def _source():
@@ -39,6 +45,16 @@ def test_formal_npz_export_passes_resin_z_print_compensation():
         "resin_z_print_compensation_mm=self.current_resin_z_print_compensation()"
         in formal_export
     )
+
+
+def test_core_injection_uses_external_rsi_validation():
+    formal_export = _source().split(
+        "    def _on_export_npz", 1
+    )[1].split("    def _on_export_progress", 1)[0]
+
+    assert "from path_processing_core.rsi_validation import validate_final_npz" in formal_export
+    assert 'stats["rsi_validation"] = validate_final_npz(' in formal_export
+    assert "validate_final_npz" not in LOCAL_INJECTOR.read_text(encoding="utf-8")
 
 
 def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():

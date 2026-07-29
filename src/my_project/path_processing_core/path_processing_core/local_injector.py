@@ -178,6 +178,17 @@ def _json_manifest(value: np.ndarray) -> dict[str, Any]:
 def _decode_vocab(keys: np.ndarray, vals: np.ndarray) -> dict[int, str]:
     return {int(value): key.decode("utf-8").rstrip("\x00") for key, value in zip(keys, vals)}
 
+def _ensure_role_vocab(static: dict[str, np.ndarray], name: str, code: int) -> None:
+    roles = _decode_vocab(static["core_injection_role_vocab_keys"], static["core_injection_role_vocab_vals"])
+    if name in roles.values():
+        return
+    if code in roles:
+        raise ValueError(f"cannot add role {name!r}: code {code} is already in use")
+    keys = static["core_injection_role_vocab_keys"]
+    values = static["core_injection_role_vocab_vals"]
+    static["core_injection_role_vocab_keys"] = np.append(keys, np.asarray([name.encode("utf-8")], dtype=keys.dtype))
+    static["core_injection_role_vocab_vals"] = np.append(values, np.asarray([code], dtype=values.dtype))
+
 
 def _code(vocab: dict[int, str], name: str) -> int:
     for value, text in vocab.items():
@@ -322,6 +333,7 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
         raise ValueError("cannot locate first effective print path for resin compensation")
 
     comp = np.flatnonzero(mask & (arrays["core_injection_role"] == comp_code))
+    previous_compensation_path_id = int(arrays["path_id"][int(comp[0])]) if len(comp) else None
     if len(indices):
         block_effective = np.flatnonzero(
             mask
@@ -333,7 +345,11 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
         anchor_index = int(block_effective[0]) if len(block_effective) else int(effective[0])
         # A zero-valued Core resin block may contain only a post_anchor at
         # the first row. Its preceding pose is the effective print anchor.
-        start_index = int(comp[0]) - 1 if len(comp) else int(anchor_index) - 1
+        # With a zero-valued export Core records the semantic insertion point
+        # as the first marker row (usually the next tool event), not as the
+        # later first PRINT row.  Its predecessor is therefore the exact
+        # `last_pose` Core used for direct full export.
+        start_index = int(comp[0]) - 1 if len(comp) else int(indices[0]) - 1
         insert_at = int(comp[0]) if len(comp) else int(indices[0])
         remove_end = int(comp[-1]) + 1 if len(comp) else insert_at
     else:
@@ -354,12 +370,16 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     template = int(start_index)
     rows = []
     if abs(float(new_value)) > 1e-9:
-        samples = _sample_segment(start_pose, end_pose, 0.0, 0.0, raw="resin_z_print_compensation", feed_mm_s=feed, dt=dt)
+        samples = _sample_segment(start_pose, end_pose, 0.0, 0.0, raw="resin_z_print_compensation", feed_mm_s=10.0, dt=dt)
         rows = _motion_rows(arrays, template, samples, bid, comp_code, _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]))
-        compensation_path_id = int(np.max(arrays["path_id"])) + 1
+        # Core allocates this TRAVEL segment at the insertion point, rather
+        # than after every later segment already present in the NPZ.
+        compensation_path_id = int(np.max(arrays["path_id"][:insert_at])) + 1
         for row in rows:
             row["path_id"] = compensation_path_id
-        rows[-1]["path_end_flag"] = 0
+        rows[-1]["path_end_flag"] = 1
+    if not rows and previous_compensation_path_id is not None:
+        arrays["path_id"][arrays["path_id"] > previous_compensation_path_id] -= 1
     _replace(arrays, insert_at, remove_end, rows)
 
 
@@ -402,12 +422,7 @@ def _apply_global_transforms(arrays, manifest, roles, move_types, delta_tool, de
 
 
 def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_lift, dt, feed):
-    """Rebuild only the Core-generated pre-tool rows.
-
-    Core changes the safe-lift/offset travel before the event.  It does not
-    invent a post-tool connector: following rows are already sampled by Core
-    and remain ordinary rows (possibly marked post_anchor/tool_change_post).
-    """
+    """Rebuild the Core-generated pre-tool rows and post-event RSI bridge."""
     bid = int(block["id"])
     pre_code = _code(roles, "tool_change_pre")
     event_code = _code(roles, "tool_change_event")
@@ -457,6 +472,37 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
         _replace(arrays, int(pre[0]), int(pre[-1]) + 1, rows)
     else:
         _replace(arrays, event_index, event_index, rows)
+
+    # Rebuild the event-to-RSI bridge as a separate synthetic region.  Older
+    # Core files have no bridge marker; insert it before their first ordinary
+    # post-tool motion so they become safe on the first local injection too.
+    mask = arrays["core_injection_block_id"] == bid
+    event_index = int(np.flatnonzero(mask & (arrays["core_injection_role"] == event_code))[0])
+    bridge_code = _code(roles, "tool_change_bridge")
+    bridge = np.flatnonzero(mask & (arrays["core_injection_role"] == bridge_code))
+    scan_from = int(bridge[-1]) + 1 if len(bridge) else event_index + 1
+    while scan_from < len(arrays["seq"]) and arrays["event_flag"][scan_from] != 0:
+        scan_from += 1
+    travel_code = _code(move_types, "TRAVEL")
+    bridge_rows = []
+    if scan_from < len(arrays["seq"]):
+        end = _pose_from_arrays(arrays, scan_from)
+        e_start = float(arrays["e64"][event_index] if "e64" in arrays else arrays["e"][event_index])
+        samples = _sample_segment(target, end, e_start, 0.0, raw="tool_change_post_bridge", feed_mm_s=feed, dt=dt)
+        bridge_rows = _motion_rows(
+            arrays, scan_from, samples, bid, bridge_code, travel_code,
+            tool_id=int(arrays["tool_id"][event_index]),
+        )
+        if bridge_rows:
+            bridge_rows[-1]["path_end_flag"] = 0
+    if len(bridge):
+        _replace(arrays, int(bridge[0]), int(bridge[-1]) + 1, bridge_rows)
+    elif bridge_rows:
+        insert_at = event_index + 1
+        while insert_at < len(arrays["seq"]) and arrays["event_flag"][insert_at] != 0:
+            insert_at += 1
+        _replace(arrays, insert_at, insert_at, bridge_rows)
+
     mask = arrays["core_injection_block_id"] == bid
     event_index = int(np.flatnonzero(mask & (arrays["core_injection_role"] == event_code))[0])
     _set_pose(_row(arrays, event_index), target)
@@ -489,7 +535,9 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     old_indices = [int(i) for i in indices]
     cut_line = str(int(block.get("source_line", -1))).encode("ascii")
     anchor_code = _code(roles, "post_anchor")
-    last_reset = resets[-1]
+    # The first two resets are emitted by Core's CUT post sequence.  Later
+    # resets belong to the following external source command and must be kept.
+    last_reset = resets[1]
     region_start = int(indices[0])
     region_end = int(indices[-1])
     tail = [int(i) for i in old_indices if int(i) > last_reset]
@@ -647,44 +695,34 @@ def _reassign_path_ids(arrays, roles, move_types, base_resin, new_resin):
         )
     if not len(normal):
         return
-    source_print_pid = int(arrays["path_id"][normal[0]])
     base_has_resin = abs(float(base_resin)) > 1e-9
     new_has_resin = abs(float(new_resin)) > 1e-9
-    path_shift = int(new_has_resin) - int(base_has_resin)
+    if base_has_resin == new_has_resin:
+        for index in np.flatnonzero(arrays["path_end_flag"] != 0):
+            if np.any((arrays["event_flag"][index + 1:] == 0) & (arrays["path_id"][index + 1:] == arrays["path_id"][index])):
+                arrays["path_end_flag"][index] = 0
+        return
     comp_code = _code(roles, "resin_z_compensation")
-    tool_pre_code = _code(roles, "tool_change_pre")
-    tool_event_code = _code(roles, "tool_change_event")
+    comp_rows = np.flatnonzero(arrays["core_injection_role"] == comp_code)
+    if not new_has_resin:
+        for index in np.flatnonzero(arrays["path_end_flag"] != 0):
+            if np.any((arrays["event_flag"][index + 1:] == 0) & (arrays["path_id"][index + 1:] == arrays["path_id"][index])):
+                arrays["path_end_flag"][index] = 0
+        return
+    if not len(comp_rows):
+        raise ValueError("rebuilt resin compensation rows are missing")
+    compensation_path_id = int(arrays["path_id"][int(comp_rows[0])])
     for index in range(len(arrays["path_id"])):
-        role_code = int(arrays["core_injection_role"][index])
-        if role_code == comp_code:
-            arrays["path_id"][index] = source_print_pid
-            continue
-        pid = int(arrays["path_id"][index])
-        if pid >= source_print_pid:
-            if role_code in (tool_pre_code, tool_event_code) and pid == source_print_pid and path_shift > 0:
-                target = pid
-            else:
-                target = pid + path_shift
-            arrays["path_id"][index] = target
+        if int(arrays["core_injection_role"][index]) != comp_code and int(arrays["path_id"][index]) >= compensation_path_id and not (int(arrays["core_injection_role"][index]) in (_code(roles, "tool_change_pre"), _code(roles, "tool_change_event")) and int(arrays["path_id"][index]) == compensation_path_id):
+            arrays["path_id"][index] += 1
     for index in np.flatnonzero(arrays["path_end_flag"] != 0):
         if np.any((arrays["event_flag"][index + 1:] == 0) & (arrays["path_id"][index + 1:] == arrays["path_id"][index])):
             arrays["path_end_flag"][index] = 0
+    return
 
 
-def _max_xyz_step(arrays: dict[str, np.ndarray]) -> float:
-    if len(arrays["seq"]) < 2:
-        return 0.0
-    pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else (
-        "x", "y", "z"
-    )
-    xyz = np.column_stack([
-        np.asarray(arrays[key], dtype=np.float64)
-        for key in pose_keys[:3]
-    ])
-    return float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max())
 
-
-def _repair(arrays, dt, *, baseline_max_step=0.0, expected_sample_step=0.0):
+def _repair(arrays, dt):
     arrays["seq"] = np.arange(len(arrays["seq"]), dtype=arrays["seq"].dtype)
     event_mask = arrays["event_flag"] != 0
     for index in np.flatnonzero(event_mask):
@@ -707,33 +745,6 @@ def _repair(arrays, dt, *, baseline_max_step=0.0, expected_sample_step=0.0):
     _finite_and_lengths(arrays)
     if not np.all(np.diff(arrays["planned_time_s"]) >= -1e-6):
         raise ValueError("planned_time_s is not monotonic")
-    # Event rows are semantic handshakes; validate only consecutive trajectory rows.
-    pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else ("x", "y", "z")
-    xyz = np.column_stack([np.asarray(arrays[key], dtype=np.float64) for key in pose_keys[:3]])
-    motion_edges = (arrays["event_flag"][:-1] == 0) & (arrays["event_flag"][1:] == 0)
-    max_step = float(np.linalg.norm(np.diff(xyz, axis=0)[motion_edges], axis=1).max()) if np.any(motion_edges) else 0.0
-    if max_step > 0.0:
-        # Core exports may legitimately contain a larger ordinary sampling
-        # step than 0.05 mm (for example, 20 mm/s * 0.004 s). Reject only a
-        # newly created step beyond the source Core baseline or the expected
-        # step of the same Core sampler, with a small numerical margin.
-        allowed_step = max(float(baseline_max_step), float(expected_sample_step))
-        pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else ("x", "y", "z")
-        xyz = np.column_stack([np.asarray(arrays[key], dtype=np.float64) for key in pose_keys[:3]])
-        coordinate_scale = max(1.0, float(np.max(np.abs(xyz))))
-        storage_eps = max(float(np.finfo(arrays[key].dtype).eps) for key in pose_keys[:3])
-        # A Core NPZ without x64 fields stores poses as float32. A uniform
-        # translation at large Z can therefore change a 0.9 mm step by several
-        # ulps without creating a physical discontinuity. Allow the storage
-        # representation error, while keeping the absolute jump limit strict.
-        representation_tolerance = 2.0 * np.sqrt(3.0) * storage_eps * coordinate_scale
-        tolerance = max(1e-6, allowed_step * 1e-6, representation_tolerance)
-        if max_step > allowed_step + tolerance:
-            raise ValueError(
-                "local injection created a new unsafe XYZ jump: "
-                f"{max_step:.6f} mm (source/ sampler limit "
-                f"{allowed_step:.6f} mm)"
-            )
 
 
 def _output_parts(output: Path, count: int) -> list[Path]:
@@ -842,8 +853,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     arrays, static, key_order = _read_parts(files)
     _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
-    baseline_max_step = _max_xyz_step(arrays)
     manifest = _json_manifest(static["core_injection_manifest"])
+    _ensure_role_vocab(static, "tool_change_bridge", 9)
     overrides = (params or LocalInjectionParams(
         tool_offset=tool_offset,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
@@ -867,6 +878,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     feed = float(base.get("default_feed_mm_s", 10.0))
     if dt <= 0 or feed <= 0:
         raise ValueError("manifest sample_period_s/default_feed_mm_s must be positive")
+    if not math.isclose(dt, 0.004, rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError("local injection requires a fixed 4 ms RSI period (sample_period_s=0.004)")
 
     # A Core NPZ already contains the canonical synthetic CUT/tool-change
     # sequence. Rebuild a block only when its effective parameter changes;
@@ -901,20 +914,17 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     if resin_changed:
         _rebuild_resin(arrays, manifest, roles, move_types, new_resin, current_resin, dt, feed)
     _apply_global_transforms(arrays, manifest, roles, move_types, new_offset - current_offset, new_resin - current_resin)
-    for block in manifest.get("blocks", []):
-        if block.get("kind") == "tool_change" and (tool_offset_changed or safe_changed):
-            _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe, dt, feed)
+    # A CUT can alter the predecessor pose of a later tool change.
+    # Rebuild CUT first, then rebuild tool-change pre/bridge rows from that
+    # final pose, matching direct Core full-export ordering.
     for block in manifest.get("blocks", []):
         if block.get("kind") == "cut" and cut_changed:
             _rebuild_cut(arrays, static, manifest, roles, move_types, block, lift, wait, dt, feed)
-    expected_sample_step = float(feed) * float(dt) * 1.10
+    for block in manifest.get("blocks", []):
+        if block.get("kind") == "tool_change" and (tool_offset_changed or safe_changed):
+            _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe, dt, feed)
     _reassign_path_ids(arrays, roles, move_types, current_resin, new_resin)
-    _repair(
-        arrays,
-        dt,
-        baseline_max_step=baseline_max_step,
-        expected_sample_step=expected_sample_step,
-    )
+    _repair(arrays, dt)
     manifest["base_parameters"] = dict(base)
     manifest["base_parameters"].update(overrides)
     static["core_injection_manifest"] = np.array(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")))

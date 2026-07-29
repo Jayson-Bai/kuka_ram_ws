@@ -533,7 +533,7 @@ def test_external_cut_uses_timed_resets_to_isolate_lift_and_retract(tmp_path):
     export_npz(
         commands,
         str(output),
-        dt=1.0,
+        dt=0.004,
         default_feed_mm_s=10.0,
         enable_extrude_wait=True,
         cut_lift_mm=12.5,
@@ -614,7 +614,7 @@ def test_fiber_cut_and_ui_actions_use_independent_absolute_e_boundaries(tmp_path
     )
     out = tmp_path / "out.npz"
     params = ProcessParams(
-        dt=1.0,
+        dt=0.004,
         fiber=FiberProcessParams(
             extrusion_scale=1.0,
             feed_mm_s=10.0,

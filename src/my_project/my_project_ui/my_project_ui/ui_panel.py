@@ -5375,7 +5375,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             external_cut_lift_mm = params["cut_lift_mm"]
             external_cut_wait_s = params["cut_wait_s"]
             if source_ext == ".npz" and not is_core_injection_source:
+                from external_npz_preprocessor.param_config import save_print_params
+
                 external_process_params = self._external_npz_process_params(params)
+                save_print_params(external_process_params)
                 external_cut_lift_mm = (
                     self._external_npz_inputs["external_cut_lift_mm"].value()
                 )
@@ -5498,6 +5501,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     )
                 else:
                     raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")
+                if is_core_injection_source:
+                    self.export_progress.emit("运行 RSI 安全审查...")
+                    from path_processing_core.rsi_validation import validate_final_npz
+
+                    output_path = Path(npz_out)
+                    stats["rsi_validation"] = validate_final_npz(
+                        npz_out,
+                        report_path=output_path.parent / (
+                            f"{output_path.stem}.rsi_validation.json"
+                        ),
+                    )
                 rows = stats.get("rows", 0)
                 parts = stats.get("parts", stats.get("output_parts", 0))
                 total_s = stats.get("total_s", 0.0)
@@ -5506,6 +5520,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     f"偏移: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
                     + ("\n模式: Core NPZ 局部注入" if is_core_injection_source else "")
                 )
+                validation_warnings = stats.get("rsi_validation", {}).get("warnings", [])
+                if validation_warnings:
+                    msg += "\nRSI 安全告警: " + "；".join(validation_warnings)
                 self.export_finished.emit(True, msg)
             except Exception as exc:
                 self.export_finished.emit(False, str(exc))

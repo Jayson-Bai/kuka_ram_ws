@@ -243,6 +243,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
     assert "load_print_params" not in npz_branch
     assert "process_params = external_process_params" in npz_branch
+    assert "save_print_params(external_process_params)" in export_method
     assert "convert_external_npz(" in npz_branch
     assert "process_params," in npz_branch
     assert 'cut_lift_mm=external_cut_lift_mm' in npz_branch

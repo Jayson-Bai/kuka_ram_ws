@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from typing import List, Optional
+from pathlib import Path
 import os
 import time
 import json
@@ -29,6 +30,7 @@ from .types import (
 from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
 from .rsi_timing import RsiTimingAccumulator
+from .rsi_validation import validate_final_npz
 
 
 @dataclass
@@ -102,6 +104,8 @@ def export_npz(
     - 速度规划由 sample_global_curve 内部的七阶多项式完成，此处不做额外处理。
     返回耗时统计字典（秒），用于 CLI 打印。
     """
+    if not math.isclose(float(dt), 0.004, rel_tol=0.0, abs_tol=1e-12):
+        raise ValueError("final NPZ export requires a fixed 4 ms RSI period (dt=0.004)")
     t_total_start = time.perf_counter()
     timing = RsiTimingAccumulator(dt)
     timings = {
@@ -190,6 +194,7 @@ def export_npz(
         "cut_post": 6,
         "post_anchor": 7,
         "resin_z_compensation": 8,
+        "tool_change_bridge": 9,
     }
     injection_role_keys = np.array(list(injection_role_map.keys()), dtype="S32")
     injection_role_vals = np.array(list(injection_role_map.values()), dtype=np.uint8)
@@ -357,6 +362,9 @@ def export_npz(
     flat_preview_stride = max(1, int(plot_stride))
     active_injection_block_id = -1
     active_injection_kind = ""
+    # Event rows are semantic handshakes, not RSI Cartesian samples.  The
+    # first subsequent motion must be bridged from the held tool-change pose.
+    pending_tool_change_bridge = None
 
     def _writer_for(layer: int, subtype: str, occ: int) -> _Writer:
         if not split_by_layer_type:
@@ -1646,6 +1654,35 @@ def export_npz(
         last_pose_map[(layer, subtype)] = hold_row
         last_pose = hold_row
 
+    def _append_pending_tool_change_bridge(next_start_pos, layer, subtype, occ, line):
+        """Insert sampled RSI motion between a tool-change event and next command."""
+        nonlocal pending_tool_change_bridge, last_pose
+        pending = pending_tool_change_bridge
+        if pending is None:
+            return
+        pending_tool_change_bridge = None
+        if last_pose is None:
+            return
+        from .types import Position as _Pos
+        start_p = _Pos(last_pose.x, last_pose.y, last_pose.z, last_pose.a, last_pose.b, last_pose.c)
+        end_p = _Pos(next_start_pos.x, next_start_pos.y, next_start_pos.z,
+                     next_start_pos.a, next_start_pos.b, next_start_pos.c)
+        if all(abs(a - b) <= 1e-9 for a, b in zip(
+                (start_p.x, start_p.y, start_p.z, start_p.a, start_p.b, start_p.c),
+                (end_p.x, end_p.y, end_p.z, end_p.a, end_p.b, end_p.c))):
+            return
+        bridge_gc = GlobalCurveCommand(
+            type="TRAVEL", cmd="SPLINE", start_pos=start_p,
+            control_points=[end_p, end_p, end_p], e_val=last_pose.e, delta_e=0.0,
+            feedrate=default_feed_mm_s * 60.0, line=line, raw="tool_change_post_bridge",
+            constraints=[], original_moves=[],
+        )
+        _append_sample(
+            bridge_gc, layer, subtype, occ, mark_path_end=False,
+            marker_block_id=int(pending["block_id"]),
+            marker_role=injection_role_map["tool_change_bridge"],
+        )
+
     if enable_extrude_wait and enable_travel_extrude_overlap:
         parsed_commands = _overlap_extrude_waits_on_travel(parsed_commands)
 
@@ -1677,7 +1714,7 @@ def export_npz(
                     "source_line": int(command.line or -1),
                     "layer": int(getattr(command, "layer", 0) or 0),
                     "subtype": str(getattr(command, "subtype", "TRAVEL") or "TRAVEL"),
-                    "roles": ["tool_change_pre", "tool_change_event", "tool_change_post", "post_anchor"],
+                    "roles": ["tool_change_pre", "tool_change_event", "tool_change_bridge", "tool_change_post", "post_anchor"],
                     "anchor": "next_effective_print_path",
                     "injectable_parameters": ["tool_offset", "tool_change_safe_lift_mm"],
                     "target_tool_id": int(mapped),
@@ -1811,13 +1848,13 @@ def export_npz(
                     # ---- 偏置补偿：在 tool_change 事件前注入安全抬升和 TRAVEL 段 ----
                     ox, oy, oz = tool_offset
                     has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
-                    if has_offset:
+                    safe_lift = max(0.0, float(tool_change_safe_lift_mm))
+                    if has_offset or safe_lift > 1e-9:
                         last_row = last_pose
                         if last_row is not None:
                             from .types import Position as _Pos
                             start_p = _Pos(last_row.x, last_row.y, last_row.z,
                                            last_row.a, last_row.b, last_row.c)
-                            safe_lift = max(0.0, float(tool_change_safe_lift_mm))
                             offset_start_p = start_p
                             if safe_lift > 1e-9:
                                 lifted_p = _Pos(last_row.x, last_row.y, last_row.z + safe_lift,
@@ -1879,6 +1916,7 @@ def export_npz(
                         ), cmd.layer, cmd.subtype, occ,
                         marker_role=injection_role_map["tool_change_event"],
                     )
+                    pending_tool_change_bridge = {"block_id": active_injection_block_id}
             elif isinstance(cmd, ResetECommand):
                 if last_pose is None and cmd.pose is not None:
                     last_pose = CsvRow(
@@ -1937,7 +1975,7 @@ def export_npz(
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
                 continue
-            if current_type is None and last_pose is not None:
+            if current_type is None and last_pose is not None and pending_tool_change_bridge is None:
                 from .types import Position as _Pos
                 if (
                     abs(cmd.start_pos.x - last_pose.x) > 1e-9
@@ -1961,6 +1999,10 @@ def export_npz(
                 current_layer = cmd.layer
                 current_subtype = cmd.subtype
                 current_occ = _ensure_segment(cmd.layer, cmd.subtype)
+            if pending_tool_change_bridge is not None:
+                _append_pending_tool_change_bridge(
+                    cmd.start_pos, cmd.layer, cmd.subtype, current_occ, cmd.line
+                )
             buffer.append(cmd)
             if (
                 delay_resin_z_compensation
@@ -1979,6 +2021,8 @@ def export_npz(
             occ = occ_counters.get((layer, subtype), 0)
             if occ == 0:
                 occ = _ensure_segment(layer, subtype)
+            if pending_tool_change_bridge is not None:
+                _append_pending_tool_change_bridge(cmd.start_pos, layer, subtype, occ, cmd.line)
             _append_sample(cmd, layer, subtype, occ)
             continue
 
@@ -1994,6 +2038,21 @@ def export_npz(
     else:
         for key in list(writers.keys()):
             _finalize_writer(key)
+
+    validation_inputs = []
+    for writer in writers.values():
+        if writer.part == 1:
+            validation_inputs.append(Path(f"{writer.base_path}.npz"))
+        elif writer.part > 1:
+            validation_inputs.extend(sorted(Path(writer.base_path).parent.glob(f"{Path(writer.base_path).name}_part*.npz")))
+    if validation_inputs:
+        validation_report_path = (
+            Path(base_root) / f"{base_name}.rsi_validation.json"
+            if split_by_layer_type else Path(f"{base_no_ext}.rsi_validation.json")
+        )
+        timings["rsi_validation"] = validate_final_npz(
+            validation_inputs, report_path=validation_report_path
+        )
 
     if plot_layer_xy and not split_by_layer_type and flat_preview_points:
         t0_plot = time.perf_counter()
