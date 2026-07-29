@@ -625,3 +625,83 @@ def test_preview_image_paths_supports_root_and_per_layer_layouts(tmp_path):
 
     assert [path.name for path in images] == ["layer_0000.png", "layer_0001.png"]
     assert images[1].parent.name == "layer_0001"
+
+
+def test_2d_preview_hides_fiber_xy_offset_only():
+    from gcode_planner.path_preview import (
+        PathType,
+        PreviewPath,
+        _points_for_2d_preview,
+    )
+
+    fiber = PreviewPath(
+        layer=0,
+        order_index=0,
+        path_type=PathType.FIBER_PRINT,
+        tool_id=1,
+        points=((12.5, 18.75, 0.2), (22.5, 18.75, 0.2)),
+        poses=(
+            (12.5, 18.75, 0.2, 0.0, 0.0, 0.0),
+            (22.5, 18.75, 0.2, 0.0, 0.0, 0.0),
+        ),
+        start=(12.5, 18.75, 0.2),
+        end=(22.5, 18.75, 0.2),
+        start_abc=(0.0, 0.0, 0.0),
+        end_abc=(0.0, 0.0, 0.0),
+        src_line_start="1",
+        src_line_end="2",
+    )
+    resin = PreviewPath(
+        layer=0,
+        order_index=1,
+        path_type=PathType.RESIN_PRINT,
+        tool_id=2,
+        points=((12.5, 18.75, 0.2), (22.5, 18.75, 0.2)),
+        poses=(
+            (12.5, 18.75, 0.2, 0.0, 0.0, 0.0),
+            (22.5, 18.75, 0.2, 0.0, 0.0, 0.0),
+        ),
+        start=(12.5, 18.75, 0.2),
+        end=(22.5, 18.75, 0.2),
+        start_abc=(0.0, 0.0, 0.0),
+        end_abc=(0.0, 0.0, 0.0),
+        src_line_start="3",
+        src_line_end="4",
+    )
+
+    fiber_display = _points_for_2d_preview(fiber, (2.5, -1.25))
+    resin_display = _points_for_2d_preview(resin, (2.5, -1.25))
+
+    np.testing.assert_allclose(
+        fiber_display[:, :2], [[10.0, 20.0], [20.0, 20.0]]
+    )
+    assert fiber_display[:, 2] == pytest.approx([0.2, 0.2])
+    assert resin_display == pytest.approx(np.asarray(resin.points))
+    assert fiber.points[0] == (12.5, 18.75, 0.2)
+
+
+def test_2d_preview_reads_fiber_offset_from_npz_sidecar(tmp_path):
+    from gcode_planner.path_preview import _fiber_preview_offset_xy
+
+    npz_path = tmp_path / "job.npz"
+    npz_path.write_bytes(b"")
+    npz_path.with_suffix(".offset.json").write_text(
+        "{\"tool_offset\": [2.5, -1.25, 3.0]}",
+        encoding="utf-8",
+    )
+
+    assert _fiber_preview_offset_xy(npz_path) == pytest.approx((2.5, -1.25))
+
+
+def test_2d_preview_reads_fiber_offset_from_npz_manifest(tmp_path):
+    from gcode_planner.path_preview import _fiber_preview_offset_xy
+
+    npz_path = tmp_path / "job.npz"
+    np.savez(
+        npz_path,
+        core_injection_manifest=np.array(
+            "{\"base_parameters\": {\"tool_offset\": [2.5, -1.25, 3.0]}}"
+        ),
+    )
+
+    assert _fiber_preview_offset_xy(npz_path) == pytest.approx((2.5, -1.25))

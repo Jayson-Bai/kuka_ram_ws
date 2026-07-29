@@ -307,18 +307,19 @@ sequenceDiagram
 |------|------|------|
 | 树脂单独矩阵 | `resin_matrix` | 使用树脂层高、树脂挤出倍率、树脂预挤出/回抽参数生成树脂喷头矩阵 |
 | 纤维单独矩阵 | `fiber_matrix` | 使用纤维层高、纤维挤出倍率、纤维预挤出/回抽参数生成纤维喷头矩阵 |
-| 树脂+纤维复合矩阵 | `composite_matrix` | 先生成树脂矩阵，再根据喷头标定的树脂到纤维相对补偿切到纤维矩阵 |
+| 树脂+纤维复合矩阵 | `composite_matrix` | 从已确认的纤维位姿开始；先安全抬升并切回树脂，以纤维 X/Y/Z 实测偏置的反向量回到树脂基准，打印树脂矩阵后再加回该偏置并打印纤维矩阵 |
 
 **喷头标定持久化**:
 
 - 标定值统一保存到运行时当前工作目录下的 `data/head_calibration_offsets/head_offsets.json`
-- JSON 中保存 `resin.z_print_compensation_mm`，以及 `fiber.x_print_compensation_mm` / `fiber.y_print_compensation_mm` / `fiber.z_print_compensation_mm`
+- JSON 中保存 `resin.z_print_compensation_mm`，以及 `fiber.x_print_compensation_mm` / `fiber.y_print_compensation_mm` / `fiber.z_offset_mm`
 - 测试矩阵生成前会刷新当前 UI 输入到该标定文件，正式打印偏移输入变化时也同步写入该文件
 
 **测试模式操作约束**:
 
 - 人工进入纤维标定前，必须先规划回 RSI 全 0 correction，确认到位后再发送 `tool_change_cf` 切换纤维头
 - 纤维偏置应用、纤维矩阵、复合矩阵和剪切动作都要求当前工具为 CF/纤维头
+- 首次“确认偏置并下发”会把当前纤维位姿设为 `(纤维 X, 纤维 Y, 树脂 Z + 纤维 Z)`；之后测试页的树脂 Z 输入会锁定。若需改变树脂 Z，必须重新进入测试准备、确认树脂高度并重新完成纤维偏置确认
 - 剪切按钮仅在当前工具为 CF/纤维头时发送预留 UART 命令 `EV 0 cut_cf`；否则只在 UI 显示拒绝状态，不下发 UART 命令
 
 **正式打印输入适配**:
@@ -584,7 +585,7 @@ QGridLayout (主布局, 2列)
 | 纤维测试参数输入 | QLineEdit/QDoubleSpinBox | 纤维目标温度、层高范围、挤出倍率范围、预挤出和回抽参数 |
 | `确认树脂打印高度` | QPushButton | 保存树脂 Z 标定，允许后续树脂单独矩阵或进入纤维标定流程 |
 | `继续调整纤维头` | QPushButton | 先回 RSI 全 0 correction，再切换到 CF/纤维头 |
-| `应用纤维偏置` / `确认纤维头偏置` | QPushButton | 仅在当前工具为 CF/纤维头时启用，用于移动到纤维 XYZ 偏置并保存 |
+| `确认偏置并下发` / `下发微调` | QPushButton | 仅在当前工具为 CF/纤维头时启用；前者下发完整纤维偏置，后者只下发相对上次值的纤维 X/Y/Z 增量，并在首次下发后锁定树脂 Z |
 | `开始测试树脂打印` | QPushButton | 生成树脂单独矩阵临时 NPZ |
 | `直接打印纤维` | QPushButton | 生成纤维单独矩阵临时 NPZ |
 | `复合打印` | QPushButton | 生成树脂+纤维复合矩阵临时 NPZ |
@@ -732,7 +733,9 @@ def _format_tool(self, tool_id):
 ### 10.5 喷头补偿与导出约定
 
 - 测试模式使用 `HeadCalibration` 作为树脂/纤维喷头补偿的内存模型，默认从运行时当前工作目录下的 `data/head_calibration_offsets/head_offsets.json` 加载
-- `calibration_relative_offsets(calibration, from_tool="resin", to_tool="fiber")` 用于测试模式复合矩阵中的工具切换补偿，其中 Z 向为树脂 Z 打印补偿与纤维 Z 偏置之和
+- `calibration_relative_offsets()` 表达名义的树脂→纤维相对偏置 `(纤维 X, 纤维 Y, 树脂 Z + 纤维 Z)`，供标定模型和测试验证使用；当前复合矩阵生成器不直接调用它
+- 运行时复合矩阵从已确认的纤维位姿（已含树脂 Z）开始，切回树脂时仅减去纤维 X/Y/Z，随后切回纤维时再加回纤维 X/Y/Z。因此树脂 Z 不会遗漏或重复叠加
+- 首次纤维偏置下发后，测试页锁定树脂 Z；改变该值必须重新完成测试准备与纤维偏置确认，以保持物理位姿和标定数据一致
 - 正式打印导出继续走既有 `tool_offset` + `resin_z_print_compensation_mm` 参数路径，不读取测试模式复合矩阵中的相对补偿模型
 - 选择已导出的 NPZ 用于正式打印时，UI 会检查 sidecar 中保存的纤维头偏置和树脂 Z 打印补偿是否与当前界面一致
 

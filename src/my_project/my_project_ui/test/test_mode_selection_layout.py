@@ -209,7 +209,8 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     )
     assert "def _external_npz_process_params(self, planner_params=None):" in src
     assert "def _on_save_external_npz_params(self):" in src
-    assert "path = save_print_params(self._external_npz_process_params())" in src
+    assert "process_params = self._external_npz_process_params()" in src
+    assert "_save_cut_config(" in src
 
     export_method = src.split("    def _on_export_npz", 1)[1].split(
         "    def _on_export_progress", 1

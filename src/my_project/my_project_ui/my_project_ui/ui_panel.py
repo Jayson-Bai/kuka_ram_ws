@@ -339,6 +339,12 @@ _OFFSET_DEFAULTS = {
     "tool_offset_y": -1.29,
     "tool_offset_z": 0.17,
     "resin_z_print_compensation_mm": 0.0}
+_CUT_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "cut_params.json")
+_CUT_DEFAULTS = {
+    "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
+    "cut_lift_mm": 20.0,
+    "cut_wait_s": 15.0,
+}
 _NPZ_OFFSET_TOLERANCE_MM = 0.005
 _NPZ_RELATED_LAUNCH_PARAMS = (
     "npz_path",
@@ -408,6 +414,40 @@ def _save_offset_config(x, y, z, resin_z_print_compensation_mm=0.0):
     with open(_OFFSET_CONFIG_PATH, "w") as f:
         json.dump({"tool_offset_x": x, "tool_offset_y": y, "tool_offset_z": z,
                   "resin_z_print_compensation_mm": resin_z_print_compensation_mm}, f, indent=2)
+
+
+def _load_cut_config():
+    try:
+        with open(_CUT_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        return {
+            key: float(data.get(key, default))
+            for key, default in _CUT_DEFAULTS.items()
+        }
+    except Exception:
+        return dict(_CUT_DEFAULTS)
+
+
+def _save_cut_config(
+    cut_lift_mm,
+    cut_wait_s,
+    tool_change_safe_lift_mm=None,
+):
+    current = _load_cut_config()
+    values = {
+        "tool_change_safe_lift_mm": (
+            current["tool_change_safe_lift_mm"]
+            if tool_change_safe_lift_mm is None
+            else float(tool_change_safe_lift_mm)
+        ),
+        "cut_lift_mm": float(cut_lift_mm),
+        "cut_wait_s": float(cut_wait_s),
+    }
+    if any(not math.isfinite(value) or value < 0.0 for value in values.values()):
+        raise ValueError("剪切参数必须是非负有限数字")
+    os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
+    with open(_CUT_CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(values, handle, ensure_ascii=False, indent=2)
 
 
 def _format_tool_offset(offset):
@@ -752,7 +792,7 @@ class _LayerViewerDialog(QtWidgets.QDialog):
             else root
         )
         self._preview_cache_dir = (
-            preview_base / ".preview_cache" / "layer_previews_2d_exact_v3"
+            preview_base / ".preview_cache" / "layer_previews_2d_exact_v4"
         )
         self._index = 0
         self._zoom = 1.0
@@ -1927,6 +1967,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(resin_z_desc)
 
         offset_cfg = _load_offset_config()
+        cut_cfg = _load_cut_config()
         resin_z_default = offset_cfg["resin_z_print_compensation_mm"]
         fiber_x_default = offset_cfg["tool_offset_x"]
         fiber_y_default = offset_cfg["tool_offset_y"]
@@ -2084,9 +2125,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         local_grid.setVerticalSpacing(4)
         self._local_injection_inputs = {}
         local_defaults = {
-            "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
-            "cut_lift_mm": 20.0,
-            "cut_wait_s": 15.0,
+            "tool_change_safe_lift_mm": cut_cfg["tool_change_safe_lift_mm"],
+            "cut_lift_mm": cut_cfg["cut_lift_mm"],
+            "cut_wait_s": cut_cfg["cut_wait_s"],
         }
         local_fields = (
             ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
@@ -2200,8 +2241,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("split_by_layer_type", "false", "按层+类型拆分 NPZ"),
             ("plot_layer_xy", "true", "每层生成 XY 路径图"),
             ("plot_stride", "5", "绘图采样步长"),
-            ("cut_lift_mm", "20.0", "剪切抬升距离（mm）"),
-            ("cut_wait_s", "15.0", "剪切等待时间（s）"),
+            ("cut_lift_mm", f"{cut_cfg['cut_lift_mm']}", "剪切抬升距离（mm）"),
+            ("cut_wait_s", f"{cut_cfg['cut_wait_s']}", "剪切等待时间（s）"),
         ]
         self._planner_inputs = {}
         for param_name, default_val, desc in _PLANNER_PARAMS:
@@ -2247,8 +2288,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "fiber_retract_length_mm": 10.0,
             "fiber_retract_speed_mm_s": 5.0,
             "fiber_fan_enabled": True,
-            "external_cut_lift_mm": 20.0,
-            "external_cut_wait_s": 15.0,
+            "external_cut_lift_mm": cut_cfg["cut_lift_mm"],
+            "external_cut_wait_s": cut_cfg["cut_wait_s"],
             "travel_feed_mm_s": 10.0,
             "first_layer_travel_feed_mm_s": 10.0,
             "prime_settle_s": 0.5,
@@ -4470,7 +4511,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         for btn in getattr(self, "_test_z_buttons", []):
             btn.setEnabled(base_ready)
         if hasattr(self, "_test_resin_z_comp_input"):
-            self._test_resin_z_comp_input.setEnabled(base_ready)
+            # The confirmed fiber pose contains resin Z + fiber Z. Changing
+            # resin Z afterwards would desynchronize the stored calibration
+            # from the physical pose used by fiber/composite test actions.
+            self._test_resin_z_comp_input.setEnabled(
+                base_ready and not self._print_test_fiber_offset_initial_sent
+            )
         if hasattr(self, "_btn_test_confirm_height"):
             self._btn_test_confirm_height.setEnabled(base_ready)
         if not hasattr(self, "_btn_test_confirm_resin_height"):
@@ -5278,7 +5324,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         try:
             from external_npz_preprocessor.param_config import save_print_params
 
-            path = save_print_params(self._external_npz_process_params())
+            process_params = self._external_npz_process_params()
+            path = save_print_params(process_params)
+            _save_cut_config(
+                self._external_npz_inputs["external_cut_lift_mm"].value(),
+                self._external_npz_inputs["external_cut_wait_s"].value(),
+            )
             self._export_status.setText(f"已保存外部 NPZ 参数: {path}")
             self._export_status.setStyleSheet("color: #1b6e3c;")
         except Exception as exc:
@@ -5334,6 +5385,30 @@ class _UiStatusWidget(QtWidgets.QWidget):
             else:
                 external_process_params = None
             local_injection_values = self._local_injection_values() if is_core_injection_source else None
+            used_cut_lift_mm = (
+                local_injection_values["cut_lift_mm"]
+                if is_core_injection_source
+                else external_cut_lift_mm
+                if source_ext == ".npz"
+                else params["cut_lift_mm"]
+            )
+            used_cut_wait_s = (
+                local_injection_values["cut_wait_s"]
+                if is_core_injection_source
+                else external_cut_wait_s
+                if source_ext == ".npz"
+                else params["cut_wait_s"]
+            )
+            used_safe_lift_mm = (
+                local_injection_values["tool_change_safe_lift_mm"]
+                if is_core_injection_source
+                else None
+            )
+            _save_cut_config(
+                used_cut_lift_mm,
+                used_cut_wait_s,
+                tool_change_safe_lift_mm=used_safe_lift_mm,
+            )
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
                 and source_ext in (".gcode", ".gc", ".g")

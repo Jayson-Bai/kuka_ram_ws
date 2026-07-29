@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
+import json
 from pathlib import Path
 import re
 from typing import Sequence
@@ -56,6 +57,70 @@ class PreviewPath:
     path_id: int = 0
     event_type: str = ""
     payload: str = ""
+
+
+def _preview_offset_sidecar_candidates(root: Path):
+    if root.is_file() or root.suffix.lower() == ".npz":
+        candidates = [root.with_suffix(".offset.json")]
+    else:
+        candidates = [root / f"{root.name}.offset.json"]
+        candidates.extend(sorted(root.glob("*.offset.json")))
+
+    seen = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        yield candidate
+
+
+def _fiber_preview_offset_xy(npz_root: str | Path) -> tuple[float, float]:
+    """Return the fiber XY offset that must be hidden in 2-D previews."""
+    root = Path(npz_root).expanduser()
+    for sidecar in _preview_offset_sidecar_candidates(root):
+        try:
+            with sidecar.open("r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            offset = payload.get("tool_offset", (0.0, 0.0, 0.0))
+            if len(offset) != 3:
+                continue
+            return float(offset[0]), float(offset[1])
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    for trajectory_path in _candidate_npz_files(root, layer=None):
+        try:
+            with np.load(str(trajectory_path), allow_pickle=False) as data:
+                if "core_injection_manifest" not in data.files:
+                    continue
+                raw_manifest = data["core_injection_manifest"].item()
+                if isinstance(raw_manifest, bytes):
+                    raw_manifest = raw_manifest.decode("utf-8")
+                manifest = json.loads(str(raw_manifest))
+                offset = manifest.get("base_parameters", {}).get(
+                    "tool_offset", (0.0, 0.0, 0.0)
+                )
+                if len(offset) == 3:
+                    return float(offset[0]), float(offset[1])
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+    return 0.0, 0.0
+
+
+def _points_for_2d_preview(
+    preview: PreviewPath,
+    fiber_offset_xy: tuple[float, float],
+) -> np.ndarray:
+    """Map display-only XY points to the common resin/fiber tip frame."""
+    points = np.asarray(preview.points, dtype=np.float64)
+    if preview.path_type != PathType.FIBER_PRINT:
+        return points
+    offset_x, offset_y = fiber_offset_xy
+    if abs(offset_x) <= 1e-12 and abs(offset_y) <= 1e-12:
+        return points
+    points = points.copy()
+    points[:, 0] -= offset_x
+    points[:, 1] -= offset_y
+    return points
 
 
 def list_preview_layers(npz_root: str | Path) -> list[int]:
@@ -320,6 +385,7 @@ def ensure_layer_preview_images(
     )
     preview_dir.mkdir(parents=True, exist_ok=True)
     step = max(1, int(stride))
+    fiber_offset_xy = _fiber_preview_offset_xy(root)
     for layer in missing:
         paths = extract_layer_preview_paths(
             root, layer, max_paths=max_paths, max_rows=max_rows
@@ -329,7 +395,7 @@ def ensure_layer_preview_images(
         for preview in paths:
             if preview.path_type not in (PathType.RESIN_PRINT, PathType.FIBER_PRINT):
                 continue
-            points = np.asarray(preview.points, dtype=np.float64)
+            points = _points_for_2d_preview(preview, fiber_offset_xy)
             if len(points) == 0:
                 continue
             points = points[::step]

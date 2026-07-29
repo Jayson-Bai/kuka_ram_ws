@@ -47,8 +47,8 @@ def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():
         "    def _on_export_npz", 1)[1].split(
         "    def _on_export_progress", 1)[0]
 
-    assert '("cut_lift_mm", "20.0", "剪切抬升距离（mm）")' in src
-    assert '("cut_wait_s", "15.0", "剪切等待时间（s）")' in src
+    assert "cut_cfg[\x27cut_lift_mm\x27]" in src
+    assert "cut_cfg[\x27cut_wait_s\x27]" in src
     assert '"cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text())' in formal_export
     assert '"cut_wait_s": float(self._planner_inputs["cut_wait_s"].text())' in formal_export
     assert 'cut_lift_mm=params["cut_lift_mm"]' in formal_export
@@ -123,6 +123,16 @@ def test_print_test_fiber_z_offset_input_requires_positive_value():
     assert "QtGui.QDoubleValidator(" in fiber_z_validator
     assert "0.001, 1000.0, 3" in fiber_z_validator
     assert "self._test_fiber_z_comp_input" in fiber_z_validator
+
+
+def test_print_test_locks_resin_z_after_initial_fiber_offset_confirmation():
+    src = _source()
+    controls = src.split(
+        "    def _set_print_test_controls_enabled", 1
+    )[1].split("    def _on_current_correction", 1)[0]
+
+    assert "self._test_resin_z_comp_input.setEnabled(" in controls
+    assert "base_ready and not self._print_test_fiber_offset_initial_sent" in controls
 
 
 def test_print_test_npz_load_checks_resin_z_floor_before_emit():
