@@ -105,9 +105,8 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
     with np.load(direct, allow_pickle=False) as direct_data, np.load(
         injected, allow_pickle=False
     ) as injected_data, np.load(source, allow_pickle=False) as source_data:
-        assert _event_contract(direct_data) == _event_contract(injected_data)
-        # Local injection must not create a larger pose discontinuity than the
-        # original Core-sampled source, even when all UI parameters change.
-        assert _max_xyz_step(injected_data) <= _max_xyz_step(source_data) + 1e-6
-        assert np.all(np.diff(injected_data["seq"].astype(np.int64)) == 1)
-        assert np.all(np.diff(injected_data["planned_time_s"]) >= -1e-6)
+        assert direct_data.files == injected_data.files
+        for key in direct_data.files:
+            assert direct_data[key].dtype == injected_data[key].dtype, key
+            assert direct_data[key].shape == injected_data[key].shape, key
+            assert np.array_equal(direct_data[key], injected_data[key]), key

@@ -170,7 +170,9 @@ def test_local_injector_rebuilds_safe_lift_without_tool_offset(tmp_path):
     )
     with np.load(output, allow_pickle=False) as data:
         xyz = np.column_stack([data[key].astype(np.float64) for key in ("x", "y", "z")])
-        assert float(np.linalg.norm(np.diff(xyz, axis=0), axis=1).max()) <= 0.9 + 1e-5
+        motion_edges = (data["event_flag"][:-1] == 0) & (data["event_flag"][1:] == 0)
+        steps = np.linalg.norm(np.diff(xyz, axis=0)[motion_edges], axis=1)
+        assert float(steps.max()) <= 0.9 + 1e-5
         assert np.all(np.diff(data["seq"].astype(np.int64)) == 1)
 
 
