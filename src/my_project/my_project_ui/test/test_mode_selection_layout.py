@@ -788,7 +788,7 @@ def test_fiber_offset_confirm_saves_and_downlinks_current_absolute_offset():
         "    def _on_print_test_print_fiber", 1
     )[0]
 
-    assert "save_head_calibration(calibration" in confirm_section
+    assert "self._store_head_calibration(calibration)" in confirm_section
     assert "self._print_test_pending_initial_fiber_offset = (" in confirm_section
     assert "calibration.resin_z_print_compensation_mm" in confirm_section
     assert "target_pose=target" in confirm_section
@@ -851,7 +851,7 @@ def test_fiber_offset_micro_nudges_stage_ui_values_but_do_not_downlink_or_save()
     assert "self._print_test_fiber_confirmed = False" in nudge_section
 
 
-def test_fiber_offset_send_nudge_downlinks_only_delta_without_saving():
+def test_fiber_offset_send_nudge_persists_shared_state_and_downlinks_only_delta():
     src = _source()
     send_section = src.split(
         "    def _on_print_test_send_fiber_offset_nudge", 1
@@ -866,7 +866,7 @@ def test_fiber_offset_send_nudge_downlinks_only_delta_without_saving():
     assert "_is_tenth_step" not in send_section
     assert "整数倍" not in send_section
     assert "calibration.resin_z_print_compensation_mm" not in send_section
-    assert "save_head_calibration" not in send_section
+    assert "self._store_head_calibration(calibration)" in send_section
     assert 'self._run_print_test_job("travel", start, target_pose=target)' in send_section
 
 
@@ -876,10 +876,38 @@ def test_fiber_offset_confirm_only_saves_without_downlinking_again():
         "    def _on_print_test_print_fiber", 1
     )[0]
 
-    assert "save_head_calibration(calibration" in confirm_section
+    assert "self._store_head_calibration(calibration)" in confirm_section
     assert "self._print_test_fiber_confirmed = True" in src
     assert "target_pose=target" in confirm_section
     assert "calibration.resin_z_print_compensation_mm" in confirm_section
+
+
+def test_head_calibration_store_synchronizes_test_and_formal_offset_controls():
+    src = _source()
+    sync_section = src.split("    def _set_head_calibration_inputs", 1)[1].split(
+        "    def _store_head_calibration", 1
+    )[0]
+    store_section = src.split("    def _store_head_calibration", 1)[1].split(
+        "    def _save_current_head_calibration", 1
+    )[0]
+    formal_section = src.split("    def _on_offset_changed", 1)[1].split(
+        "    def get_tool_offset", 1
+    )[0]
+
+    for name in (
+        "_test_resin_z_comp_input",
+        "_test_fiber_x_comp_input",
+        "_test_fiber_y_comp_input",
+        "_test_fiber_z_comp_input",
+        "_resin_z_print_comp_spin",
+        "_fiber_z_print_comp_spin",
+        "_offset_spins",
+    ):
+        assert name in sync_section
+    assert "widget.blockSignals(True)" in sync_section
+    assert "_save_offset_config(" in store_section
+    assert "save_head_calibration(calibration" in store_section
+    assert "self._store_head_calibration(" in formal_section
 
 
 def test_scissor_button_checks_fiber_tool_before_uart_command():

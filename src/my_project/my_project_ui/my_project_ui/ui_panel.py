@@ -4314,25 +4314,52 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
 
     def _set_head_calibration_inputs(self, calibration):
-        self._test_resin_z_comp_input.setText(
-            f"{calibration.resin_z_print_compensation_mm:.3f}"
+        test_values = (
+            ("_test_resin_z_comp_input", calibration.resin_z_print_compensation_mm),
+            ("_test_fiber_x_comp_input", calibration.fiber_x_print_compensation_mm),
+            ("_test_fiber_y_comp_input", calibration.fiber_y_print_compensation_mm),
+            ("_test_fiber_z_comp_input", calibration.fiber_z_print_compensation_mm),
         )
-        self._test_fiber_x_comp_input.setText(
-            f"{calibration.fiber_x_print_compensation_mm:.3f}"
+        for name, value in test_values:
+            widget = getattr(self, name, None)
+            if widget is not None:
+                widget.setText(f"{float(value):.3f}")
+
+        formal_values = (
+            (getattr(self, "_resin_z_print_comp_spin", None),
+             calibration.resin_z_print_compensation_mm),
+            (getattr(self, "_offset_spins", {}).get("X"),
+             calibration.fiber_x_print_compensation_mm),
+            (getattr(self, "_offset_spins", {}).get("Y"),
+             calibration.fiber_y_print_compensation_mm),
+            (getattr(self, "_fiber_z_print_comp_spin", None),
+             calibration.fiber_z_print_compensation_mm),
         )
-        self._test_fiber_y_comp_input.setText(
-            f"{calibration.fiber_y_print_compensation_mm:.3f}"
+        for widget, value in formal_values:
+            if widget is None:
+                continue
+            previous = widget.blockSignals(True)
+            try:
+                widget.setValue(float(value))
+            finally:
+                widget.blockSignals(previous)
+
+    def _store_head_calibration(self, calibration):
+        self._head_calibration = calibration
+        self._set_head_calibration_inputs(calibration)
+        _save_offset_config(
+            calibration.fiber_x_print_compensation_mm,
+            calibration.fiber_y_print_compensation_mm,
+            calibration.fiber_z_print_compensation_mm,
+            calibration.resin_z_print_compensation_mm,
         )
-        self._test_fiber_z_comp_input.setText(
-            f"{calibration.fiber_z_print_compensation_mm:.3f}"
-        )
+        save_head_calibration(calibration, path=DEFAULT_HEAD_CALIBRATION_PATH)
+        return calibration
 
     def _save_current_head_calibration(self):
-        self._head_calibration = self._current_head_calibration_from_inputs()
-        save_head_calibration(
-            self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
+        return self._store_head_calibration(
+            self._current_head_calibration_from_inputs()
         )
-        return self._head_calibration
 
     def _parse_print_test_params(self):
         from gcode_planner.print_test_generator import (
@@ -4753,6 +4780,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if max(abs(delta_x), abs(delta_y), abs(delta_z)) <= 1e-9:
             self._set_print_test_status("当前没有待下发的纤维偏置增量。", "#b15e00")
             return
+        try:
+            self._store_head_calibration(calibration)
+        except Exception as exc:
+            self._set_print_test_status(f"纤维偏置保存失败: {exc}", "#b42318")
+            return
         start = self._print_test_current_correction
         target = (
             start[0] + delta_x,
@@ -4793,8 +4825,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         try:
             calibration = self._current_head_calibration_from_inputs()
-            self._head_calibration = calibration
-            save_head_calibration(calibration, path=DEFAULT_HEAD_CALIBRATION_PATH)
+            self._store_head_calibration(calibration)
         except Exception as exc:
             self._set_print_test_status(f"标定保存失败: {exc}", "#b42318")
             return
@@ -5017,9 +5048,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._set_print_test_status("正在生成临时测试 NPZ...", "#b15e00")
         if job_type in ("resin_matrix", "fiber_matrix", "composite_matrix"):
             try:
-                self._head_calibration = self._current_head_calibration_from_inputs()
-                save_head_calibration(
-                    self._head_calibration, path=DEFAULT_HEAD_CALIBRATION_PATH
+                self._store_head_calibration(
+                    self._current_head_calibration_from_inputs()
                 )
             except Exception as exc:
                 self._print_test_busy = False
@@ -5188,15 +5218,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_z = self._fiber_z_print_comp_spin.value()
         resin_z = self.current_resin_z_print_compensation()
         try:
-            _save_offset_config(x, y, fiber_z, resin_z)
-            save_head_calibration(
+            self._store_head_calibration(
                 HeadCalibration(
                     resin_z_print_compensation_mm=resin_z,
                     fiber_x_print_compensation_mm=x,
                     fiber_y_print_compensation_mm=y,
                     fiber_z_print_compensation_mm=fiber_z,
-                ),
-                path=DEFAULT_HEAD_CALIBRATION_PATH,
+                )
             )
             self._offset_status.setText(
                 f"已保存: X={x:.2f}  Y={y:.2f}  纤维Z偏置={fiber_z:.2f}  树脂Z补偿={resin_z:.2f}")

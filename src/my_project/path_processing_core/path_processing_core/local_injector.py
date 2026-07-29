@@ -438,7 +438,15 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
         raise ValueError(f"tool block {bid} has no preceding pose")
     start = _pose_from_arrays(arrays, start_index)
     start_e = float(arrays["e64"][start_index] if "e64" in arrays else arrays["e"][start_index])
-    target_tool = int(block.get("target_tool_id", 1))
+    # Core manifests record tool changes as ``from_tool`` / ``to_tool``.
+    # ``target_tool_id`` is accepted only for compatibility with older
+    # experimental manifests. Never guess here: defaulting every block to
+    # tool 1 makes a fiber->resin change use the fiber sign and applies the
+    # head offset twice.
+    target_tool_raw = block.get("to_tool", block.get("target_tool_id"))
+    if target_tool_raw is None:
+        raise ValueError(f"tool block {bid} has no target tool")
+    target_tool = int(target_tool_raw)
     sign = 1.0 if target_tool == 1 else -1.0
     has_offset = bool(np.any(np.abs(new_offset) > 1e-9))
     lifted = start.copy()

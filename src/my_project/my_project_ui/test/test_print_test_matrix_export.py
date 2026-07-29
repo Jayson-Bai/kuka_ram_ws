@@ -47,6 +47,27 @@ def test_formal_npz_export_passes_resin_z_print_compensation():
     )
 
 
+def test_core_injection_reads_fiber_and_resin_z_from_independent_ui_controls():
+    src = _source()
+    value_reader = src.split("    def _local_injection_values", 1)[1].split(
+        "    def _external_npz_process_params", 1
+    )[0]
+    formal_export = src.split("    def _on_export_npz", 1)[1].split(
+        "    def _on_export_progress", 1
+    )[0]
+
+    assert '"tool_offset": tuple(float(v) for v in self.get_tool_offset())' in value_reader
+    assert (
+        '"resin_z_print_compensation_mm": '
+        "float(self.current_resin_z_print_compensation())"
+    ) in value_reader
+    assert 'tool_offset=local_injection_values["tool_offset"]' in formal_export
+    assert (
+        'resin_z_print_compensation_mm='
+        'local_injection_values["resin_z_print_compensation_mm"]'
+    ) in formal_export
+
+
 def test_core_injection_uses_external_rsi_validation():
     formal_export = _source().split(
         "    def _on_export_npz", 1
@@ -111,7 +132,7 @@ def test_print_test_job_generation_supports_resin_fiber_and_composite_modes():
     assert "generate_head_test_matrix_gcode" in fiber_branch
     assert 'tool="fiber"' in fiber_branch
     assert "generate_composite_test_matrix_gcode" in composite_branch
-    assert "save_head_calibration" in block
+    assert "_store_head_calibration" in block
 
 
 def test_print_test_fiber_exports_start_from_fiber_tool():
