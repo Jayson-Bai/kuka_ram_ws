@@ -22,6 +22,11 @@ from .types import GlobalCurveCommand, Position
 
 _PART_RE = re.compile(r"^(?P<base>.+)_part(?P<part>\d{4})$")
 _MAX_ESTIMATED_ROWS = 4_000_000
+_TIMING_PRINT = 0
+_TIMING_TRAVEL = 1
+_TIMING_WAIT = 2
+_TIMING_CUT = 3
+_TIMING_EVENT = 4
 _HIGH_PRECISION_MAP = {
     "x": "x64",
     "y": "y64",
@@ -238,7 +243,10 @@ def _sample_segment(start: np.ndarray, end: np.ndarray, e_start: float, delta_e:
     ))
 
 
-def _motion_rows(arrays, template, samples, block_id, role_code, move_type_code, tool_id=None):
+def _motion_rows(
+    arrays, template, samples, block_id, role_code, move_type_code,
+    tool_id=None, timing_category=_TIMING_TRAVEL,
+):
     rows = []
     for sample in samples:
         row = _row(arrays, template)
@@ -257,6 +265,8 @@ def _motion_rows(arrays, template, samples, block_id, role_code, move_type_code,
         row["trigger_seq"] = -1
         row["path_end_flag"] = 0
         row["planned_time_s"] = 0.0
+        if "timing_category" in row:
+            row["timing_category"] = timing_category
         row["core_injection_block_id"] = block_id
         row["core_injection_role"] = role_code
         if tool_id is not None:
@@ -266,7 +276,7 @@ def _motion_rows(arrays, template, samples, block_id, role_code, move_type_code,
 
 
 def _wait_rows(arrays, template, pose, e_start, delta_e, duration, *, block_id, role_code,
-               print_code, dt, path_end=False):
+               print_code, dt, path_end=False, timing_category=_TIMING_WAIT):
     count = max(1, int(math.ceil(max(float(duration), dt) / dt)))
     rows = []
     for index in range(1, count + 1):
@@ -281,6 +291,8 @@ def _wait_rows(arrays, template, pose, e_start, delta_e, duration, *, block_id, 
         row["trigger_seq"] = -1
         row["path_end_flag"] = 1 if path_end and index == count else 0
         row["planned_time_s"] = 0.0
+        if "timing_category" in row:
+            row["timing_category"] = timing_category
         row["core_injection_block_id"] = block_id
         row["core_injection_role"] = role_code
         rows.append(row)
@@ -598,13 +610,14 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
         )
         rows.extend(_motion_rows(
             arrays, template, samples, bid, post_code, travel_code,
-            int(arrays["tool_id"][event_index]),
+            int(arrays["tool_id"][event_index]), _TIMING_CUT,
         ))
 
     settle_s = 3.0
     rows.extend(_wait_rows(
         arrays, template, high, float(new_lift), 0.0, settle_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+        timing_category=_TIMING_CUT,
     ))
 
     def _reset_row(index, e_value):
@@ -618,20 +631,24 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, 0.0, dt,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+        timing_category=_TIMING_CUT,
     ))
     lift_duration_s = float(new_lift) / max(feed, 1e-9)
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, -float(new_lift), lift_duration_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+        timing_category=_TIMING_CUT,
     ))
     rows.extend(_wait_rows(
         arrays, template, high, -float(new_lift), 0.0, settle_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+        timing_category=_TIMING_CUT,
     ))
     rows.append(_reset_row(resets[1], -float(new_lift)))
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, 0.0, dt,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+        timing_category=_TIMING_CUT,
     ))
     retract_duration_s = float(new_lift) / max(feed, 1e-9)
     remaining = max(
@@ -645,7 +662,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, 0.0, remaining,
         block_id=bid, role_code=action_code, print_code=print_code,
-        dt=dt,
+        dt=dt, timing_category=_TIMING_CUT,
     ))
 
     if source_action_path_end:
@@ -800,13 +817,60 @@ def _timing_sidecar(path: Path) -> Path:
     return path.parent / f"{name}.timing.json"
 
 
-def _write_timing(path: Path, arrays: dict[str, np.ndarray], dt: float) -> None:
+def _write_timing(
+    path: Path, arrays: dict[str, np.ndarray],
+    static: dict[str, np.ndarray], dt: float,
+) -> None:
+    event_mask = arrays["event_flag"] != 0
     payload = {
         "format": "rsi_print_timing", "version": 1, "sample_period_s": float(dt),
         "total_planned_time_s": float(arrays["planned_time_s"][-1]) if len(arrays["seq"]) else 0.0,
-        "trajectory_rows": int(np.count_nonzero(arrays["event_flag"] == 0)),
-        "event_rows_ignored": int(np.count_nonzero(arrays["event_flag"] != 0)),
+        "trajectory_rows": int(np.count_nonzero(~event_mask)),
+        "event_rows_ignored": int(np.count_nonzero(event_mask)),
     }
+    if "timing_category" in arrays:
+        category_rows = arrays["timing_category"][~event_mask]
+        durations = np.bincount(
+            category_rows[1:].astype(np.int64, copy=False),
+            minlength=_TIMING_EVENT + 1,
+        ) * float(dt)
+        event_counts = _event_counts(arrays, static)
+        manifest = _json_manifest(static["core_injection_manifest"])
+        injected_cut_wait_s = max(
+            0.0,
+            float(manifest.get("base_parameters", {}).get("cut_wait_s", 15.0)),
+        )
+        cut_count = int(event_counts.get("cut", 0))
+        payload.update({
+            "version": 2,
+            "trajectory_time_breakdown_s": {
+                "print": float(durations[_TIMING_PRINT]),
+                "travel": float(durations[_TIMING_TRAVEL]),
+                "wait": float(durations[_TIMING_WAIT]),
+                "cut": float(durations[_TIMING_CUT]),
+            },
+            "event_counts": event_counts,
+            "planned_print_motion_time_s": float(durations[_TIMING_PRINT]),
+            "planned_travel_time_s": float(durations[_TIMING_TRAVEL]),
+            "planned_wait_time_s": float(durations[_TIMING_WAIT]),
+            "planned_cut_time_s": float(durations[_TIMING_CUT]),
+            "cut_injected_wait_s": injected_cut_wait_s,
+            "planned_cut_injected_wait_time_s": (
+                injected_cut_wait_s * cut_count
+            ),
+            "planned_cut_count": cut_count,
+            "planned_tool_change_count": int(
+                event_counts.get("tool_change_cf", 0)
+                + event_counts.get("tool_change_resin", 0)
+            ),
+            "planned_unquantified_event_count": int(sum(
+                event_counts.get(name, 0)
+                for name in (
+                    "heat_cf", "heat_resin", "fan_cf", "fan_resin",
+                    "extrude_reset",
+                )
+            )),
+        })
     target = _timing_sidecar(path)
     fd, raw = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
     Path(raw).unlink(missing_ok=True)
@@ -816,6 +880,22 @@ def _write_timing(path: Path, arrays: dict[str, np.ndarray], dt: float) -> None:
         temp.replace(target)
     finally:
         temp.unlink(missing_ok=True)
+
+
+def _event_counts(
+    arrays: dict[str, np.ndarray], static: dict[str, np.ndarray],
+) -> dict[str, int]:
+    keys = static.get("event_type_vocab_keys")
+    values = static.get("event_type_vocab_vals")
+    if keys is None or values is None:
+        return {}
+    vocab = _decode_vocab(keys, values)
+    counts = {}
+    for code in arrays["event_type"][arrays["event_flag"] != 0]:
+        name = vocab.get(int(code), "")
+        if name:
+            counts[name] = counts.get(name, 0) + 1
+    return counts
 
 
 def _estimate_injected_rows(
@@ -957,7 +1037,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                 remain -= size
             parts = _output_parts(output, len(sizes))
     _atomic_write(parts, arrays, static, sizes, key_order)
-    _write_timing(output, arrays, dt)
+    _write_timing(output, arrays, static, dt)
     return {
         "input_parts": len(files), "output_parts": len(parts), "rows": len(arrays["seq"]),
         "output_path": str(output), "delta_tool_offset": [float(v) for v in new_offset - current_offset],

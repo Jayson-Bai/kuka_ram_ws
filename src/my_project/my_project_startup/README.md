@@ -75,6 +75,9 @@ python3 -m external_npz_preprocessor.cli --source /path/to/source.npz --out /pat
 - `heartbeat_timeout_s`：心跳超时时间（秒），默认 `1.0`
 - `traj_queue_limit`：UI 侧轨迹队列上限，默认 `5000`
 - `event_queue_limit`：UI 侧事件队列上限，默认 `2000`
+- `print_time_update_period_ms`：预计打印时间刷新周期，默认 `500 ms`
+- 剪切等待估时不设启动参数，直接读取本次NPZ计时元数据中实际注入的 `cut_wait_s`
+- `tool_change_fixed_time_s`：实测单次阻塞换头耗时，默认 `15.0 s`
 
 ### extruder_latency_monitor_node （挤出延迟监控）
 - `latency_publish_period_ms`：延迟状态发布周期（毫秒），默认 `200`

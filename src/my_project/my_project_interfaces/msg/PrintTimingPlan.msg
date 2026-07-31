@@ -1,0 +1,13 @@
+builtin_interfaces/Time stamp
+float32 planned_total_time_s
+float32 planned_print_motion_time_s
+float32 planned_travel_time_s
+float32 planned_wait_time_s
+float32 planned_cut_time_s
+float32 cut_injected_wait_s
+float32 planned_cut_injected_wait_time_s
+uint32 planned_cut_count
+uint32 planned_tool_change_count
+uint32 planned_unquantified_event_count
+bool breakdown_valid
+bool valid

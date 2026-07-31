@@ -32,7 +32,6 @@ struct NpzRow
   uint32_t path_id{};
   bool path_end_flag{};
   float planned_time_s{};
-  float planned_total_time_s{};
   bool planned_time_valid{};
 };
 
@@ -70,7 +69,23 @@ public:
   const std::string & error() const {return error_;}
 
   bool timing_valid() const {return timing_valid_;}
+  bool timing_breakdown_valid() const {return timing_breakdown_valid_;}
   double total_planned_time_s() const {return total_planned_time_s_;}
+  double planned_print_motion_time_s() const {return planned_print_motion_time_s_;}
+  double planned_travel_time_s() const {return planned_travel_time_s_;}
+  double planned_wait_time_s() const {return planned_wait_time_s_;}
+  double planned_cut_time_s() const {return planned_cut_time_s_;}
+  double cut_injected_wait_s() const {return cut_injected_wait_s_;}
+  double planned_cut_injected_wait_time_s() const
+  {
+    return planned_cut_injected_wait_time_s_;
+  }
+  uint32_t planned_cut_count() const {return planned_cut_count_;}
+  uint32_t planned_tool_change_count() const {return planned_tool_change_count_;}
+  uint32_t planned_unquantified_event_count() const
+  {
+    return planned_unquantified_event_count_;
+  }
 
   bool has_next() const;
   bool next_row(NpzRow & out);
@@ -105,9 +120,19 @@ private:
   bool ok_{false};
   std::string error_;
   bool timing_valid_{false};
+  bool timing_breakdown_valid_{false};
   bool timing_rows_valid_{true};
   bool timing_metadata_valid_{false};
   double total_planned_time_s_{0.0};
+  double planned_print_motion_time_s_{0.0};
+  double planned_travel_time_s_{0.0};
+  double planned_wait_time_s_{0.0};
+  double planned_cut_time_s_{0.0};
+  double cut_injected_wait_s_{0.0};
+  double planned_cut_injected_wait_time_s_{0.0};
+  uint32_t planned_cut_count_{0};
+  uint32_t planned_tool_change_count_{0};
+  uint32_t planned_unquantified_event_count_{0};
 
   std::deque<NpzChunk> cache_;
   size_t chunk_row_idx_{0};

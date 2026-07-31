@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/TrajectoryPoint.msg"
 "msg/PlannedEvent.msg"
 "msg/PrintHeadStatus.msg"
+"msg/PrintTimingPlan.msg"
 "msg/KukaStatus.msg"
 "msg/RsiHeartBeat.msg"
 "msg/UiStatus.msg"

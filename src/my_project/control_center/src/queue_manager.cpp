@@ -64,7 +64,6 @@ void QueueManager::fill(NpzLoader & loader)
     tp.path_id = row.path_id;
     tp.path_end_flag = row.path_end_flag;
     tp.planned_time_s = row.planned_time_s;
-    tp.planned_total_time_s = row.planned_total_time_s;
     tp.planned_time_valid = row.planned_time_valid && loader.timing_valid();
     traj_queue_.push_back(tp);
   }

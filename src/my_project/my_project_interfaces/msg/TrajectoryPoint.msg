@@ -13,5 +13,4 @@ uint32 total_layers
 uint32 path_id
 bool path_end_flag
 float32 planned_time_s
-float32 planned_total_time_s
 bool planned_time_valid

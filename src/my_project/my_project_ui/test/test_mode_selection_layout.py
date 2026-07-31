@@ -12,6 +12,7 @@ QUEUE_MANAGER = PROJECT_SRC / "control_center" / "src" / "queue_manager.cpp"
 NPZ_LOADER_HPP = PROJECT_SRC / "control_center" / "include" / "control_center" / "npz_loader.hpp"
 NPZ_LOADER_CPP = PROJECT_SRC / "control_center" / "src" / "npz_loader.cpp"
 TRAJECTORY_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
+TIMING_PLAN_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "PrintTimingPlan.msg"
 UI_STATUS_MSG = PROJECT_SRC / "my_project_interfaces" / "msg" / "UiStatus.msg"
 NPZ_EXPORTER = PROJECT_SRC / "path_processing_core" / "path_processing_core" / "npz_exporter.py"
 
@@ -359,6 +360,17 @@ def test_formal_print_remaining_time_is_low_frequency_and_formatted_in_ui():
         "planned_total_time_s",
         "planned_elapsed_time_s",
         "planned_remaining_time_s",
+        "planned_print_motion_time_s",
+        "planned_travel_time_s",
+        "planned_wait_time_s",
+        "planned_cut_time_s",
+        "cut_injected_wait_s",
+        "planned_cut_injected_wait_time_s",
+        "planned_tool_change_time_s",
+        "planned_cut_count",
+        "planned_tool_change_count",
+        "planned_unquantified_event_count",
+        "bool print_time_breakdown_valid",
         "bool print_time_valid",
     ):
         assert field in ui_status
@@ -366,9 +378,18 @@ def test_formal_print_remaining_time_is_low_frequency_and_formatted_in_ui():
     assert "print_time_update_period_ms_" in system_src
     assert "planned_remaining_time_s" in ui_src
     assert "时间估计" in ui_src
+    assert "可量化构成" in ui_src
+    assert "打印运动" in ui_src
+    assert "空走" in ui_src
+    assert "原地等待/挤出动作" in ui_src
+    assert "注入参数" in ui_src
+    assert "已包含于剪切流程" in ui_src
+    assert "按约定忽略 加热/风扇/挤出复位" in ui_src
     assert "def _format_print_duration(seconds):" in ui_src
     assert 'return "--"' in ui_src
     assert "时间估计 --" in ui_src
+    assert '"cut_fixed_time_s"' not in ui_src
+    assert '"tool_change_fixed_time_s", "15.0"' in ui_src
 
 
 def test_print_duration_formatter_handles_hours_and_invalid_values():

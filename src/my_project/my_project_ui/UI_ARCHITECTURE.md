@@ -247,6 +247,7 @@ flowchart LR
 | `/kuka/status` | `KukaStatus` | 机械臂当前 XYZABC 位姿 |
 | `/printhead/status` | `PrintHeadStatus` | 打印头温度、风扇、工具状态 |
 | `/planned_trajectory` | `TrajectoryPoint` | 规划轨迹点队列 |
+| `/print/timing_plan` | `PrintTimingPlan` | 离线计时静态摘要（单次持久发布） |
 | `/planned_events` | `PlannedEvent` | 规划事件队列 |
 | `/rsi/triggered_event` | `PlannedEvent` | 已触发的事件 |
 
@@ -262,17 +263,19 @@ flowchart LR
 
 ```text
 npz_exporter
-  ├─ planned_time_s（每个 NPZ 行的 RSI 累计时间）
+  ├─ planned_time_s（最终 RSI 点的离线累计时间查找值）
   └─ <base>.timing.json（总时长、段信息、加速/匀速/减速参数）
         ↓
-NpzLoader → QueueManager → TrajectoryPoint
+NpzLoader
+  ├─ QueueManager → TrajectoryPoint（仅携带每点 planned_time_s）
+  └─ PrintTimingPlan（静态摘要，transient_local 单次发布）
         ↓
-system_manager_node（按 seq_used、默认 500 ms 更新）
+system_manager_node（按 seq_used O(1) 查表、默认 500 ms 更新）
         ↓
 UiStatus → 正式打印页：总 / 已用 / 剩余约
 ```
 
-时间范围明确限定为 RSI 侧：空走、打印采样行和离线展开的 RSI 侧挤出等待计入；事件行不推进时间，打印头事件等待与 ABORT 不计入。`planned_time_s` 或 timing sidecar 缺失、长度不匹配、非有限或总时长非法时，轨迹仍按旧逻辑加载，`UiStatus.print_time_valid=false`，UI 显示“时间估计 --”。
+时间范围明确限定为最终 RSI 点：七阶多项式运动、空走、固定驻留，以及按长度和速度离线展开的预挤出/回抽均按点数计入。事件行不推进点时间；只有已知会阻塞 RSI、且未展开为点的换头固定 15 s 额外加入。非阻塞剪切事件不额外加入，其抬升、等待和回抽点已经计时；加热、风扇、挤出复位等状态或通信相关等待按约定忽略。`planned_time_s` 或 timing sidecar 缺失、长度不匹配、非有限或总时长非法时，轨迹仍按旧逻辑加载，`UiStatus.print_time_valid=false`，UI 显示“时间估计 --”。
 
 `print_time_update_period_ms` 是 `system_manager_node` 的参数，默认 `500` ms。该估计不会进入 `rsi_node` 的 UDP/RSI 控制循环；暂停或队列暂时未对齐时复用最后一个有效快照，避免界面倒计时脱离实际 `seq_used`。
 
@@ -674,6 +677,18 @@ bool next_event_valid
 float32 planned_total_time_s         # RSI 计划总时长
 float32 planned_elapsed_time_s       # 按 seq_used 的已用时长
 float32 planned_remaining_time_s     # 估计剩余时长
+float32 planned_trajectory_time_s    # RSI 轨迹总时长
+float32 planned_print_motion_time_s  # 有效打印运动
+float32 planned_travel_time_s        # 空走运动
+float32 planned_wait_time_s          # 原地等待/挤出动作
+float32 planned_cut_time_s           # NPZ 中实际展开的剪切安全流程
+float32 cut_injected_wait_s          # 本次导出/局部注入实际采用的 cut_wait_s
+float32 planned_cut_injected_wait_time_s # cut_wait_s × 剪切次数，已包含于剪切流程
+float32 planned_tool_change_time_s   # 15 s × 换头次数
+uint32 planned_cut_count
+uint32 planned_tool_change_count
+uint32 planned_unquantified_event_count
+bool print_time_breakdown_valid
 bool print_time_valid                # timing sidecar/行数据均有效
 ```
 

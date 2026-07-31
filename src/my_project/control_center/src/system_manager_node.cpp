@@ -11,6 +11,7 @@
 #include <my_project_interfaces/msg/trajectory_point.hpp>
 #include <my_project_interfaces/msg/planned_event.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/print_timing_plan.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/kuka_status.hpp>
 
@@ -28,6 +29,7 @@ using my_project_interfaces::msg::UiStatus;
 using my_project_interfaces::msg::TrajectoryPoint;
 using my_project_interfaces::msg::PlannedEvent;
 using my_project_interfaces::msg::PrintHeadStatus;
+using my_project_interfaces::msg::PrintTimingPlan;
 using my_project_interfaces::msg::RsiHeartBeat;
 using my_project_interfaces::msg::KukaStatus;
 
@@ -42,6 +44,8 @@ public:
     traj_queue_limit_ = declare_parameter<int>("traj_queue_limit", 5000);
     event_queue_limit_ = declare_parameter<int>("event_queue_limit", 2000);
     print_time_update_period_ms_ = declare_parameter<int>("print_time_update_period_ms", 500);
+    tool_change_fixed_time_s_ = std::max(
+      0.0, declare_parameter<double>("tool_change_fixed_time_s", 15.0));
 
     ui_pub_ = create_publisher<UiStatus>("/ui/status", 10);
 
@@ -102,6 +106,17 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         last_triggered_event_ = *msg;
         last_triggered_stamp_ = now();
+        if (msg->event_type == "tool_change_cf" ||
+        msg->event_type == "tool_change_resin")
+        {
+          const std::string event_key =
+          std::to_string(msg->trigger_seq) + ":" + msg->event_type;
+          if (event_key != last_counted_tool_change_key_) {
+            ++triggered_tool_change_count_;
+            last_tool_change_start_ = last_triggered_stamp_;
+            last_counted_tool_change_key_ = event_key;
+          }
+        }
         auto same_event = [&msg](const PlannedEvent & ev) {
           return ev.trigger_seq == msg->trigger_seq &&
           ev.event_type == msg->event_type &&
@@ -125,6 +140,17 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         traj_queue_.push_back(*msg);
         trim_queue(traj_queue_, static_cast<size_t>(traj_queue_limit_));
+      });
+
+    timing_plan_sub_ = create_subscription<PrintTimingPlan>(
+      "/print/timing_plan", rclcpp::QoS(1).reliable().transient_local(),
+      [this](PrintTimingPlan::SharedPtr msg) {
+        std::lock_guard<std::mutex> lk(mutex_);
+        timing_plan_ = *msg;
+        print_time_cache_valid_ = false;
+        triggered_tool_change_count_ = 0;
+        last_tool_change_start_ = rclcpp::Time();
+        last_counted_tool_change_key_.clear();
       });
 
     timer_ = create_wall_timer(
@@ -267,15 +293,41 @@ private:
     out.planned_total_time_s = 0.0F;
     out.planned_elapsed_time_s = 0.0F;
     out.planned_remaining_time_s = 0.0F;
+    out.planned_trajectory_time_s = 0.0F;
+    out.planned_print_motion_time_s = 0.0F;
+    out.planned_travel_time_s = 0.0F;
+    out.planned_wait_time_s = 0.0F;
+    out.planned_cut_time_s = 0.0F;
+    out.cut_injected_wait_s = 0.0F;
+    out.planned_cut_injected_wait_time_s = 0.0F;
+    out.planned_tool_change_time_s = 0.0F;
+    out.planned_tool_change_elapsed_time_s = 0.0F;
+    out.tool_change_fixed_time_s = static_cast<float>(tool_change_fixed_time_s_);
+    out.planned_cut_count = 0;
+    out.planned_tool_change_count = 0;
+    out.planned_unquantified_event_count = 0;
+    out.print_time_breakdown_valid = false;
     out.print_time_valid = false;
 
-    if (out.current_traj_valid && out.current_traj.planned_time_valid) {
-      const float total = std::max(0.0F, out.current_traj.planned_total_time_s);
+    if (out.current_traj_valid && out.current_traj.planned_time_valid &&
+      timing_plan_ && timing_plan_->valid)
+    {
+      const float trajectory_total =
+        std::max(0.0F, timing_plan_->planned_total_time_s);
+      const float tool_change_total =
+        static_cast<float>(timing_plan_->planned_tool_change_count) *
+        static_cast<float>(tool_change_fixed_time_s_);
+      const float total = trajectory_total + tool_change_total;
       const bool new_run = print_time_cache_valid_ &&
-        (out.current_traj.seq < print_time_last_seq_ ||
-        std::abs(total - print_time_total_s_) > 1e-3F);
+        (out.current_traj.seq<print_time_last_seq_ ||
+        std::abs(total - print_time_total_s_)>1e-3F ||
+        timing_plan_->planned_tool_change_count !=
+        print_time_tool_change_count_);
       if (new_run) {
         print_time_cache_valid_ = false;
+        triggered_tool_change_count_ = 0;
+        last_tool_change_start_ = rclcpp::Time();
+        last_counted_tool_change_key_.clear();
       }
 
       const double elapsed_since_update = print_time_last_update_.nanoseconds() == 0 ?
@@ -284,10 +336,49 @@ private:
       const bool update_due = !print_time_cache_valid_ ||
         elapsed_since_update * 1000.0 >= static_cast<double>(print_time_update_period_ms_);
       if (update_due) {
-        const float elapsed = std::clamp(out.current_traj.planned_time_s, 0.0F, total);
+        const uint32_t planned_tool_changes =
+          timing_plan_->planned_tool_change_count;
+        float tool_change_elapsed = 0.0F;
+        if (triggered_tool_change_count_ > 0) {
+          const uint32_t completed_before_current = triggered_tool_change_count_ - 1;
+          double current_progress = tool_change_fixed_time_s_;
+          if (last_tool_change_start_.nanoseconds() != 0) {
+            current_progress = std::clamp(
+              (now_t - last_tool_change_start_).seconds(),
+              0.0, tool_change_fixed_time_s_);
+          }
+          tool_change_elapsed =
+            static_cast<float>(completed_before_current) *
+            static_cast<float>(tool_change_fixed_time_s_) +
+            static_cast<float>(current_progress);
+        }
+        tool_change_elapsed = std::clamp(
+          tool_change_elapsed, 0.0F, tool_change_total);
+        const float trajectory_elapsed = std::clamp(
+          out.current_traj.planned_time_s, 0.0F, trajectory_total);
+        const float elapsed = std::clamp(
+          trajectory_elapsed + tool_change_elapsed, 0.0F, total);
         print_time_total_s_ = total;
         print_time_elapsed_s_ = elapsed;
         print_time_remaining_s_ = std::clamp(total - elapsed, 0.0F, total);
+        print_time_trajectory_total_s_ = trajectory_total;
+        print_time_print_motion_s_ =
+          timing_plan_->planned_print_motion_time_s;
+        print_time_travel_s_ = timing_plan_->planned_travel_time_s;
+        print_time_wait_s_ = timing_plan_->planned_wait_time_s;
+        print_time_cut_s_ = timing_plan_->planned_cut_time_s;
+        print_time_cut_injected_wait_s_ =
+          timing_plan_->cut_injected_wait_s;
+        print_time_cut_injected_wait_total_s_ =
+          timing_plan_->planned_cut_injected_wait_time_s;
+        print_time_tool_change_s_ = tool_change_total;
+        print_time_tool_change_elapsed_s_ = tool_change_elapsed;
+        print_time_cut_count_ = timing_plan_->planned_cut_count;
+        print_time_tool_change_count_ = planned_tool_changes;
+        print_time_unquantified_event_count_ =
+          timing_plan_->planned_unquantified_event_count;
+        print_time_breakdown_valid_ =
+          timing_plan_->breakdown_valid;
         print_time_last_seq_ = out.current_traj.seq;
         print_time_last_update_ = now_t;
         print_time_cache_valid_ = true;
@@ -298,6 +389,22 @@ private:
       out.planned_total_time_s = print_time_total_s_;
       out.planned_elapsed_time_s = print_time_elapsed_s_;
       out.planned_remaining_time_s = print_time_remaining_s_;
+      out.planned_trajectory_time_s = print_time_trajectory_total_s_;
+      out.planned_print_motion_time_s = print_time_print_motion_s_;
+      out.planned_travel_time_s = print_time_travel_s_;
+      out.planned_wait_time_s = print_time_wait_s_;
+      out.planned_cut_time_s = print_time_cut_s_;
+      out.cut_injected_wait_s = print_time_cut_injected_wait_s_;
+      out.planned_cut_injected_wait_time_s =
+        print_time_cut_injected_wait_total_s_;
+      out.planned_tool_change_time_s = print_time_tool_change_s_;
+      out.planned_tool_change_elapsed_time_s =
+        print_time_tool_change_elapsed_s_;
+      out.planned_cut_count = print_time_cut_count_;
+      out.planned_tool_change_count = print_time_tool_change_count_;
+      out.planned_unquantified_event_count =
+        print_time_unquantified_event_count_;
+      out.print_time_breakdown_valid = print_time_breakdown_valid_;
       out.print_time_valid = true;
     }
   }
@@ -313,6 +420,7 @@ private:
   rclcpp::Subscription<PlannedEvent>::SharedPtr planned_event_sub_;
   rclcpp::Subscription<PlannedEvent>::SharedPtr triggered_event_sub_;
   rclcpp::Subscription<TrajectoryPoint>::SharedPtr planned_traj_sub_;
+  rclcpp::Subscription<PrintTimingPlan>::SharedPtr timing_plan_sub_;
 
   rclcpp::TimerBase::SharedPtr timer_;
 
@@ -320,6 +428,7 @@ private:
   std::optional<KukaStatus> last_kuka_status_;
   std::optional<RsiHeartBeat> last_hb_;
   std::optional<PrintHeadStatus> last_printhead_status_;
+  std::optional<PrintTimingPlan> timing_plan_;
   std::optional<PlannedEvent> last_triggered_event_;
   rclcpp::Time last_kuka_stamp_;
   rclcpp::Time last_hb_stamp_;
@@ -334,11 +443,28 @@ private:
   int traj_queue_limit_{5000};
   int event_queue_limit_{2000};
   int print_time_update_period_ms_{500};
+  double tool_change_fixed_time_s_{15.0};
   bool print_time_cache_valid_{false};
   uint32_t print_time_last_seq_{0};
   float print_time_total_s_{0.0F};
   float print_time_elapsed_s_{0.0F};
   float print_time_remaining_s_{0.0F};
+  float print_time_trajectory_total_s_{0.0F};
+  float print_time_print_motion_s_{0.0F};
+  float print_time_travel_s_{0.0F};
+  float print_time_wait_s_{0.0F};
+  float print_time_cut_s_{0.0F};
+  float print_time_cut_injected_wait_s_{0.0F};
+  float print_time_cut_injected_wait_total_s_{0.0F};
+  float print_time_tool_change_s_{0.0F};
+  float print_time_tool_change_elapsed_s_{0.0F};
+  uint32_t print_time_cut_count_{0};
+  uint32_t print_time_tool_change_count_{0};
+  uint32_t print_time_unquantified_event_count_{0};
+  bool print_time_breakdown_valid_{false};
+  uint32_t triggered_tool_change_count_{0};
+  rclcpp::Time last_tool_change_start_;
+  std::string last_counted_tool_change_key_;
   rclcpp::Time print_time_last_update_;
   std::string system_command_;   // 当前系统命令状态: "PAUSED" / "ABORTING" / "ABORTED" / ""
 };

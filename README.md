@@ -93,7 +93,7 @@ my_project_ui RQT panel
 - `npz_exporter.py`：导出 `seq/x/y/z/a/b/c/e/tool_id` 以及事件字段；支持单文件 `npz` 或按层/类型拆分的 manifest。默认同时写入 `planned_time_s` RSI 时间轴和 `<base>.timing.json`（拆分输出为 `<base>_timing.json`），时间轴包含每段的加速、匀速、减速参数化元数据。
 - `cli.py`：提供 `ros2 run gcode_planner gcode_planner_npz ...` 命令入口。
 
-预计打印时间只针对 RSI 轨迹时钟：空走、打印采样点和离线展开的 RSI 侧挤出等待都会计入；事件行不推进时间，打印头事件等待和 ABORT 不计入。`NpzLoader` 将可选时间字段安全传入 `TrajectoryPoint`，缺少或损坏 timing 数组/sidecar 时仍可正常打印，但 UI 会显示“时间估计 --”。
+正式模式预计打印时间直接以最终注入后的 RSI 点为准：七阶多项式运动采样点、空走点、固定驻留点，以及按“长度÷速度”离线展开的预挤出/回抽点统一按固定 4 ms 周期生成累计时间表。剪切抬升、等待和安全回抽也已经体现在这些点中，不重复相加；非阻塞 `cut` 事件自身不额外计时。只有不在点表中且会阻塞 RSI 的换头事件按实测 `15 s × 换头次数` 叠加。加热、风扇确认、挤出复位、通信/调度抖动、人工暂停和故障恢复按现场状态决定，按约定忽略。静态分项通过一次性的 `/print/timing_plan` 发布，250 Hz `TrajectoryPoint` 只携带当前点的离线累计时间，运行时按 `seq_used` O(1) 查表。
 
 `e` 字段在系统中始终表示绝对挤出量。`G92 E...` 会导出 `extrude_reset` 事件，供 UART 侧和固件状态同步。
 
@@ -156,6 +156,7 @@ MCU 返回的 `STAT`、`EVACK`、`EVDONE` 等行会被解析为 `/printhead/stat
 | 话题 | 类型 | 发布者 | 订阅者 | 说明 |
 | --- | --- | --- | --- | --- |
 | `/planned_trajectory` | `TrajectoryPoint` | `center_node` | `rsi_node`, `system_manager_node`, `extruder_latency_monitor_node` | 规划轨迹点，包含 `XYZABC`、绝对 `E`、`tool_id`、`seq` 和可选 RSI 计划时间 |
+| `/print/timing_plan` | `PrintTimingPlan` | `center_node` | `system_manager_node` | 单次发布的离线时间总量、分项和固定事件计数 |
 | `/planned_events` | `PlannedEvent` | `center_node` | `rsi_node`, `system_manager_node` | 计划事件，如换刀、加热、风扇、挤出复位 |
 | `/rsi/heartbeat` | `RsiHeartBeat` | `rsi_node` | `center_node`, `uart_node`, `system_manager_node`, `extruder_latency_monitor_node` | RSI 主时钟，携带当前执行序号与绝对挤出量 |
 | `/rsi/triggered_event` | `PlannedEvent` | `rsi_node` | `uart_node`, `system_manager_node` | 到达触发序号的事件 |

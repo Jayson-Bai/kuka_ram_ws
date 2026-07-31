@@ -2,11 +2,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 CENTER = ROOT / "control_center" / "src" / "center_node.cpp"
+SYSTEM_MANAGER = ROOT / "control_center" / "src" / "system_manager_node.cpp"
 RSI = ROOT / "rsi_server" / "src" / "rsi_node.cpp"
 UART = ROOT / "uart_bridge" / "src" / "uart_node.cpp"
 TRAJ = ROOT / "my_project_interfaces" / "msg" / "TrajectoryPoint.msg"
+TIMING_PLAN = ROOT / "my_project_interfaces" / "msg" / "PrintTimingPlan.msg"
 UI = ROOT / "my_project_ui" / "my_project_ui" / "ui_panel.py"
 LAUNCH = ROOT / "my_project_startup" / "launch" / "startup.launch.py"
+STARTUP = LAUNCH
 NPZ_HEADER = ROOT / "control_center" / "include" / "control_center" / "npz_loader.hpp"
 NPZ_LOADER_CPP = ROOT / "control_center" / "src" / "npz_loader.cpp"
 QUEUE = ROOT / "control_center" / "src" / "queue_manager.cpp"
@@ -87,16 +90,24 @@ def test_pause_safety_parameters_are_launch_configurable():
 
 
 
-def test_runtime_trajectory_contract_carries_optional_timing():
+def test_runtime_trajectory_carries_only_offline_lookup_time():
     msg = _read(TRAJ)
     assert "planned_time_s" in msg
-    assert "planned_total_time_s" in msg
     assert "bool planned_time_valid" in msg
+    assert "planned_total_time_s" not in msg
+    timing_plan = _read(TIMING_PLAN)
+    assert "planned_total_time_s" in timing_plan
+    assert "planned_print_motion_time_s" in timing_plan
+    assert "planned_cut_injected_wait_time_s" in timing_plan
+    assert "planned_tool_change_count" in timing_plan
     header = _read(NPZ_HEADER)
     assert "planned_time_s" in header
-    assert "planned_total_time_s" in header
+    assert "total_planned_time_s" in header
     queue = _read(QUEUE)
     assert "planned_time_valid" in queue
+    center = _read(CENTER)
+    assert '"/print/timing_plan"' in center
+    assert "transient_local()" in center
 
 
 def test_npz_loader_exposes_optional_timing_metadata():
@@ -106,3 +117,25 @@ def test_npz_loader_exposes_optional_timing_metadata():
     assert "double total_planned_time_s() const" in header
     assert 'npz.count("planned_time_s")' in loader_cpp
     assert "timing.json" in loader_cpp
+    assert '"planned_print_motion_time_s"' in loader_cpp
+    assert '"cut_injected_wait_s"' in loader_cpp
+    assert '"planned_cut_injected_wait_time_s"' in loader_cpp
+    assert '"planned_tool_change_count"' in loader_cpp
+
+
+def test_print_time_adds_only_blocking_tool_change_fixed_duration():
+    system = _read(SYSTEM_MANAGER)
+    launch = _read(STARTUP)
+
+    assert "cut_fixed_time_s" not in system
+    assert 'declare_parameter<double>("tool_change_fixed_time_s", 15.0)' in system
+    assert "trajectory_total + tool_change_total" in system
+    assert "const float total = trajectory_total + tool_change_total;" in system
+    assert (
+        "timing_plan_->planned_tool_change_count" in system
+        and "tool_change_fixed_time_s_" in system
+    )
+    assert "out.current_traj.planned_time_s" in system
+    assert "cut_fixed_time_s" not in system
+    assert '"cut_fixed_time_s"' not in launch
+    assert 'default_value="15.0"' in launch

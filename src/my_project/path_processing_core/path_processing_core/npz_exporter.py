@@ -56,6 +56,7 @@ class CsvRow:
     path_id: int = 0
     path_end_flag: int = 0
     planned_time_s: float = 0.0
+    timing_category: str = "print"
     core_injection_block_id: int = -1
     core_injection_role: int = 0
 
@@ -169,6 +170,13 @@ def export_npz(
         "PRINT_FIT": 3,
         "EVENT": 4,
     }
+    timing_category_map = {
+        "print": 0,
+        "travel": 1,
+        "wait": 2,
+        "cut": 3,
+        "event": 4,
+    }
     event_type_map = {
         "": 0,
         "heat_cf": 1,
@@ -184,6 +192,10 @@ def export_npz(
     move_type_vals = np.array(list(move_type_map.values()), dtype=np.uint8)
     event_type_keys = np.array(list(event_type_map.keys()), dtype="S32")
     event_type_vals = np.array(list(event_type_map.values()), dtype=np.uint8)
+    timing_category_keys = np.array(
+        list(timing_category_map.keys()), dtype="S16")
+    timing_category_vals = np.array(
+        list(timing_category_map.values()), dtype=np.uint8)
     injection_role_map = {
         "none": 0,
         "tool_change_pre": 1,
@@ -289,6 +301,10 @@ def export_npz(
             path_end_flag = np.array([r.path_end_flag for r in chunk], dtype=np.uint8)
             planned_time_s = np.array(
                 [r.planned_time_s for r in chunk], dtype=np.float32)
+            timing_category = np.array(
+                [timing_category_map.get(r.timing_category, 255) for r in chunk],
+                dtype=np.uint8,
+            )
             core_injection_block_id = np.array(
                 [r.core_injection_block_id for r in chunk], dtype=np.int32)
             core_injection_role = np.array(
@@ -324,6 +340,7 @@ def export_npz(
                 path_id=path_id,
                 path_end_flag=path_end_flag,
                 planned_time_s=planned_time_s,
+                timing_category=timing_category,
                 core_injection_manifest=np.array(manifest_json),
                 core_injection_block_id=core_injection_block_id,
                 core_injection_role=core_injection_role,
@@ -333,6 +350,8 @@ def export_npz(
                 move_type_vocab_vals=move_type_vals,
                 event_type_vocab_keys=event_type_keys,
                 event_type_vocab_vals=event_type_vals,
+                timing_category_vocab_keys=timing_category_keys,
+                timing_category_vocab_vals=timing_category_vals,
             )
             self.part += 1
             self.wrote_any = True
@@ -362,6 +381,7 @@ def export_npz(
     flat_preview_stride = max(1, int(plot_stride))
     active_injection_block_id = -1
     active_injection_kind = ""
+    in_cut_sequence = False
     # Event rows are semantic handshakes, not RSI Cartesian samples.  The
     # first subsequent motion must be bridged from the held tool-change pose.
     pending_tool_change_bridge = None
@@ -565,7 +585,12 @@ def export_npz(
             if not has_any:
                 timing.start_segment(path_id=path_id, move_type=gc.type, start_seq=seq)
             has_any = True
-            planned_time_s = timing.append_trajectory_time()
+            timing_category = (
+                "cut" if in_cut_sequence
+                else "print" if gc.type in ("PRINT", "PRINT_FIT")
+                else "travel"
+            )
+            planned_time_s = timing.append_trajectory_time(timing_category)
             row_marker_id = int(marker_block_id)
             row_marker_role = int(marker_role)
             if row_marker_id < 0 and active_injection_block_id >= 0:
@@ -602,6 +627,7 @@ def export_npz(
                 trigger_seq=None,
                 path_id=path_id,
                 planned_time_s=planned_time_s,
+                timing_category=timing_category,
                 core_injection_block_id=row_marker_id,
                 core_injection_role=row_marker_role,
             )
@@ -1277,7 +1303,8 @@ def export_npz(
         )
         for i in range(1, steps + 1):
             ratio = i / steps
-            planned_time_s = timing.append_trajectory_time()
+            timing_category = "cut" if in_cut_sequence else "wait"
+            planned_time_s = timing.append_trajectory_time(timing_category)
             wait_marker_id = active_injection_block_id
             if active_injection_kind == "cut":
                 wait_marker_role = injection_role_map["cut_action"]
@@ -1305,6 +1332,7 @@ def export_npz(
                 trigger_seq=None,
                 path_id=_path_id_for(layer, subtype, occ),
                 planned_time_s=planned_time_s,
+                timing_category=timing_category,
                 core_injection_block_id=wait_marker_id,
                 core_injection_role=wait_marker_role,
             )
@@ -1616,7 +1644,7 @@ def export_npz(
             trigger_seq=None,
             path_id=_path_id_for(layer, subtype, occ),
         )
-        planned_time_s = timing.append_event_time()
+        planned_time_s = timing.append_event_time(ev.event_type)
         event_marker_id = active_injection_block_id
         if marker_role:
             event_marker_role = marker_role
@@ -1644,6 +1672,7 @@ def export_npz(
             trigger_seq=seq,
             path_id=_path_id_for(layer, subtype, occ),
             planned_time_s=planned_time_s,
+            timing_category="event",
             core_injection_block_id=event_marker_id,
             core_injection_role=event_marker_role,
         )
@@ -1952,7 +1981,11 @@ def export_npz(
                 if isinstance(cmd, MCommand) and cmd.code.upper() == "CUT":
                     active_injection_block_id = block_id_by_command_index.get(idx, -1)
                     active_injection_kind = "cut"
-                    _append_cut_sequence(cmd, cmd.layer, cmd.subtype, occ, idx)
+                    in_cut_sequence = True
+                    try:
+                        _append_cut_sequence(cmd, cmd.layer, cmd.subtype, occ, idx)
+                    finally:
+                        in_cut_sequence = False
                 else:
                     ev = _mcommand_to_event(cmd, current_tool)
                     if ev:
@@ -2088,8 +2121,14 @@ def export_npz(
         timing_parent = os.path.dirname(timing_sidecar_path)
         if timing_parent:
             os.makedirs(timing_parent, exist_ok=True)
+        timing_summary = timing.summary()
+        injected_cut_wait_s = max(0.0, float(cut_wait_s))
+        timing_summary["cut_injected_wait_s"] = injected_cut_wait_s
+        timing_summary["planned_cut_injected_wait_time_s"] = (
+            injected_cut_wait_s * int(timing_summary["planned_cut_count"])
+        )
         with open(timing_sidecar_path, "w", encoding="utf-8") as f:
-            json.dump(timing.summary(), f, ensure_ascii=False, indent=2)
+            json.dump(timing_summary, f, ensure_ascii=False, indent=2)
     except Exception as exc:
         print(f"[Warning] Failed to write timing sidecar json: {exc}")
 

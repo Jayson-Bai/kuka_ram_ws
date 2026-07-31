@@ -139,8 +139,18 @@ NpzLoader::NpzLoader(const std::string & path, size_t preload_chunks)
 void NpzLoader::load_timing_metadata(const std::string & path)
 {
   timing_metadata_valid_ = false;
+  timing_breakdown_valid_ = false;
   timing_valid_ = false;
   total_planned_time_s_ = 0.0;
+  planned_print_motion_time_s_ = 0.0;
+  planned_travel_time_s_ = 0.0;
+  planned_wait_time_s_ = 0.0;
+  planned_cut_time_s_ = 0.0;
+  cut_injected_wait_s_ = 0.0;
+  planned_cut_injected_wait_time_s_ = 0.0;
+  planned_cut_count_ = 0;
+  planned_tool_change_count_ = 0;
+  planned_unquantified_event_count_ = 0;
 
   const fs::path sidecar = timing_sidecar_for(path);
   std::ifstream in(sidecar);
@@ -156,6 +166,50 @@ void NpzLoader::load_timing_metadata(const std::string & path)
   total_planned_time_s_ = total;
   timing_metadata_valid_ = true;
   timing_valid_ = timing_rows_valid_ && timing_metadata_valid_;
+
+  double print_motion = 0.0;
+  double travel = 0.0;
+  double wait = 0.0;
+  double cut = 0.0;
+  double cut_injected_wait = 0.0;
+  double cut_injected_wait_total = 0.0;
+  double cut_count = 0.0;
+  double tool_change_count = 0.0;
+  double unquantified_count = 0.0;
+  const bool has_breakdown =
+    read_json_number(content, "planned_print_motion_time_s", print_motion) &&
+    read_json_number(content, "planned_travel_time_s", travel) &&
+    read_json_number(content, "planned_wait_time_s", wait) &&
+    read_json_number(content, "planned_cut_time_s", cut) &&
+    read_json_number(content, "cut_injected_wait_s", cut_injected_wait) &&
+    read_json_number(
+    content, "planned_cut_injected_wait_time_s", cut_injected_wait_total) &&
+    read_json_number(content, "planned_cut_count", cut_count) &&
+    read_json_number(content, "planned_tool_change_count", tool_change_count) &&
+    read_json_number(
+    content, "planned_unquantified_event_count", unquantified_count);
+  const double category_sum = print_motion + travel + wait + cut;
+  if (has_breakdown &&
+    print_motion >= 0.0 && travel >= 0.0 && wait >= 0.0 && cut >= 0.0 &&
+    cut_injected_wait >= 0.0 && cut_injected_wait_total >= 0.0 &&
+    cut_count >= 0.0 && tool_change_count >= 0.0 && unquantified_count >= 0.0 &&
+    std::abs(cut_injected_wait_total - cut_injected_wait * cut_count) <=
+    std::max(0.02, cut_injected_wait_total * 1e-5) &&
+    std::abs(category_sum - total) <= std::max(0.02, total * 1e-5))
+  {
+    planned_print_motion_time_s_ = print_motion;
+    planned_travel_time_s_ = travel;
+    planned_wait_time_s_ = wait;
+    planned_cut_time_s_ = cut;
+    cut_injected_wait_s_ = cut_injected_wait;
+    planned_cut_injected_wait_time_s_ = cut_injected_wait_total;
+    planned_cut_count_ = static_cast<uint32_t>(std::llround(cut_count));
+    planned_tool_change_count_ =
+      static_cast<uint32_t>(std::llround(tool_change_count));
+    planned_unquantified_event_count_ =
+      static_cast<uint32_t>(std::llround(unquantified_count));
+    timing_breakdown_valid_ = true;
+  }
 }
 
 bool NpzLoader::has_next() const
@@ -198,7 +252,6 @@ bool NpzLoader::next_row(NpzRow & out)
   out.path_id = c.path_id[i];
   out.path_end_flag = c.path_end_flag[i] != 0;
   out.planned_time_s = 0.0F;
-  out.planned_total_time_s = static_cast<float>(total_planned_time_s_);
   out.planned_time_valid = false;
   if (timing_valid_ && i < c.planned_time_s.size() &&
     std::isfinite(c.planned_time_s[i]))

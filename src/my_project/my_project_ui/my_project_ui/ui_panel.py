@@ -101,6 +101,7 @@ LAUNCH_PARAMS = [
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
     ("print_time_update_period_ms", "500", "预计时间更新周期（ms）", "系统管理器"),
+    ("tool_change_fixed_time_s", "15.0", "实测换头固定耗时（s）", "系统管理器"),
     ("latency_publish_period_ms", "200", "延迟状态发布周期（ms）", "延迟监控"),
     ("latency_history_limit", "5000", "RSI 心跳缓存数量", "延迟监控"),
     ("latency_stats_window_limit", "5000", "延迟统计窗口样本数", "延迟监控"),
@@ -1279,9 +1280,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_mode_back.setCursor(QtCore.Qt.PointingHandCursor)
         self._print_progress_widget = QtWidgets.QWidget()
         self._print_progress_widget.setObjectName("printProgressWidget")
-        progress_layout = QtWidgets.QHBoxLayout(self._print_progress_widget)
+        progress_layout = QtWidgets.QVBoxLayout(self._print_progress_widget)
         progress_layout.setContentsMargins(0, 0, 0, 0)
-        progress_layout.setSpacing(6)
+        progress_layout.setSpacing(2)
+        progress_summary_layout = QtWidgets.QHBoxLayout()
+        progress_summary_layout.setContentsMargins(0, 0, 0, 0)
+        progress_summary_layout.setSpacing(6)
         self._print_progress_label = QtWidgets.QLabel("层进度 -- / --")
         self._print_progress_label.setObjectName("printProgressLabel")
         self._print_progress_label.setAlignment(
@@ -1299,9 +1303,24 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_time_label.setAlignment(
             QtCore.Qt.AlignLeft | QtCore.Qt.AlignVCenter)
         self._print_time_label.setMinimumWidth(250)
-        progress_layout.addWidget(self._print_progress_label)
-        progress_layout.addWidget(self._print_progress_bar)
-        progress_layout.addWidget(self._print_time_label)
+        progress_summary_layout.addWidget(self._print_progress_label)
+        progress_summary_layout.addWidget(self._print_progress_bar)
+        progress_summary_layout.addWidget(self._print_time_label)
+        progress_layout.addLayout(progress_summary_layout)
+        self._print_time_breakdown_label = QtWidgets.QLabel("可量化构成 --")
+        self._print_time_breakdown_label.setObjectName("printTimeBreakdownLabel")
+        self._print_time_breakdown_label.setAlignment(
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self._print_time_breakdown_label.setStyleSheet(
+            "color: #4f5965; font-size: 11px;")
+        self._print_time_event_label = QtWidgets.QLabel("固定事件 --")
+        self._print_time_event_label.setObjectName("printTimeEventLabel")
+        self._print_time_event_label.setAlignment(
+            QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self._print_time_event_label.setStyleSheet(
+            "color: #4f5965; font-size: 11px;")
+        progress_layout.addWidget(self._print_time_breakdown_label)
+        progress_layout.addWidget(self._print_time_event_label)
         self._print_progress_widget.setVisible(False)
 
         header.addWidget(self._title_label, 1)
@@ -3935,11 +3954,39 @@ class _UiStatusWidget(QtWidgets.QWidget):
     def _update_print_time(self, msg: UiStatus):
         if not msg.print_time_valid:
             self._print_time_label.setText("时间估计 --")
+            self._print_time_breakdown_label.setText("可量化构成 --")
+            self._print_time_event_label.setText("固定事件 --")
             return
         self._print_time_label.setText(
-            "总 " + _format_print_duration(msg.planned_total_time_s) +
-            " | 已用 " + _format_print_duration(msg.planned_elapsed_time_s) +
-            " | 剩余约 " + _format_print_duration(msg.planned_remaining_time_s)
+            f"总 {_format_print_duration(msg.planned_total_time_s)}"
+            f" | 已用 {_format_print_duration(msg.planned_elapsed_time_s)}"
+            f" | 剩余约 {_format_print_duration(msg.planned_remaining_time_s)}"
+        )
+        if not msg.print_time_breakdown_valid:
+            self._print_time_breakdown_label.setText(
+                "当前 NPZ 无分项计时元数据（需重新导出）")
+            self._print_time_event_label.setText("固定事件 --")
+            return
+        self._print_time_breakdown_label.setText(
+            "可量化构成  打印运动 "
+            f"{_format_print_duration(msg.planned_print_motion_time_s)}"
+            f" | 空走 {_format_print_duration(msg.planned_travel_time_s)}"
+            " | 原地等待/挤出动作 "
+            f"{_format_print_duration(msg.planned_wait_time_s)}"
+            f" | 剪切流程 {_format_print_duration(msg.planned_cut_time_s)}"
+        )
+        self._print_time_event_label.setText(
+            f"注入参数  剪切等待 {msg.cut_injected_wait_s:g}s × "
+            f"{int(msg.planned_cut_count)} = "
+            f"{_format_print_duration(msg.planned_cut_injected_wait_time_s)}"
+            "（已包含于剪切流程）"
+            f" | 换头 {msg.tool_change_fixed_time_s:g}s × "
+            f"{int(msg.planned_tool_change_count)} = "
+            f"{_format_print_duration(msg.planned_tool_change_time_s)}"
+            f"（已用 "
+            f"{_format_print_duration(msg.planned_tool_change_elapsed_time_s)}）"
+            " | 按约定忽略 加热/风扇/挤出复位 "
+            f"{int(msg.planned_unquantified_event_count)} 次"
         )
 
     def _update_print_progress(self, msg: UiStatus):

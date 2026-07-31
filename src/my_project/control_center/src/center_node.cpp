@@ -14,6 +14,7 @@
 #include <my_project_interfaces/msg/kuka_status.hpp>
 #include <my_project_interfaces/msg/planned_event.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/print_timing_plan.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/trajectory_point.hpp>
 
@@ -34,6 +35,7 @@ using std_msgs::msg::String;
 using my_project_interfaces::msg::TrajectoryPoint; //TCP轨迹点
 using my_project_interfaces::msg::PlannedEvent; //打印事件
 using my_project_interfaces::msg::PrintHeadStatus; //打印头状态
+using my_project_interfaces::msg::PrintTimingPlan;
 using my_project_interfaces::msg::RsiHeartBeat; //RSI心跳
 using my_project_interfaces::msg::KukaStatus; //kuka状态
 
@@ -51,6 +53,7 @@ private:
 
   rclcpp::Publisher<TrajectoryPoint>::SharedPtr traj_pub_;
   rclcpp::Publisher<PlannedEvent>::SharedPtr event_pub_;
+  rclcpp::Publisher<PrintTimingPlan>::SharedPtr timing_plan_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr cmd_pub_;
   std::mutex cache_mutex_;
   std::optional<PrintHeadStatus> last_printhead_status_;
@@ -184,6 +187,8 @@ public:
     //发布
     traj_pub_ = create_publisher<TrajectoryPoint>("/planned_trajectory", plan_qos);
     event_pub_ = create_publisher<PlannedEvent>("/planned_events", event_qos);
+    timing_plan_pub_ = create_publisher<PrintTimingPlan>(
+      "/print/timing_plan", rclcpp::QoS(1).reliable().transient_local());
     cmd_pub_ = create_publisher<std_msgs::msg::String>("/system/command", 10);
 
     //订阅系统命令
@@ -213,11 +218,42 @@ public:
       }
     );
 
+    publish_timing_plan();
     initial_prefill();
 
   }
 
 private:
+  void publish_timing_plan()
+  {
+    if (!timing_plan_pub_ || !npz_loader_ || !npz_loader_->ok()) {
+      return;
+    }
+    PrintTimingPlan plan;
+    plan.stamp = now();
+    plan.planned_total_time_s =
+      static_cast<float>(npz_loader_->total_planned_time_s());
+    plan.planned_print_motion_time_s =
+      static_cast<float>(npz_loader_->planned_print_motion_time_s());
+    plan.planned_travel_time_s =
+      static_cast<float>(npz_loader_->planned_travel_time_s());
+    plan.planned_wait_time_s =
+      static_cast<float>(npz_loader_->planned_wait_time_s());
+    plan.planned_cut_time_s =
+      static_cast<float>(npz_loader_->planned_cut_time_s());
+    plan.cut_injected_wait_s =
+      static_cast<float>(npz_loader_->cut_injected_wait_s());
+    plan.planned_cut_injected_wait_time_s =
+      static_cast<float>(npz_loader_->planned_cut_injected_wait_time_s());
+    plan.planned_cut_count = npz_loader_->planned_cut_count();
+    plan.planned_tool_change_count = npz_loader_->planned_tool_change_count();
+    plan.planned_unquantified_event_count =
+      npz_loader_->planned_unquantified_event_count();
+    plan.breakdown_valid = npz_loader_->timing_breakdown_valid();
+    plan.valid = npz_loader_->timing_valid();
+    timing_plan_pub_->publish(plan);
+  }
+
   void on_print_test_command(const std::string & cmd)
   {
     if (cmd == "RESET") {
@@ -303,6 +339,7 @@ private:
     }
     paused_.store(false);
     RCLCPP_INFO(get_logger(), "测试模式动态加载 NPZ：%s", path.c_str());
+    publish_timing_plan();
     initial_prefill();
   }
 

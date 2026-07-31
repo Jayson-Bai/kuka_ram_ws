@@ -289,6 +289,32 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
             assert direct_data[key].dtype == injected_data[key].dtype, key
             assert direct_data[key].shape == injected_data[key].shape, key
             assert np.array_equal(direct_data[key], injected_data[key]), key
+    direct_timing = json.loads(
+        direct.with_suffix(".timing.json").read_text(encoding="utf-8"))
+    injected_timing = json.loads(
+        injected.with_suffix(".timing.json").read_text(encoding="utf-8"))
+    for key in (
+        "total_planned_time_s",
+        "planned_print_motion_time_s",
+        "planned_travel_time_s",
+        "planned_wait_time_s",
+        "planned_cut_time_s",
+        "cut_injected_wait_s",
+        "planned_cut_injected_wait_time_s",
+    ):
+        assert injected_timing[key] == pytest.approx(
+            direct_timing[key], abs=0.005)
+    for key in (
+        "planned_cut_count",
+        "planned_tool_change_count",
+        "planned_unquantified_event_count",
+    ):
+        assert injected_timing[key] == direct_timing[key]
+    assert direct_timing["cut_injected_wait_s"] == changed["cut_wait_s"]
+    assert injected_timing["cut_injected_wait_s"] == changed["cut_wait_s"]
+    assert direct_timing["planned_cut_injected_wait_time_s"] == (
+        changed["cut_wait_s"] * direct_timing["planned_cut_count"]
+    )
 
 
 def test_fiber_offset_change_keeps_resin_return_target_and_print_rows_fixed(tmp_path):
