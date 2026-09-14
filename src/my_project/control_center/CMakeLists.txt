@@ -74,6 +74,10 @@ if(BUILD_TESTING)
   # a copyright and license is added to all source files
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  add_executable(test_cnpy_zip64 test/test_cnpy_zip64.cpp)
+  target_link_libraries(test_cnpy_zip64 cnpy ZLIB::ZLIB)
+  add_test(NAME cnpy_zip64 COMMAND test_cnpy_zip64)
 endif()
 
 ament_package()
