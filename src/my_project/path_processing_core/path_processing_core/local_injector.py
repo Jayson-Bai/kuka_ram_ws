@@ -8,6 +8,8 @@ closed instead of producing a best-effort trajectory.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -38,6 +40,13 @@ _HIGH_PRECISION_MAP = {
 }
 _HIGH_PRECISION_FIELDS = tuple(_HIGH_PRECISION_MAP.values())
 _HIGH_PRECISION_POSE_FIELDS = _HIGH_PRECISION_FIELDS[:6]
+_INJECTION_FORMAT_V1 = "core_npz_local_injection_v1"
+_INJECTION_FORMAT_V2 = "core_npz_local_injection_v2"
+_OFFSET_KIND = "command_compensation"
+_OFFSET_FRAME = "calibrated_flat_print_reference"
+_ABC_CONVENTION = "KUKA_AZ_BY_CX"
+_ABC_SEMANTICS = "relative_to_calibrated_flat_printing_pose"
+_OFFSET_APPLICATION = "per_sample_pose_rotated"
 
 _REQUIRED = {
     "seq", "x", "y", "z", "a", "b", "c", "e", "tool_id", "move_type",
@@ -88,20 +97,25 @@ def _part_sort_key(path: Path) -> int:
 
 
 def _part_files(path: Path) -> list[Path]:
-    if not path.exists():
-        raise FileNotFoundError(str(path))
     if path.is_dir():
         files = list(path.glob("*.npz"))
+    elif not path.exists():
+        files = list(path.parent.glob(f"{path.stem}_part*.npz"))
     else:
         match = _PART_RE.match(path.stem)
-        files = list(path.parent.glob(f"{match.group('base')}_part*.npz")) if match else [path]
+        files = (
+            list(path.parent.glob(f"{match.group('base')}_part*.npz"))
+            if match else [path]
+        )
     files.sort(key=lambda p: (_part_sort_key(p), p.name))
     if not files:
         raise ValueError("no NPZ parts found")
     return files
 
 
-def _read_parts(files: list[Path]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], list[str]]:
+def _read_parts(
+    files: list[Path],
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], list[str]]:
     chunks: list[dict[str, np.ndarray]] = []
     for path in files:
         with np.load(path, allow_pickle=False) as data:
@@ -175,13 +189,70 @@ def _json_manifest(value: np.ndarray) -> dict[str, Any]:
         manifest = json.loads(str(value.item()))
     except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ValueError("invalid core_injection_manifest JSON") from exc
-    if not isinstance(manifest, dict) or manifest.get("format") != "core_npz_local_injection_v1":
+    if not isinstance(manifest, dict) or manifest.get("format") not in {
+        _INJECTION_FORMAT_V1,
+        _INJECTION_FORMAT_V2,
+    }:
         raise ValueError("unsupported core injection manifest format")
+    if manifest.get("format") == _INJECTION_FORMAT_V2:
+        expected = {
+            "offset_kind": _OFFSET_KIND,
+            "offset_frame": _OFFSET_FRAME,
+            "abc_convention": _ABC_CONVENTION,
+            "abc_semantics": _ABC_SEMANTICS,
+            "offset_application": _OFFSET_APPLICATION,
+        }
+        mismatched = [
+            name for name, value in expected.items()
+            if manifest.get(name) != value
+        ]
+        if mismatched:
+            raise ValueError(
+                "unsupported core injection v2 semantics: " + ", ".join(mismatched)
+            )
     return manifest
+
+
+def _rotated_reference_offsets(
+    a_deg: np.ndarray,
+    b_deg: np.ndarray,
+    c_deg: np.ndarray,
+    offset: np.ndarray,
+) -> np.ndarray:
+    """Rotate a flat-reference command compensation by KUKA Rz(A)Ry(B)Rx(C)."""
+
+    a = np.radians(np.asarray(a_deg, dtype=np.float64))
+    b = np.radians(np.asarray(b_deg, dtype=np.float64))
+    c = np.radians(np.asarray(c_deg, dtype=np.float64))
+    x, y, z = np.asarray(offset, dtype=np.float64)
+    ca, sa = np.cos(a), np.sin(a)
+    cb, sb = np.cos(b), np.sin(b)
+    cc, sc = np.cos(c), np.sin(c)
+    return np.column_stack((
+        ca * cb * x + (ca * sb * sc - sa * cc) * y
+        + (ca * sb * cc + sa * sc) * z,
+        sa * cb * x + (sa * sb * sc + ca * cc) * y
+        + (sa * sb * cc - ca * sc) * z,
+        -sb * x + cb * sc * y + cb * cc * z,
+    ))
+
+
+def _calibration_id(tool_offset: np.ndarray, resin_z: float) -> str:
+    payload = json.dumps({
+        "abc_convention": _ABC_CONVENTION,
+        "abc_semantics": _ABC_SEMANTICS,
+        "offset_application": _OFFSET_APPLICATION,
+        "offset_frame": _OFFSET_FRAME,
+        "offset_kind": _OFFSET_KIND,
+        "resin_z_print_compensation_mm": float(resin_z),
+        "tool_offset": [float(value) for value in tool_offset],
+    }, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
 def _decode_vocab(keys: np.ndarray, vals: np.ndarray) -> dict[int, str]:
     return {int(value): key.decode("utf-8").rstrip("\x00") for key, value in zip(keys, vals)}
+
 
 def _ensure_role_vocab(static: dict[str, np.ndarray], name: str, code: int) -> None:
     roles = _decode_vocab(static["core_injection_role_vocab_keys"], static["core_injection_role_vocab_vals"])
@@ -395,13 +466,40 @@ def _rebuild_resin(arrays, manifest, roles, move_types, new_value, base_value, d
     _replace(arrays, insert_at, remove_end, rows)
 
 
-def _apply_global_transforms(arrays, manifest, roles, move_types, delta_tool, delta_resin):
+def _apply_global_transforms(
+    arrays,
+    manifest,
+    roles,
+    move_types,
+    current_tool_offset,
+    new_tool_offset,
+    delta_resin,
+    *,
+    legacy_fixed_offset=False,
+):
     role_names = np.array([roles[int(v)] for v in arrays["core_injection_role"]], dtype=object)
     non_event = arrays["event_flag"] == 0
     tool_mask = (arrays["tool_id"] == 1) & non_event & (role_names != "tool_change_pre")
-    for public, delta in zip(("x", "y", "z"), delta_tool):
+    angle_keys = (
+        ("a64", "b64", "c64") if _has_high_precision(arrays)
+        else ("a", "b", "c")
+    )
+    rotated_delta = _rotated_reference_offsets(
+        arrays[angle_keys[0]][tool_mask],
+        arrays[angle_keys[1]][tool_mask],
+        arrays[angle_keys[2]][tool_mask],
+        (
+            np.asarray(new_tool_offset, dtype=np.float64)
+            if legacy_fixed_offset
+            else np.asarray(new_tool_offset, dtype=np.float64)
+            - np.asarray(current_tool_offset, dtype=np.float64)
+        ),
+    )
+    if legacy_fixed_offset:
+        rotated_delta -= np.asarray(current_tool_offset, dtype=np.float64)
+    for axis, public in enumerate(("x", "y", "z")):
         precise = _HIGH_PRECISION_MAP.get(public) if _has_high_precision(arrays) else public
-        arrays[precise][tool_mask] += float(delta)
+        arrays[precise][tool_mask] += rotated_delta[:, axis]
     if abs(delta_resin) <= 1e-12:
         _sync_public_pose(arrays)
         return
@@ -464,7 +562,13 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     lifted = start.copy()
     lifted[2] += max(0.0, float(safe_lift))
     target = lifted.copy()
-    target[:3] += sign * np.asarray(new_offset, dtype=float)
+    rotated_offset = _rotated_reference_offsets(
+        np.asarray([lifted[3]]),
+        np.asarray([lifted[4]]),
+        np.asarray([lifted[5]]),
+        np.asarray(new_offset, dtype=np.float64),
+    )[0]
+    target[:3] += sign * rotated_offset
     rows = []
     if has_offset or safe_lift > 1e-9:
         template = event_index
@@ -817,6 +921,45 @@ def _timing_sidecar(path: Path) -> Path:
     return path.parent / f"{name}.timing.json"
 
 
+def _offset_sidecar(path: Path) -> Path:
+    stem = _PART_RE.match(path.stem)
+    name = stem.group("base") if stem else path.stem
+    return path.parent / f"{name}.offset.json"
+
+
+def _write_offset_metadata(path: Path, manifest: dict[str, Any]) -> Path:
+    base = manifest["base_parameters"]
+    target = _offset_sidecar(path)
+    payload = {
+        "format": _INJECTION_FORMAT_V2,
+        "schema_version": 2,
+        "injection_state": manifest["injection_state"],
+        "offset_kind": manifest["offset_kind"],
+        "offset_frame": manifest["offset_frame"],
+        "abc_convention": manifest["abc_convention"],
+        "abc_semantics": manifest["abc_semantics"],
+        "offset_application": manifest["offset_application"],
+        "calibration_id": manifest["calibration_id"],
+        "injected_at": manifest["injected_at"],
+        "tool_offset": [float(value) for value in base["tool_offset"]],
+        "resin_z_print_compensation_mm": float(
+            base["resin_z_print_compensation_mm"]
+        ),
+    }
+    fd, raw = tempfile.mkstemp(
+        prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
+    )
+    temporary = Path(raw)
+    try:
+        with open(fd, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+        temporary.replace(target)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return target
+
+
 def _write_timing(
     path: Path, arrays: dict[str, np.ndarray],
     static: dict[str, np.ndarray], dt: float,
@@ -942,6 +1085,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
     manifest = _json_manifest(static["core_injection_manifest"])
+    source_manifest_format = manifest["format"]
     _ensure_role_vocab(static, "tool_change_bridge", 9)
     overrides = (params or LocalInjectionParams(
         tool_offset=tool_offset,
@@ -952,8 +1096,13 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     )).as_overrides()
     if not overrides:
         raise ValueError("at least one local injection parameter is required")
-    roles = _decode_vocab(static["core_injection_role_vocab_keys"], static["core_injection_role_vocab_vals"])
-    move_types = _decode_vocab(static["move_type_vocab_keys"], static["move_type_vocab_vals"])
+    roles = _decode_vocab(
+        static["core_injection_role_vocab_keys"],
+        static["core_injection_role_vocab_vals"],
+    )
+    move_types = _decode_vocab(
+        static["move_type_vocab_keys"], static["move_type_vocab_vals"]
+    )
     base = manifest.get("base_parameters", {})
     current_offset = np.asarray(base.get("tool_offset", [0.0, 0.0, 0.0]), dtype=float)
     new_offset = np.asarray(overrides.get("tool_offset", current_offset), dtype=float)
@@ -1001,7 +1150,19 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         )
     if resin_changed:
         _rebuild_resin(arrays, manifest, roles, move_types, new_resin, current_resin, dt, feed)
-    _apply_global_transforms(arrays, manifest, roles, move_types, new_offset - current_offset, new_resin - current_resin)
+    _apply_global_transforms(
+        arrays,
+        manifest,
+        roles,
+        move_types,
+        current_offset,
+        new_offset,
+        new_resin - current_resin,
+        legacy_fixed_offset=(
+            source_manifest_format == _INJECTION_FORMAT_V1
+            and bool(np.any(np.abs(current_offset) > 1e-9))
+        ),
+    )
     # A CUT can alter the predecessor pose of a later tool change.
     # Rebuild CUT first, then rebuild tool-change pre/bridge rows from that
     # final pose, matching direct Core full-export ordering.
@@ -1015,8 +1176,27 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
     _repair(arrays, dt)
     manifest["base_parameters"] = dict(base)
     manifest["base_parameters"].update(overrides)
-    static["core_injection_manifest"] = np.array(json.dumps(manifest, ensure_ascii=False, separators=(",", ":")))
-    output = Path(output_path).expanduser() if output_path is not None else Path(input_path).expanduser()
+    injected_at = datetime.now(timezone.utc).isoformat()
+    calibration_id = _calibration_id(new_offset, new_resin)
+    manifest.update({
+        "format": _INJECTION_FORMAT_V2,
+        "schema_version": 2,
+        "offset_kind": _OFFSET_KIND,
+        "offset_frame": _OFFSET_FRAME,
+        "abc_convention": _ABC_CONVENTION,
+        "abc_semantics": _ABC_SEMANTICS,
+        "offset_application": _OFFSET_APPLICATION,
+        "injection_state": "machine_ready",
+        "calibration_id": calibration_id,
+        "injected_at": injected_at,
+    })
+    static["core_injection_manifest"] = np.array(
+        json.dumps(manifest, ensure_ascii=False, separators=(",", ":"))
+    )
+    output = (
+        Path(output_path).expanduser()
+        if output_path is not None else Path(input_path).expanduser()
+    )
     parts = _output_parts(output, len(files))
     sizes = []
     for path in files:
@@ -1038,8 +1218,15 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
             parts = _output_parts(output, len(sizes))
     _atomic_write(parts, arrays, static, sizes, key_order)
     _write_timing(output, arrays, static, dt)
+    offset_sidecar = _write_offset_metadata(output, manifest)
     return {
-        "input_parts": len(files), "output_parts": len(parts), "rows": len(arrays["seq"]),
-        "output_path": str(output), "delta_tool_offset": [float(v) for v in new_offset - current_offset],
+        "input_parts": len(files),
+        "output_parts": len(parts),
+        "rows": len(arrays["seq"]),
+        "output_path": str(output),
+        "delta_tool_offset": [float(v) for v in new_offset - current_offset],
         "delta_resin_z_mm": float(new_resin - current_resin),
+        "injection_state": "machine_ready",
+        "calibration_id": calibration_id,
+        "offset_sidecar": str(offset_sidecar),
     }

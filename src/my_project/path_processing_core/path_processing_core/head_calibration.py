@@ -91,7 +91,14 @@ def save_head_calibration(
     p = Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
+        "format": "kuka_parallel_head_calibration_v2",
+        "schema_version": 2,
         "updated_at": datetime.now(timezone.utc).isoformat(),
+        "offset_kind": "command_compensation",
+        "offset_frame": "calibrated_flat_print_reference",
+        "abc_convention": "KUKA_AZ_BY_CX",
+        "abc_semantics": "relative_to_calibrated_flat_printing_pose",
+        "offset_application": "per_sample_pose_rotated",
         "resin": {
             "z_print_compensation_mm": float(
                 calibration.resin_z_print_compensation_mm

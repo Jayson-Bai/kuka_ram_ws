@@ -283,9 +283,20 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
 
     with np.load(direct, allow_pickle=False) as direct_data, np.load(
         injected, allow_pickle=False
-    ) as injected_data, np.load(source, allow_pickle=False) as source_data:
+    ) as injected_data:
         assert direct_data.files == injected_data.files
         for key in direct_data.files:
+            if key == "core_injection_manifest":
+                manifest_raw = injected_data[key].item()
+                if isinstance(manifest_raw, bytes):
+                    manifest_raw = manifest_raw.decode("utf-8")
+                manifest = json.loads(str(manifest_raw))
+                assert manifest["format"] == "core_npz_local_injection_v2"
+                assert manifest["injection_state"] == "machine_ready"
+                assert manifest["abc_convention"] == "KUKA_AZ_BY_CX"
+                assert manifest["offset_application"] == "per_sample_pose_rotated"
+                assert manifest["calibration_id"].startswith("sha256:")
+                continue
             assert direct_data[key].dtype == injected_data[key].dtype, key
             assert direct_data[key].shape == injected_data[key].shape, key
             assert np.array_equal(direct_data[key], injected_data[key]), key
@@ -436,6 +447,8 @@ def test_random_multilayer_injection_matches_full_export_after_fiber_z_only_chan
     ) as expected, np.load(injected_305, allow_pickle=False) as actual:
         assert expected.files == actual.files
         for key in expected.files:
+            if key == "core_injection_manifest":
+                continue
             assert expected[key].dtype == actual[key].dtype, key
             assert expected[key].shape == actual[key].shape, key
             if key in {"x64", "y64", "z64"}:

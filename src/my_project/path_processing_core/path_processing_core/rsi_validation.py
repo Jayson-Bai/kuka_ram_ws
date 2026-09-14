@@ -20,6 +20,23 @@ _RSI_PERIOD_S = 0.004
 _MAX_TCP_SPEED_MM_S = 25.0
 _FLOAT_TOLERANCE_MM = 2e-5
 _MAX_TCP_STEP_MM = _MAX_TCP_SPEED_MM_S * _RSI_PERIOD_S + _FLOAT_TOLERANCE_MM
+_ANGULAR_TOLERANCE_DEG = 1e-6
+
+
+def _kuka_abc_quaternions(abc_deg: np.ndarray) -> np.ndarray:
+    """Return normalized quaternions for KUKA Rz(A)Ry(B)Rx(C) rows."""
+
+    half = np.radians(np.asarray(abc_deg, dtype=np.float64)) * 0.5
+    a, b, c = half[:, 0], half[:, 1], half[:, 2]
+    ca, sa = np.cos(a), np.sin(a)
+    cb, sb = np.cos(b), np.sin(b)
+    cc, sc = np.cos(c), np.sin(c)
+    return np.column_stack((
+        ca * cb * cc + sa * sb * sc,
+        ca * cb * sc - sa * sb * cc,
+        ca * sb * cc + sa * cb * sc,
+        sa * cb * cc - ca * sb * sc,
+    ))
 
 
 class RsiContinuityError(ValueError):
@@ -70,7 +87,9 @@ def _write_report(path: Path | None, report: dict) -> None:
 
 
 def validate_final_npz(
-    paths: str | Path | Iterable[str | Path], *, report_path: str | Path | None = None,
+    paths: str | Path | Iterable[str | Path], *,
+    report_path: str | Path | None = None,
+    max_angular_speed_deg_s: float | None = None,
 ) -> dict:
     """Validate final Cartesian RSI continuity and report TCP floor warnings.
 
@@ -85,7 +104,11 @@ def validate_final_npz(
     static = None
     for path in files:
         with np.load(path, allow_pickle=False) as data:
-            required = {"seq", "x", "y", "z", "event_flag", "planned_time_s", "tool_id", "move_type", "layer_index", "move_type_vocab_keys", "move_type_vocab_vals"}
+            required = {
+                "seq", "x", "y", "z", "a", "b", "c", "event_flag",
+                "planned_time_s", "tool_id", "move_type", "layer_index",
+                "move_type_vocab_keys", "move_type_vocab_vals",
+            }
             missing = sorted(required - set(data.files))
             if missing:
                 raise ValueError(f"{path} missing NPZ fields: {', '.join(missing)}")
@@ -103,6 +126,9 @@ def validate_final_npz(
             chunks.append({
                 "seq": data["seq"].astype(np.int64, copy=True),
                 "xyz": np.column_stack([data[key].astype(np.float64) for key in pose_keys]),
+                "abc": np.column_stack([
+                    data[key].astype(np.float64) for key in ("a", "b", "c")
+                ]),
                 "event": data["event_flag"].astype(np.uint8, copy=True),
                 "time": data["planned_time_s"].copy(),
                 "tool": data["tool_id"].astype(np.int64, copy=True),
@@ -117,11 +143,14 @@ def validate_final_npz(
     rsi = values["event"] == 0
     rsi_seq = seq[rsi]
     rsi_xyz = values["xyz"][rsi]
+    rsi_abc = values["abc"][rsi]
     rsi_time = values["time"][rsi]
     if len(rsi_xyz) < 2:
         raise RsiContinuityError("final NPZ has fewer than two RSI Cartesian samples")
     if not np.all(np.isfinite(rsi_xyz)):
         raise RsiContinuityError("final NPZ RSI Cartesian samples contain non-finite values")
+    if not np.all(np.isfinite(rsi_abc)):
+        raise RsiContinuityError("final NPZ RSI orientation samples contain non-finite values")
     if not np.all(np.diff(rsi_seq) > 0) or not np.all(np.diff(rsi_time) > 0.0):
         raise RsiContinuityError("final NPZ RSI sequence/time is not strictly increasing")
 
@@ -139,15 +168,49 @@ def validate_final_npz(
     step_limit = _MAX_TCP_STEP_MM
     bad = np.flatnonzero(steps > step_limit)
 
+    quaternions = _kuka_abc_quaternions(rsi_abc)
+    dots = np.abs(np.sum(quaternions[:-1] * quaternions[1:], axis=1))
+    orientation_steps_deg = np.degrees(
+        2.0 * np.arccos(np.clip(dots, 0.0, 1.0))
+    )
+    max_orientation_step_deg = (
+        float(np.max(orientation_steps_deg)) if len(orientation_steps_deg) else 0.0
+    )
+    max_observed_angular_speed = max_orientation_step_deg / _RSI_PERIOD_S
+    if max_angular_speed_deg_s is not None:
+        max_angular_speed_deg_s = float(max_angular_speed_deg_s)
+        if not np.isfinite(max_angular_speed_deg_s) or max_angular_speed_deg_s <= 0.0:
+            raise ValueError("max_angular_speed_deg_s must be a positive finite value")
+        angular_limit = max_angular_speed_deg_s * _RSI_PERIOD_S
+        angular_bad = np.flatnonzero(
+            orientation_steps_deg > angular_limit + _ANGULAR_TOLERANCE_DEG
+        )
+        if len(angular_bad):
+            index = int(angular_bad[np.argmax(orientation_steps_deg[angular_bad])])
+            raise RsiContinuityError(
+                "final NPZ orientation exceeds the configured angular speed: "
+                f"sample {index}, step={orientation_steps_deg[index]:.9f} deg, "
+                f"limit={angular_limit:.9f} deg/4ms"
+            )
+
     report = {
         "format": "rsi_continuity_validation",
-        "version": 1,
+        "version": 2,
         "files": [str(item) for item in files],
         "rows": int(len(seq)),
         "rsi_rows": int(np.count_nonzero(rsi)),
         "event_rows_excluded_from_geometry": int(np.count_nonzero(~rsi)),
         "rsi_period_s": _RSI_PERIOD_S,
-        "max_timestamp_quantization_error_s": float(np.max(time_error)) if len(time_error) else 0.0,
+        "max_timestamp_quantization_error_s": (
+            float(np.max(time_error)) if len(time_error) else 0.0
+        ),
+        "abc_convention": "KUKA_AZ_BY_CX",
+        "max_orientation_step_deg": max_orientation_step_deg,
+        "max_observed_angular_speed_deg_s": max_observed_angular_speed,
+        "configured_max_angular_speed_deg_s": max_angular_speed_deg_s,
+        "orientation_limit_ok": (
+            None if max_angular_speed_deg_s is None else True
+        ),
         "max_tcp_speed_mm_s": _MAX_TCP_SPEED_MM_S,
         "rsi_step_limit_mm": float(step_limit),
         "max_rsi_step_mm": float(np.max(steps)),
@@ -156,6 +219,10 @@ def validate_final_npz(
         "tcp_floor_ok": True,
         "warnings": [],
     }
+    if max_angular_speed_deg_s is None:
+        report["warnings"].append(
+            "尚未配置机器人姿态角速度上限；已报告逐帧姿态变化，但未执行角速度门禁"
+        )
     if len(bad):
         index = int(bad[np.argmax(steps[bad])])
         report["continuity_error"] = {
