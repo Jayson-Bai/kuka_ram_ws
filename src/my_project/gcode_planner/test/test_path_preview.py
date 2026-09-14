@@ -681,7 +681,10 @@ def test_2d_preview_hides_fiber_xy_offset_only():
 
 
 def test_2d_preview_reads_fiber_offset_from_npz_sidecar(tmp_path):
-    from gcode_planner.path_preview import _fiber_preview_offset_xy
+    from gcode_planner.path_preview import (
+        _fiber_preview_offset_xy,
+        _fiber_preview_offset_xyz,
+    )
 
     npz_path = tmp_path / "job.npz"
     npz_path.write_bytes(b"")
@@ -691,6 +694,7 @@ def test_2d_preview_reads_fiber_offset_from_npz_sidecar(tmp_path):
     )
 
     assert _fiber_preview_offset_xy(npz_path) == pytest.approx((2.5, -1.25))
+    assert _fiber_preview_offset_xyz(npz_path) == pytest.approx((2.5, -1.25, 3.0))
 
 
 def test_2d_preview_reads_fiber_offset_from_npz_manifest(tmp_path):
@@ -705,3 +709,35 @@ def test_2d_preview_reads_fiber_offset_from_npz_manifest(tmp_path):
     )
 
     assert _fiber_preview_offset_xy(npz_path) == pytest.approx((2.5, -1.25))
+
+
+def test_2d_preview_removes_pose_rotated_fiber_offset():
+    from gcode_planner.path_preview import (
+        PathType,
+        PreviewPath,
+        _points_for_2d_preview,
+    )
+
+    fiber = PreviewPath(
+        layer=0,
+        order_index=0,
+        path_type=PathType.FIBER_PRINT,
+        tool_id=1,
+        points=((11.0, 20.0, 0.2), (10.0, 21.0, 0.2)),
+        poses=(
+            (11.0, 20.0, 0.2, 0.0, 0.0, 0.0),
+            (10.0, 21.0, 0.2, 90.0, 0.0, 0.0),
+        ),
+        start=(11.0, 20.0, 0.2),
+        end=(10.0, 21.0, 0.2),
+        start_abc=(0.0, 0.0, 0.0),
+        end_abc=(90.0, 0.0, 0.0),
+        src_line_start="1",
+        src_line_end="2",
+    )
+
+    display = _points_for_2d_preview(
+        fiber, (1.0, 0.0, 0.0), pose_rotated=True
+    )
+
+    np.testing.assert_allclose(display, ((10.0, 20.0, 0.2),) * 2, atol=1e-12)

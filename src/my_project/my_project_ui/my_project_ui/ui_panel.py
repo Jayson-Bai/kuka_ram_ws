@@ -564,19 +564,26 @@ def _offset_sidecar_candidates(npz_source):
     return candidates
 
 
-def _read_npz_export_metadata(npz_source):
+def _read_npz_injection_metadata(npz_source):
     for offset_file in _offset_sidecar_candidates(npz_source):
         if not offset_file.is_file():
             continue
         with open(offset_file, "r", encoding="utf-8") as f:
             data = json.load(f)
+        return data, str(offset_file)
+    return None, None
+
+
+def _read_npz_export_metadata(npz_source):
+    data, offset_file = _read_npz_injection_metadata(npz_source)
+    if data is not None:
         saved_offset = data.get("tool_offset")
         offset = None
         if saved_offset and len(saved_offset) == 3:
             offset = tuple(float(v) for v in saved_offset)
         resin_z = data.get("resin_z_print_compensation_mm")
         resin_z_value = None if resin_z is None else float(resin_z)
-        return offset, resin_z_value, str(offset_file)
+        return offset, resin_z_value, offset_file
     return None, None, None
 
 
@@ -1971,13 +1978,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         export_layout.addWidget(resin_z_subtitle)
 
         resin_z_desc = QtWidgets.QLabel(
-            "树脂 Z 是整体 TCP/打印空间补偿；纤维 XYZ 是纤维头相对树脂头的物理偏置。"
-            "切换到纤维头后，机械臂会按纤维偏置同号移动来补偿头间差异。"
+            "树脂 Z 是整体 TCP/打印空间补偿；纤维 XYZ 是平面参考姿态下的"
+            "机器人命令补偿，空间打印时会按逐点 ABC 自动旋转。"
         )
         offset_help = (
             "树脂 Z：整体 TCP/打印空间 Z 补偿，所有工具都会叠加。\n"
-            "纤维 X/Y/Z：纤维头相对树脂头的物理偏置。填入正值表示纤维头相对树脂头在该轴正方向偏移；填入负值表示在负方向偏移。\n"
-            "导出和切换到纤维头时，机械臂会按填入值同号移动补偿：例如纤维 Z=+6mm 表示纤维头物理上比树脂头低 6mm，切到纤维头后机械臂 Z 会上移 6mm，使纤维头末端回到同一打印空间高度。"
+            "纤维 X/Y/Z：平面参考姿态下，为使纤维 TCP 到达树脂 TCP 同一点所需的机器人命令补偿。\n"
+            "上位机会按每点 KUKA A-Z/B-Y/C-X 姿态旋转该三维向量；输入前应先把实测喷头物理位移转换为命令补偿符号。"
         )
         resin_z_subtitle.setToolTip(offset_help)
         resin_z_desc.setObjectName("fieldLabel")
@@ -2052,9 +2059,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         fiber_z_label.setObjectName("fieldLabel")
         fiber_z_label.setAlignment(QtCore.Qt.AlignCenter)
         fiber_z_tip = (
-            "纤维头相对树脂头的 Z 向物理偏置。\n"
-            "正值：纤维头相对树脂头在物理上更低/需要机械臂 Z 正向上移补偿；负值：纤维头相对树脂头更高/切换后机械臂 Z 会向下补偿。\n"
-            "导出时纤维轨迹 Z = 源路径 Z + 树脂整体 Z 补偿 + 纤维 Z 偏置。"
+            "平面参考姿态下，为使纤维 TCP 到达树脂 TCP 同一点所需的 Z 向机器人命令补偿。\n"
+            "该值会随每个轨迹点的 KUKA ABC 姿态旋转，不是固定 BASE-Z 平移。\n"
+            "树脂整体 Z 补偿另行叠加，且保持 BASE/打印空间语义。"
         )
         fiber_z_label.setToolTip(fiber_z_tip)
         self._fiber_z_print_comp_spin = _NoWheelDoubleSpinBox()
@@ -2076,18 +2083,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         offset_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 2px;")
         xy_offset_tip = (
-            "纤维头相对树脂头的 X/Y 物理偏置。\n"
-            "X 正值：纤维头相对树脂头在机器人 X 正方向偏移，切到纤维头后机械臂 X 同号移动补偿。\n"
-            "Y 正值：纤维头相对树脂头在机器人 Y 正方向偏移，切到纤维头后机械臂 Y 同号移动补偿。\n"
-            "负值表示对应轴负方向偏移，机械臂也按负方向补偿。"
+            "平面参考姿态下，为使纤维 TCP 到达树脂 TCP 同一点所需的 X/Y 机器人命令补偿。\n"
+            "保存后，上位机按每点 KUKA A-Z/B-Y/C-X 姿态自动旋转该三维向量。\n"
+            "这里输入的是命令补偿，不是未经符号转换的喷头物理位移。"
         )
         offset_subtitle.setToolTip(xy_offset_tip)
         export_layout.addWidget(offset_subtitle)
 
         # Tool Offset Description & Input Fields (placed inside GCode Export)
         offset_desc = QtWidgets.QLabel(
-            "纤维头相对树脂头的物理偏置；切换到纤维头后，"
-            "机械臂按填入值同号移动来补偿头间差异。"
+            "平面参考姿态下的纤维 TCP 命令补偿；空间打印时由上位机"
+            "按逐点 ABC 自动旋转，使两个喷头落到同一名义空间点。"
         )
         offset_desc.setObjectName("fieldLabel")
         offset_desc.setWordWrap(True)
@@ -2107,9 +2113,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             lbl.setObjectName("fieldLabel")
             lbl.setAlignment(QtCore.Qt.AlignCenter)
             axis_tip = (
-                f"纤维头相对树脂头的 {axis} 向物理偏置。\n"
-                f"正值表示纤维头相对树脂头在机器人 {axis} 正方向偏移；负值表示在 {axis} 负方向偏移。\n"
-                f"导出/切换纤维头时，机械臂 {axis} 会按该值同号移动补偿。"
+                f"平面参考姿态下的纤维 TCP {axis} 向机器人命令补偿。\n"
+                "空间打印时，该值会作为三维向量的一部分随逐点 KUKA ABC 旋转。\n"
+                "请勿直接填入未转换符号的喷头物理位移。"
             )
             lbl.setToolTip(axis_tip)
             spin = _NoWheelDoubleSpinBox()
@@ -5391,6 +5397,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
             corner_retreat_max_mm=values["corner_retreat_max_mm"].value(),
             corner_blend_segments=int(values["corner_blend_segments"].value()),
         )
+        process_params = replace(
+            process_params,
+            export=replace(
+                process_params.export,
+                fiber_x_print_compensation_mm=0.0,
+                fiber_y_print_compensation_mm=0.0,
+                fiber_z_print_compensation_mm=0.0,
+                resin_z_print_compensation_mm=0.0,
+            ),
+        )
         if planner_params is None:
             return process_params
         return replace(process_params, dt=planner_params["dt"])
@@ -5425,7 +5441,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
 
         source_ext = os.path.splitext(source_path)[1].lower()
-        is_core_injection_source = source_ext == ".npz" and _has_core_injection_manifest(source_path)
+        is_core_injection_source = (
+            source_ext == ".npz" and _has_core_injection_manifest(source_path)
+        )
 
         # Gather export params
         try:
@@ -5447,6 +5465,11 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text()),
                 "cut_wait_s": float(self._planner_inputs["cut_wait_s"].text()),
             }
+            if params["split_by_layer_type"] and not is_core_injection_source:
+                raise ValueError(
+                    "机器就绪空间打印暂不支持按层+类型拆分；"
+                    "请关闭该选项并导出单一全局 4 ms 序列"
+                )
             external_cut_lift_mm = params["cut_lift_mm"]
             external_cut_wait_s = params["cut_wait_s"]
             if source_ext == ".npz" and not is_core_injection_source:
@@ -5462,7 +5485,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 )
             else:
                 external_process_params = None
-            local_injection_values = self._local_injection_values() if is_core_injection_source else None
+            local_injection_values = self._local_injection_values()
             used_cut_lift_mm = (
                 local_injection_values["cut_lift_mm"]
                 if is_core_injection_source
@@ -5522,8 +5545,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         source_path,
                         npz_out,
                         tool_offset=local_injection_values["tool_offset"],
-                        resin_z_print_compensation_mm=local_injection_values["resin_z_print_compensation_mm"],
-                        tool_change_safe_lift_mm=local_injection_values["tool_change_safe_lift_mm"],
+                        resin_z_print_compensation_mm=local_injection_values[
+                            "resin_z_print_compensation_mm"
+                        ],
+                        tool_change_safe_lift_mm=local_injection_values[
+                            "tool_change_safe_lift_mm"
+                        ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
                     )
@@ -5564,36 +5591,55 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         max_fit_points_per_segment=params["max_fit_points_per_segment"],
                         export_sleep_ms=params["export_sleep_ms"],
                         export_yield_every=params["export_yield_every"],
-                        tool_offset=offset,
+                        tool_offset=(0.0, 0.0, 0.0),
                         progress_callback=progress_cb,
                         split_by_layer_type=params["split_by_layer_type"],
                         plot_layer_xy=params["plot_layer_xy"],
                         plot_stride=params["plot_stride"],
                         enable_extrude_wait=True,
-                        resin_z_print_compensation_mm=self.current_resin_z_print_compensation(),
+                        resin_z_print_compensation_mm=0.0,
                         cut_lift_mm=params["cut_lift_mm"],
                         cut_wait_s=params["cut_wait_s"],
                     )
                 else:
                     raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")
-                if is_core_injection_source:
-                    self.export_progress.emit("运行 RSI 安全审查...")
-                    from path_processing_core.rsi_validation import validate_final_npz
+                if not is_core_injection_source:
+                    self.export_progress.emit("注入现场喷头标定并重建换头轨迹...")
+                    from path_processing_core.local_injector import inject_npz
 
-                    output_path = Path(npz_out)
-                    stats["rsi_validation"] = validate_final_npz(
+                    base_stats = stats
+                    stats = inject_npz(
                         npz_out,
-                        report_path=output_path.parent / (
-                            f"{output_path.stem}.rsi_validation.json"
-                        ),
+                        npz_out,
+                        tool_offset=local_injection_values["tool_offset"],
+                        resin_z_print_compensation_mm=local_injection_values[
+                            "resin_z_print_compensation_mm"
+                        ],
+                        tool_change_safe_lift_mm=local_injection_values[
+                            "tool_change_safe_lift_mm"
+                        ],
+                        cut_lift_mm=local_injection_values["cut_lift_mm"],
+                        cut_wait_s=local_injection_values["cut_wait_s"],
                     )
+                    stats["base_export_total_s"] = base_stats.get("total_s", 0.0)
+
+                self.export_progress.emit("运行最终 4 ms 轨迹安全审查...")
+                from path_processing_core.rsi_validation import validate_final_npz
+
+                output_path = Path(npz_out)
+                stats["rsi_validation"] = validate_final_npz(
+                    npz_out,
+                    report_path=output_path.parent / (
+                        f"{output_path.stem}.rsi_validation.json"
+                    ),
+                )
                 rows = stats.get("rows", 0)
                 parts = stats.get("parts", stats.get("output_parts", 0))
                 total_s = stats.get("total_s", 0.0)
                 msg = (
                     f"完成: {rows} 行, {parts} 分块, {total_s:.1f}秒\n"
                     f"偏移: ({offset[0]:.2f}, {offset[1]:.2f}, {offset[2]:.2f})"
-                    + ("\n模式: Core NPZ 局部注入" if is_core_injection_source else "")
+                    + "\n模式: 零偏置基础导出 + 上位机姿态旋转注入"
                 )
                 validation_warnings = stats.get("rsi_validation", {}).get("warnings", [])
                 if validation_warnings:
@@ -6166,6 +6212,9 @@ class MyProjectUiPlugin(Plugin):
                 return False, "missing", None, None, None
 
         try:
+            injection_metadata, _metadata_file = _read_npz_injection_metadata(
+                npz_launch_path
+            )
             (
                 saved_offset,
                 saved_resin_z_print_compensation,
@@ -6176,6 +6225,32 @@ class MyProjectUiPlugin(Plugin):
 
         if saved_offset is None:
             return False, "no_offset", None, saved_resin_z_print_compensation, offset_file
+
+        required_metadata = {
+            "format": "core_npz_local_injection_v2",
+            "schema_version": 2,
+            "injection_state": "machine_ready",
+            "offset_kind": "command_compensation",
+            "offset_frame": "calibrated_flat_print_reference",
+            "abc_convention": "KUKA_AZ_BY_CX",
+            "abc_semantics": "relative_to_calibrated_flat_printing_pose",
+            "offset_application": "per_sample_pose_rotated",
+        }
+        if injection_metadata is None:
+            return (
+                False, "no_offset", saved_offset,
+                saved_resin_z_print_compensation, offset_file,
+            )
+        if injection_metadata.get("injection_state") == "base":
+            return False, "base", saved_offset, saved_resin_z_print_compensation, offset_file
+        if any(
+            injection_metadata.get(name) != expected
+            for name, expected in required_metadata.items()
+        ) or not injection_metadata.get("calibration_id"):
+            return (
+                False, "incompatible", saved_offset,
+                saved_resin_z_print_compensation, offset_file,
+            )
 
         cur_offset = self._widget.get_tool_offset()
         for val_saved, val_cur in zip(saved_offset, cur_offset):
@@ -6232,6 +6307,10 @@ class MyProjectUiPlugin(Plugin):
             lines.append("警告: 未找到或无法读取纤维头偏置或树脂 Z 打印补偿 sidecar，无法确认参数是否一致。")
         elif status == "mismatch":
             lines.append("警告: NPZ 中的纤维头偏置或树脂 Z 打印补偿与当前界面设置不一致。")
+        elif status == "base":
+            lines.append("禁止启动: 这是尚未完成现场标定注入的基础 NPZ。")
+        elif status == "incompatible":
+            lines.append("禁止启动: NPZ 缺少受支持的姿态旋转偏置契约或标定标识。")
 
         related_values = []
         for name in _NPZ_RELATED_LAUNCH_PARAMS:
@@ -6306,7 +6385,26 @@ class MyProjectUiPlugin(Plugin):
             )
             return
 
-        title = "确认启动" if ok else "NPZ 校验警告"
+        if not ok and self._widget.active_mode() != _MODE_PAGE_TEST:
+            _show_warning(
+                self._widget,
+                "NPZ 未通过机器执行校验",
+                self._launch_npz_notice(
+                    npz_launch_path,
+                    source,
+                    saved_offset,
+                    saved_resin_z_print_compensation,
+                    offset_file,
+                    status,
+                ).replace("\n是否继续启动？", ""),
+            )
+            self._widget._launch_status.setText(f"启动已阻止: NPZ {status}。")
+            self._widget._launch_status.setStyleSheet(
+                "color: #b42318; font-weight: 700; font-size: 13px;"
+            )
+            return
+
+        title = "确认启动" if ok else "测试模式 NPZ 校验警告"
         default_button = QtWidgets.QMessageBox.Yes if ok else QtWidgets.QMessageBox.No
         reply = _ask_yes_no(
             self._widget,

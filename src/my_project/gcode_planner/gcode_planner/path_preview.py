@@ -74,8 +74,10 @@ def _preview_offset_sidecar_candidates(root: Path):
         yield candidate
 
 
-def _fiber_preview_offset_xy(npz_root: str | Path) -> tuple[float, float]:
-    """Return the fiber XY offset that must be hidden in 2-D previews."""
+def _fiber_preview_offset_contract(
+    npz_root: str | Path,
+) -> tuple[tuple[float, float, float], bool]:
+    """Return fiber compensation and whether it uses the v2 pose contract."""
     root = Path(npz_root).expanduser()
     for sidecar in _preview_offset_sidecar_candidates(root):
         try:
@@ -84,7 +86,10 @@ def _fiber_preview_offset_xy(npz_root: str | Path) -> tuple[float, float]:
             offset = payload.get("tool_offset", (0.0, 0.0, 0.0))
             if len(offset) != 3:
                 continue
-            return float(offset[0]), float(offset[1])
+            return (
+                tuple(float(value) for value in offset),
+                payload.get("offset_application") == "per_sample_pose_rotated",
+            )
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             continue
     for trajectory_path in _candidate_npz_files(root, layer=None):
@@ -100,26 +105,66 @@ def _fiber_preview_offset_xy(npz_root: str | Path) -> tuple[float, float]:
                     "tool_offset", (0.0, 0.0, 0.0)
                 )
                 if len(offset) == 3:
-                    return float(offset[0]), float(offset[1])
+                    return (
+                        tuple(float(value) for value in offset),
+                        manifest.get("offset_application")
+                        == "per_sample_pose_rotated",
+                    )
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             continue
-    return 0.0, 0.0
+    return (0.0, 0.0, 0.0), False
+
+
+def _fiber_preview_offset_xyz(npz_root: str | Path) -> tuple[float, float, float]:
+    """Return the stored fiber command compensation."""
+    return _fiber_preview_offset_contract(npz_root)[0]
+
+
+def _fiber_preview_offset_xy(npz_root: str | Path) -> tuple[float, float]:
+    """Backward-compatible XY view of the stored flat-reference offset."""
+    offset = _fiber_preview_offset_xyz(npz_root)
+    return offset[0], offset[1]
+
+
+def _kuka_rotated_offset(abc_deg, offset_xyz) -> np.ndarray:
+    """Apply KUKA Rz(A) Ry(B) Rx(C) to one flat-reference offset."""
+    a, b, c = np.radians(np.asarray(abc_deg, dtype=np.float64))
+    x, y, z = np.asarray(offset_xyz, dtype=np.float64)
+    ca, sa = np.cos(a), np.sin(a)
+    cb, sb = np.cos(b), np.sin(b)
+    cc, sc = np.cos(c), np.sin(c)
+    return np.asarray((
+        ca * cb * x + (ca * sb * sc - sa * cc) * y
+        + (ca * sb * cc + sa * sc) * z,
+        sa * cb * x + (sa * sb * sc + ca * cc) * y
+        + (sa * sb * cc - ca * sc) * z,
+        -sb * x + cb * sc * y + cb * cc * z,
+    ))
 
 
 def _points_for_2d_preview(
     preview: PreviewPath,
-    fiber_offset_xy: tuple[float, float],
+    fiber_offset_xyz: Sequence[float],
+    *,
+    pose_rotated: bool = False,
 ) -> np.ndarray:
-    """Map display-only XY points to the common resin/fiber tip frame."""
+    """Map machine-command points to the common material-tip frame."""
     points = np.asarray(preview.points, dtype=np.float64)
     if preview.path_type != PathType.FIBER_PRINT:
         return points
-    offset_x, offset_y = fiber_offset_xy
-    if abs(offset_x) <= 1e-12 and abs(offset_y) <= 1e-12:
+    offset = tuple(float(value) for value in fiber_offset_xyz)
+    if len(offset) == 2:
+        offset = (*offset, 0.0)
+    if len(offset) != 3:
+        raise ValueError("fiber preview offset must contain 2 or 3 values")
+    if all(abs(value) <= 1e-12 for value in offset):
         return points
     points = points.copy()
-    points[:, 0] -= offset_x
-    points[:, 1] -= offset_y
+    if pose_rotated:
+        for index, pose in enumerate(preview.poses):
+            points[index] -= _kuka_rotated_offset(pose[3:6], offset)
+    else:
+        points -= np.asarray(offset, dtype=np.float64)
     return points
 
 
@@ -385,7 +430,7 @@ def ensure_layer_preview_images(
     )
     preview_dir.mkdir(parents=True, exist_ok=True)
     step = max(1, int(stride))
-    fiber_offset_xy = _fiber_preview_offset_xy(root)
+    fiber_offset_xyz, pose_rotated_offset = _fiber_preview_offset_contract(root)
     for layer in missing:
         paths = extract_layer_preview_paths(
             root, layer, max_paths=max_paths, max_rows=max_rows
@@ -395,7 +440,11 @@ def ensure_layer_preview_images(
         for preview in paths:
             if preview.path_type not in (PathType.RESIN_PRINT, PathType.FIBER_PRINT):
                 continue
-            points = _points_for_2d_preview(preview, fiber_offset_xy)
+            points = _points_for_2d_preview(
+                preview,
+                fiber_offset_xyz,
+                pose_rotated=pose_rotated_offset,
+            )
             if len(points) == 0:
                 continue
             points = points[::step]

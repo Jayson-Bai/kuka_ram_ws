@@ -35,16 +35,18 @@ def test_formal_npz_export_keeps_extrude_wait_segments():
     assert "enable_extrude_wait=True" in formal_export
 
 
-def test_formal_npz_export_passes_resin_z_print_compensation():
+def test_formal_npz_export_uses_zero_base_then_local_injection():
     src = _source()
     formal_export = src.split(
         "    def _on_export_npz", 1)[1].split(
         "    def _on_export_progress", 1)[0]
+    formal_compact = "".join(formal_export.split())
 
-    assert (
-        "resin_z_print_compensation_mm=self.current_resin_z_print_compensation()"
-        in formal_export
-    )
+    assert "resin_z_print_compensation_mm=0.0" in formal_export
+    assert "tool_offset=(0.0, 0.0, 0.0)" in formal_export
+    assert "from path_processing_core.local_injector import inject_npz" in formal_export
+    assert 'local_injection_values["resin_z_print_compensation_mm"]' in formal_compact
+    assert "机器就绪空间打印暂不支持按层+类型拆分" in formal_export
 
 
 def test_core_injection_reads_fiber_and_resin_z_from_independent_ui_controls():
@@ -55,6 +57,7 @@ def test_core_injection_reads_fiber_and_resin_z_from_independent_ui_controls():
     formal_export = src.split("    def _on_export_npz", 1)[1].split(
         "    def _on_export_progress", 1
     )[0]
+    formal_compact = "".join(formal_export.split())
 
     assert '"tool_offset": tuple(float(v) for v in self.get_tool_offset())' in value_reader
     assert (
@@ -65,7 +68,7 @@ def test_core_injection_reads_fiber_and_resin_z_from_independent_ui_controls():
     assert (
         'resin_z_print_compensation_mm='
         'local_injection_values["resin_z_print_compensation_mm"]'
-    ) in formal_export
+    ) in formal_compact
 
 
 def test_core_injection_uses_external_rsi_validation():
@@ -76,6 +79,24 @@ def test_core_injection_uses_external_rsi_validation():
     assert "from path_processing_core.rsi_validation import validate_final_npz" in formal_export
     assert 'stats["rsi_validation"] = validate_final_npz(' in formal_export
     assert "validate_final_npz" not in LOCAL_INJECTOR.read_text(encoding="utf-8")
+
+
+def test_formal_launch_requires_machine_ready_v2_calibration_contract():
+    src = _source()
+    check = src.split(
+        "    def _check_npz_and_offset_match", 1
+    )[1].split("    def _launch_npz_notice", 1)[0]
+    launch = src.split("    def _on_launch", 1)[1].split(
+        "    def _send_system_command", 1
+    )[0]
+
+    assert '"format": "core_npz_local_injection_v2"' in check
+    assert '"injection_state": "machine_ready"' in check
+    assert '"abc_convention": "KUKA_AZ_BY_CX"' in check
+    assert '"offset_application": "per_sample_pose_rotated"' in check
+    assert 'not injection_metadata.get("calibration_id")' in check
+    assert "self._widget.active_mode() != _MODE_PAGE_TEST" in launch
+    assert "NPZ 未通过机器执行校验" in launch
 
 
 def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():

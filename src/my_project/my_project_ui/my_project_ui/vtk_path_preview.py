@@ -20,6 +20,7 @@ from gcode_planner.path_preview import (
     PREVIEW_RENDER_POINTS,
     PathType,
     PreviewPath,
+    _kuka_rotated_offset,
     extract_layer_preview_paths,
     list_preview_layers,
 )
@@ -49,7 +50,6 @@ _PATH_COLORS = {
     PathType.EVENT: (0.8, 0.8, 0.2),
 }
 _CUT_EVENT_COLOR = (0.9, 0.05, 0.12)
-
 
 
 _SIGNAL = getattr(QtCore, "pyqtSignal", None) or getattr(QtCore, "Signal")
@@ -212,10 +212,10 @@ def _filter_origin_bridge_artifacts(paths):
     return filtered
 
 
-def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
+def _sample_indices(points, max_points=_MAX_POINTS_PER_PATH):
     max_points = max(2, int(max_points))
     if len(points) <= max_points:
-        return points
+        return tuple(range(len(points)))
 
     # Uniform decimation destroys the short U-turns of a raster/fill path.
     # Keep geometric turns first, then use the remaining budget for evenly
@@ -253,7 +253,7 @@ def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
             turn_indices[round(index * stride)]
             for index in range(max_points)
         ]
-        return tuple(points[index] for index in selected)
+        return tuple(selected)
 
     selected = set(turn_indices)
     remaining = max_points - len(turn_indices)
@@ -261,7 +261,20 @@ def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
         stride = (len(points) - 1) / (remaining + 1)
         for index in range(1, remaining + 1):
             selected.add(round(index * stride))
-    return tuple(points[index] for index in sorted(selected))
+    return tuple(sorted(selected))
+
+
+def _sample_points(points, max_points=_MAX_POINTS_PER_PATH):
+    return tuple(
+        points[index] for index in _sample_indices(points, max_points=max_points)
+    )
+
+
+def _sample_pose_points(path: PreviewPath, max_points=_MAX_POINTS_PER_PATH):
+    return tuple(
+        (path.points[index], path.poses[index][3:6])
+        for index in _sample_indices(path.points, max_points=max_points)
+    )
 
 
 def _sample_limit_for_paths(paths, total_points, path=None):
@@ -286,7 +299,11 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
     def __init__(self, npz_root: str, parent=None):
         super().__init__(parent)
         self._npz_root = Path(npz_root).expanduser()
-        self._tool_offset_xyz, self._preview_z_origin = (
+        (
+            self._tool_offset_xyz,
+            self._preview_z_origin,
+            self._pose_rotated_tool_offset,
+        ) = (
             self._read_preview_offsets()
         )
         self._layers = []
@@ -485,10 +502,17 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                 preview_z_origin = float(
                     data.get("resin_z_print_compensation_mm", 0.0)
                 )
-                return tuple(float(v) for v in offset), preview_z_origin
+                pose_rotated = (
+                    data.get("offset_application") == "per_sample_pose_rotated"
+                )
+                return (
+                    tuple(float(v) for v in offset),
+                    preview_z_origin,
+                    pose_rotated,
+                )
             except Exception:
                 continue
-        return (0.0, 0.0, 0.0), 0.0
+        return (0.0, 0.0, 0.0), 0.0, False
 
     def _offset_sidecar_candidates(self):
         root = self._npz_root
@@ -819,8 +843,10 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                 path,
             )
             points = compact_points([
-                self._display_point_for_path(path, point)
-                for point in _sample_points(path.points, max_points=sample_limit)
+                self._display_point_for_path(path, point, abc)
+                for point, abc in _sample_pose_points(
+                    path, max_points=sample_limit
+                )
             ])
             if len(points) < 2:
                 continue
@@ -920,14 +946,14 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
                 _MAX_RENDER_POINTS_PER_ACTOR,
                 path,
             )
-            points = _sample_points(path.points, max_points=sample_limit)
-            if not points:
+            pose_points = _sample_pose_points(path, max_points=sample_limit)
+            if not pose_points:
                 continue
             polyline = self._vtk["vtkPolyLine"]()
-            polyline.GetPointIds().SetNumberOfIds(len(points))
-            for local_index, point in enumerate(points):
+            polyline.GetPointIds().SetNumberOfIds(len(pose_points))
+            for local_index, (point, abc) in enumerate(pose_points):
                 vtk_points.InsertNextPoint(
-                    *self._display_point_for_path(path, point)
+                    *self._display_point_for_path(path, point, abc)
                 )
                 polyline.GetPointIds().SetId(local_index, point_index)
                 point_index += 1
@@ -1117,7 +1143,7 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         radius = self._endpoint_radius(all_points) * 1.5
         actors = []
         for path in paths:
-            point = self._display_point_for_path(path, path.end)
+            point = self._display_point_for_path(path, path.end, path.end_abc)
             if path.event_type == "cut":
                 actors.append(self._cut_marker_actor(point, radius))
             elif path.path_type == PathType.TOOL_CHANGE_EVENT:
@@ -1164,9 +1190,9 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         visible_paths: list[PreviewPath],
     ):
         all_points = [
-            self._display_point_for_path(path, point)
+            self._display_point_for_path(path, point, pose[3:6])
             for path in (visible_paths or [current_path])
-            for point in path.points
+            for point, pose in zip(path.points, path.poses)
         ]
         radius = self._endpoint_radius(all_points)
         body_radius = radius * 0.45
@@ -1207,19 +1233,24 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         )
         actor.GetProperty().SetOpacity(0.92)
         display_end = self._display_point_for_path(
-            current_path, current_path.end
+            current_path, current_path.end, current_path.end_abc
         )
         self._apply_xyzabc_transform(
             actor, display_end, current_path.end_abc
         )
         return actor
 
-    def _display_point_for_path(self, path: PreviewPath, point):
+    def _display_point_for_path(self, path: PreviewPath, point, abc=None):
         x, y, z = point
         if int(path.tool_id) == 1:
-            x -= self._tool_offset_xyz[0]
-            y -= self._tool_offset_xyz[1]
-            z -= self._tool_offset_xyz[2]
+            offset = self._tool_offset_xyz
+            if self._pose_rotated_tool_offset:
+                if abc is None:
+                    abc = path.end_abc
+                offset = _kuka_rotated_offset(abc, offset)
+            x -= offset[0]
+            y -= offset[1]
+            z -= offset[2]
         z -= self._preview_z_origin
         return x, y, z
 
@@ -1247,19 +1278,19 @@ class VtkPathPreviewDialog(QtWidgets.QDialog):
         visible_paths: list[PreviewPath],
     ):
         bounds_points = [
-            self._display_point_for_path(item, point)
+            self._display_point_for_path(item, point, pose[3:6])
             for item in visible_paths
-            for point in item.points
+            for point, pose in zip(item.points, item.poses)
         ]
         radius = self._endpoint_radius(bounds_points)
         return [
             self._sphere_actor(
-                self._display_point_for_path(path, path.start),
+                self._display_point_for_path(path, path.start, path.start_abc),
                 radius,
                 (0.0, 0.9, 0.25),
             ),
             self._sphere_actor(
-                self._display_point_for_path(path, path.end),
+                self._display_point_for_path(path, path.end, path.end_abc),
                 radius,
                 (1.0, 0.15, 0.05),
             ),

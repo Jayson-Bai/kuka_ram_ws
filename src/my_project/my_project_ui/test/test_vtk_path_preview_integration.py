@@ -176,10 +176,10 @@ def test_vtk_path_preview_caps_render_geometry_for_large_npz_layers():
     )[0]
     assert "sample_limit = _sample_limit_for_paths(" in bead_block
     assert "_MAX_BEAD_RIBBON_SEGMENTS_PER_ACTOR" in bead_block
-    assert "_sample_points(path.points, max_points=sample_limit)" in bead_block
+    assert "_sample_pose_points(" in bead_block
     assert "sample_limit = _sample_limit_for_paths(" in line_block
     assert "_MAX_RENDER_POINTS_PER_ACTOR" in line_block
-    assert "_sample_points(path.points, max_points=sample_limit)" in line_block
+    assert "_sample_pose_points(path, max_points=sample_limit)" in line_block
 
 
 def test_vtk_path_preview_defaults_to_complete_chunked_print_paths_and_trackball():
@@ -267,21 +267,24 @@ def test_vtk_preview_uses_material_coordinates_from_offset_sidecar():
     assert "tool_offset" in src
     assert "self._tool_offset_xyz" in src
     assert "self._preview_z_origin" in src
+    assert "self._pose_rotated_tool_offset" in src
     assert "def _display_point_for_path" in src
     assert "if int(path.tool_id) == 1:" in src
-    assert "x -= self._tool_offset_xyz[0]" in src
-    assert "y -= self._tool_offset_xyz[1]" in src
-    assert "z -= self._tool_offset_xyz[2]" in src
+    assert "if self._pose_rotated_tool_offset:" in src
+    assert "_kuka_rotated_offset(abc, offset)" in src
+    assert "x -= offset[0]" in src
+    assert "y -= offset[1]" in src
+    assert "z -= offset[2]" in src
     assert "z -= self._preview_z_origin" in src
 
 
 def test_vtk_preview_renders_paths_events_and_nozzle_with_display_points():
     src = VTK_PREVIEW.read_text(encoding="utf-8")
 
-    assert "self._display_point_for_path(path, point)" in src
-    assert "self._display_point_for_path(path, path.end)" in src
+    assert "self._display_point_for_path(path, point, abc)" in src
+    assert "self._display_point_for_path(path, path.end, path.end_abc)" in src
     assert "display_end = self._display_point_for_path(" in src
-    assert "current_path.end, current_path.end_abc" not in src
+    assert "current_path.end, current_path.end_abc" in src
 
 
 def test_vtk_path_preview_splits_only_legacy_large_paths_for_stepwise_review():
@@ -419,10 +422,13 @@ def test_vtk_bead_preview_uses_lightweight_closed_solids():
     assert "bottom_z = path_z - height" in bead_block
     assert "path_top_z = path_z + height" not in bead_block
     assert "\n                bottom_z = path_z\n" not in bead_block
-    assert "self._display_point_for_path(path, point)" in bead_block
+    assert "self._display_point_for_path(path, point, abc)" in bead_block
     assert 'solid_cells = self._vtk["vtkCellArray"]()' in bead_block
     assert "add_quad((left_top[0], right_top[0], right_bottom[0], left_bottom[0]))" in bead_block
-    assert "add_quad((left_top[-1], left_bottom[-1], right_bottom[-1], right_top[-1]))" in bead_block
+    assert (
+        "add_quad((left_top[-1], left_bottom[-1], "
+        "right_bottom[-1], right_top[-1]))" in bead_block
+    )
     assert "poly_data.SetPolys(solid_cells)" in bead_block
     assert "prop.SetOpacity(_BEAD_SOLID_OPACITY.get(path_type, 0.74))" in bead_block
     assert "prop.EdgeVisibilityOn()" not in bead_block
@@ -459,7 +465,7 @@ def test_vtk_tool_change_markers_use_event_row_display_position():
         "    def _nozzle_actor_for_path", 1
     )[0]
 
-    assert "self._display_point_for_path(path, path.end)" in marker_block
+    assert "self._display_point_for_path(path, path.end, path.end_abc)" in marker_block
     assert "path.start" not in marker_block
     assert "self._tool_offset_xyz" not in marker_block
 
@@ -542,6 +548,7 @@ def test_layer_image_preview_loads_large_npz_in_background():
     assert "dpi=PREVIEW_2D_DPI" in dialog
     assert "layer_previews_2d_exact_v4" in dialog
     assert "self._images_loaded.emit(files, None)" in dialog
+
 
 def test_vtk_sampling_preserves_raster_turns_and_allocates_by_path_size():
     import sys
