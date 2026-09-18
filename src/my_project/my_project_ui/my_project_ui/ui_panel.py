@@ -2287,6 +2287,17 @@ class _UiStatusWidget(QtWidgets.QWidget):
         gcode_row.addWidget(self._btn_browse_gcode)
         export_layout.addLayout(gcode_row)
 
+        # The upper-computer UI consumes only final Core NPZ files.  Keep the
+        # legacy GCode/external-source widgets for compatibility with saved
+        # settings, but do not expose that alternate export path here.
+        for _legacy_widget in (
+            gcode_subtitle,
+            gcode_lbl,
+            self._gcode_path_input,
+            self._btn_browse_gcode,
+        ):
+            _legacy_widget.setVisible(False)
+
         # NPZ output path (internal, hidden from UI)
         self._npz_out_input = QtWidgets.QLineEdit()
         self._npz_out_input.setPlaceholderText("根据源文件名自动生成")
@@ -2834,6 +2845,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_export_npz.setObjectName("btnExportNpz")
         self._btn_export_npz.setMinimumHeight(36)
         self._btn_export_npz.setCursor(QtCore.Qt.PointingHandCursor)
+        self._btn_export_npz.setVisible(False)
         export_btn_row.addWidget(self._btn_export_npz)
         export_layout.addLayout(export_btn_row)
 
@@ -2854,7 +2866,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         view_row.addWidget(self._btn_view_vtk_paths)
         export_layout.addLayout(view_row)
 
-        npz_dir_subtitle = QtWidgets.QLabel("选择已导出的NPZ文件")
+        npz_dir_subtitle = QtWidgets.QLabel("选择 Core 已导出的 NPZ 并注入")
         npz_dir_subtitle.setStyleSheet(
             "font-weight: bold; color: #1a73e8; font-size: 12px; margin-top: 4px;")
         export_layout.addWidget(npz_dir_subtitle)
@@ -2864,9 +2876,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._selected_npz_dir_input = QtWidgets.QLineEdit()
         self._selected_npz_dir_input.setReadOnly(True)
         self._selected_npz_dir_input.setPlaceholderText("可选择已导出的NPZ文件用于启动")
-        self._btn_select_npz_dir = QtWidgets.QPushButton("选择")
-        self._btn_select_npz_dir.setFixedWidth(48)
-        self._btn_select_npz_dir.setFixedHeight(28)
+        self._btn_select_npz_dir = QtWidgets.QPushButton("选择并注入")
+        self._btn_select_npz_dir.setMinimumWidth(104)
+        self._btn_select_npz_dir.setFixedHeight(32)
+        self._btn_select_npz_dir.setToolTip(
+            "选择 slicer Core 已导出的最终 NPZ；上位机将注入标定参数并执行安全检查"
+        )
         self._btn_select_npz_dir.setCursor(QtCore.Qt.PointingHandCursor)
         self._btn_clear_npz_dir = QtWidgets.QPushButton("清除")
         self._btn_clear_npz_dir.setFixedWidth(48)
@@ -5724,6 +5739,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _on_export_finished(self, success, message):
         self._btn_export_npz.setEnabled(True)
+        self._btn_select_npz_dir.setEnabled(True)
         self._export_progress.setVisible(False)
         if success:
             self._export_status.setText(message)
@@ -5881,6 +5897,57 @@ class _UiStatusWidget(QtWidgets.QWidget):
         )
         if not npz_file:
             return
+
+        if not _has_core_injection_manifest(npz_file):
+            self._export_status.setText(
+                "选择失败：这里只接受 slicer Core 已导出的最终 NPZ，"
+                "不接受外部 layer_0000_R/F 源文件。"
+            )
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+
+        source_path = Path(npz_file)
+        output_path = source_path.with_name(source_path.stem + "_injected.npz")
+        self._npz_out_input.setText(str(output_path))
+        self._btn_select_npz_dir.setEnabled(False)
+        self._export_progress.setVisible(True)
+        self._export_progress.setRange(0, 0)
+        self._export_status.setText("正在注入 Core NPZ 并执行安全检查...")
+        self._export_status.setStyleSheet("color: #b15e00;")
+
+        local_values = self._local_injection_values()
+
+        def _inject_worker():
+            try:
+                from path_processing_core.local_injector import inject_npz
+                from path_processing_core.rsi_validation import validate_final_npz
+
+                self.export_progress.emit("读取最终 Core NPZ，执行局部注入...")
+                stats = inject_npz(
+                    source_path,
+                    output_path,
+                    tool_offset=local_values["tool_offset"],
+                    resin_z_print_compensation_mm=local_values[
+                        "resin_z_print_compensation_mm"
+                    ],
+                    tool_change_safe_lift_mm=local_values["tool_change_safe_lift_mm"],
+                    cut_lift_mm=local_values["cut_lift_mm"],
+                    cut_wait_s=local_values["cut_wait_s"],
+                )
+                self.export_progress.emit("运行最终 4 ms 轨迹安全审查...")
+                stats["rsi_validation"] = validate_final_npz(
+                    output_path,
+                    report_path=output_path.with_suffix(".rsi_validation.json"),
+                )
+                self.export_finished.emit(
+                    True,
+                    "Core NPZ 注入完成，机器就绪文件已通过安全检查。",
+                )
+            except Exception as exc:
+                self.export_finished.emit(False, str(exc))
+
+        threading.Thread(target=_inject_worker, daemon=True).start()
+        return
 
         launch_path = _normalize_npz_launch_path(npz_file)
         if not launch_path:
