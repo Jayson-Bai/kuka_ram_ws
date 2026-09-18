@@ -9,6 +9,7 @@ from path_processing_core.head_calibration import (
     DEFAULT_HEAD_CALIBRATION_PATH,
     load_head_calibration,
 )
+from path_processing_core.local_injector import inject_npz
 from path_processing_core.npz_exporter import export_npz
 
 from .converter import source_job_to_parsed_commands
@@ -73,9 +74,10 @@ def convert_external_npz(
     job = load_source_npz(source_path, default_abc=params.default_abc)
     commands = source_job_to_parsed_commands(job, params)
     tool_offset, resin_z_print_compensation_mm = load_shared_export_offsets(calibration_path)
-    return export_npz(
+    base_output = resolved_output.with_name(resolved_output.stem + ".base.npz")
+    stats = export_npz(
         commands,
-        str(resolved_output),
+        str(base_output),
         dt=params.dt,
         default_feed_mm_s=params.travel_feed_mm_s,
         corner_angle_deg=params.corner_angle_deg,
@@ -85,9 +87,22 @@ def convert_external_npz(
         max_fit_points_per_segment=params.max_fit_points_per_segment,
         progress_callback=progress_callback,
         enable_extrude_wait=True,
-        tool_offset=tool_offset,
-        resin_z_print_compensation_mm=resin_z_print_compensation_mm,
+        tool_offset=(0.0, 0.0, 0.0),
+        resin_z_print_compensation_mm=0.0,
         cut_lift_mm=cut_lift_mm,
         cut_wait_s=cut_wait_s,
         external_npz_cut_absolute_e=True,
     )
+    try:
+        injection = inject_npz(
+            base_output,
+            resolved_output,
+            tool_offset=tool_offset,
+            resin_z_print_compensation_mm=resin_z_print_compensation_mm,
+            cut_lift_mm=cut_lift_mm,
+            cut_wait_s=cut_wait_s,
+        )
+    finally:
+        base_output.unlink(missing_ok=True)
+    stats["local_injection"] = injection
+    return stats
