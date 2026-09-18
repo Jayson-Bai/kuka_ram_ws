@@ -69,6 +69,38 @@ class _PendingEvent:
     tool_id: int
 
 
+def _validated_direct_tool_offset(
+    parsed_commands: ParsedCommandList,
+    tool_offset,
+) -> tuple[float, float, float]:
+    try:
+        offset = tuple(float(value) for value in tool_offset)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("tool_offset must contain three finite XYZ values") from exc
+    if len(offset) != 3 or not all(math.isfinite(value) for value in offset):
+        raise ValueError("tool_offset must contain three finite XYZ values")
+    if not any(abs(value) > 1e-12 for value in offset):
+        return offset
+
+    for command in parsed_commands:
+        poses = [getattr(command, "start_pos", None), getattr(command, "pos", None)]
+        poses.extend(getattr(command, "control_points", ()) or ())
+        if any(
+            pose is not None
+            and any(
+                abs(float(getattr(pose, axis, 0.0))) > 1e-12
+                for axis in ("a", "b", "c")
+            )
+            for pose in poses
+        ):
+            raise ValueError(
+                "direct tool_offset export is disabled for XYZABC paths; "
+                "export a zero-offset base NPZ and apply the calibrated offset with "
+                "path_processing_core.local_injector.inject_npz()"
+            )
+    return offset
+
+
 def export_npz(
     parsed_commands: ParsedCommandList,
     output_path: str,
@@ -105,6 +137,7 @@ def export_npz(
     - 速度规划由 sample_global_curve 内部的七阶多项式完成，此处不做额外处理。
     返回耗时统计字典（秒），用于 CLI 打印。
     """
+    tool_offset = _validated_direct_tool_offset(parsed_commands, tool_offset)
     if not math.isclose(float(dt), 0.004, rel_tol=0.0, abs_tol=1e-12):
         raise ValueError("final NPZ export requires a fixed 4 ms RSI period (dt=0.004)")
     t_total_start = time.perf_counter()

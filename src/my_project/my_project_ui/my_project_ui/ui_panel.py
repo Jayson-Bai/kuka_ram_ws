@@ -36,6 +36,8 @@ _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM = 10.0
 _PRINT_TEST_ZERO_CORRECTION = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 _PRINT_TEST_FIBER_TOOL_ID = 1
 _PRINT_TEST_RESIN_TOOL_ID = 2
+_PRINT_JOB_FORMAT = "kuka_print_job_v1"
+_CONFORMAL_JOB_KIND = "conformal_honeycomb"
 
 
 def _ensure_default_data_dirs():
@@ -64,7 +66,11 @@ def _has_core_injection_manifest(path):
         with np.load(path, allow_pickle=False) as data:
             if "core_injection_manifest" not in data.files:
                 return False
-            return "core_npz_local_injection_v1" in str(data["core_injection_manifest"].item())
+            manifest = json.loads(str(data["core_injection_manifest"].item()))
+            return manifest.get("format") in {
+                "core_npz_local_injection_v1",
+                "core_npz_local_injection_v2",
+            }
     except Exception:
         return False
 
@@ -585,6 +591,64 @@ def _read_npz_export_metadata(npz_source):
         resin_z_value = None if resin_z is None else float(resin_z)
         return offset, resin_z_value, offset_file
     return None, None, None
+
+
+def _first_npz_data_file(npz_source):
+    """Resolve the first real archive behind a flat or chunked launch path."""
+    path = Path(npz_source)
+    if path.is_dir():
+        candidates = sorted(path.glob("*.npz"))
+        return candidates[0] if candidates else None
+    if path.suffix.lower() != ".npz":
+        return None
+    if path.is_file():
+        return path
+    stem = re.sub(r"_part\d+$", "", path.stem)
+    candidates = sorted(path.parent.glob(f"{stem}_part*.npz"))
+    return candidates[0] if candidates else None
+
+
+def _read_npz_print_job_metadata(npz_source):
+    """Read the optional task identity without inferring it from ABC values."""
+    archive = _first_npz_data_file(npz_source)
+    if archive is None:
+        return None
+    import numpy as np
+    with np.load(archive, allow_pickle=False) as data:
+        if "print_job_manifest" not in data.files:
+            return None
+        raw = data["print_job_manifest"]
+        if raw.shape != ():
+            raise ValueError("print_job_manifest must be a scalar JSON string")
+        manifest = json.loads(str(raw.item()))
+    if not isinstance(manifest, dict):
+        raise ValueError("print_job_manifest must contain a JSON object")
+    return manifest
+
+
+def _is_supported_print_job_metadata(manifest):
+    if manifest is None:
+        return True
+    expected = {
+        "format": _PRINT_JOB_FORMAT,
+        "job_kind": _CONFORMAL_JOB_KIND,
+        "pose_mode": "surface_normal_xyzabc",
+        "abc_convention": "KUKA_AZ_BY_CX",
+        "abc_semantics": "relative_to_calibrated_flat_printing_pose",
+        "default_abc_policy": "fallback_only_never_override_xyzabc",
+        "primeline_pose_mode": "flat_reference_abc_zero",
+        "cut_lift_frame": "surface_normal",
+        "global_z_compensation_frame": "world_z",
+        "pause_lift_frame": "world_z",
+        "tool_change_safe_lift_frame": "world_z",
+    }
+    if any(manifest.get(name) != value for name, value in expected.items()):
+        return False
+    source_sha256 = manifest.get("source_surface_sha256")
+    return bool(
+        isinstance(source_sha256, str)
+        and re.fullmatch(r"[0-9a-f]{64}", source_sha256)
+    )
 
 
 def _read_npz_tool_offset(npz_source):
@@ -6215,6 +6279,7 @@ class MyProjectUiPlugin(Plugin):
             injection_metadata, _metadata_file = _read_npz_injection_metadata(
                 npz_launch_path
             )
+            print_job_metadata = _read_npz_print_job_metadata(npz_launch_path)
             (
                 saved_offset,
                 saved_resin_z_print_compensation,
@@ -6239,6 +6304,11 @@ class MyProjectUiPlugin(Plugin):
         if injection_metadata is None:
             return (
                 False, "no_offset", saved_offset,
+                saved_resin_z_print_compensation, offset_file,
+            )
+        if not _is_supported_print_job_metadata(print_job_metadata):
+            return (
+                False, "incompatible", saved_offset,
                 saved_resin_z_print_compensation, offset_file,
             )
         if injection_metadata.get("injection_state") == "base":
@@ -6294,6 +6364,15 @@ class MyProjectUiPlugin(Plugin):
             f"当前界面纤维头偏置: {_format_tool_offset(cur_offset)}",
             f"当前界面树脂 Z 打印补偿: {cur_resin_z:.2f} mm",
         ]
+        try:
+            print_job_metadata = _read_npz_print_job_metadata(npz_launch_path)
+        except Exception:
+            print_job_metadata = None
+        if print_job_metadata is not None:
+            if print_job_metadata.get("job_kind") == _CONFORMAL_JOB_KIND:
+                lines.append("任务类型: 曲面蜂窝（逐点曲面 XYZABC）")
+            else:
+                lines.append("任务类型: 未受支持的显式任务契约")
         if saved_offset is not None:
             lines.append(f"NPZ 保存的纤维头偏置: {_format_tool_offset(saved_offset)}")
         if saved_resin_z_print_compensation is not None:
@@ -6308,9 +6387,15 @@ class MyProjectUiPlugin(Plugin):
         elif status == "mismatch":
             lines.append("警告: NPZ 中的纤维头偏置或树脂 Z 打印补偿与当前界面设置不一致。")
         elif status == "base":
-            lines.append("禁止启动: 这是尚未完成现场标定注入的基础 NPZ。")
+            lines.append(
+                "禁止启动: 这是切片器导出的基础轨迹（可包含真实曲面 ABC），"
+                "尚未执行上位机现场参数注入。请先在“正式打印 / NPZ 文件”中导出"
+                "机器就绪 NPZ，再启动该导出结果。"
+            )
         elif status == "incompatible":
-            lines.append("禁止启动: NPZ 缺少受支持的姿态旋转偏置契约或标定标识。")
+            lines.append(
+                "禁止启动: NPZ 的姿态旋转偏置、曲面任务语义或标定标识不受支持。"
+            )
 
         related_values = []
         for name in _NPZ_RELATED_LAUNCH_PARAMS:

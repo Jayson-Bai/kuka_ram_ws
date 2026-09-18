@@ -99,6 +99,25 @@ def test_formal_launch_requires_machine_ready_v2_calibration_contract():
     assert "NPZ 未通过机器执行校验" in launch
 
 
+def test_ui_recognizes_v2_core_and_validates_explicit_conformal_job_contract():
+    src = _source()
+    detector = src.split("def _has_core_injection_manifest", 1)[1].split(
+        "LAUNCH_PARAMS", 1
+    )[0]
+    check = src.split("    def _check_npz_and_offset_match", 1)[1].split(
+        "    def _launch_npz_notice", 1
+    )[0]
+
+    assert '"core_npz_local_injection_v2"' in detector
+    assert "json.loads" in detector
+    assert "_read_npz_print_job_metadata(npz_launch_path)" in check
+    assert "_is_supported_print_job_metadata(print_job_metadata)" in check
+    assert '"job_kind": _CONFORMAL_JOB_KIND' in src
+    assert '"cut_lift_frame": "surface_normal"' in src
+    assert '"primeline_pose_mode": "flat_reference_abc_zero"' in src
+    assert "曲面蜂窝（逐点曲面 XYZABC）" in src
+
+
 def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():
     src = _source()
     formal_export = src.split(

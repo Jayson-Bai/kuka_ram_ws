@@ -690,18 +690,19 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
         if int(arrays["core_injection_role"][index]) == post_code
     ]
     connector_set = set(connector)
-    connector_ordinal = {index: ordinal for ordinal, index in enumerate(connector)}
-    connector_positions = np.asarray([_pose_from_arrays(arrays, index)[:3] for index in connector], dtype=np.float64)
-    connector_distances = np.linalg.norm(np.diff(connector_positions, axis=0), axis=1) if len(connector) > 1 else np.empty(0)
-    connector_total = float(np.sum(connector_distances))
-    connector_progress = np.concatenate(([0.0], np.cumsum(connector_distances) / connector_total)) if connector_total > 1e-12 else np.zeros(len(connector))
-    base_lift = float(manifest.get("base_parameters", {}).get("cut_lift_mm", 20.0))
-    lift_delta = float(new_lift) - base_lift
 
     low = _pose_from_arrays(arrays, event_index - 1)
     low_e = float(arrays["e64"][event_index - 1] if "e64" in arrays else arrays["e"][event_index - 1])
     high = low.copy()
-    high[2] += float(new_lift)
+    # CUT is the one lift whose frame belongs to the curved print path.  Its
+    # flat-reference +Z vector follows the row's KUKA A(Z)-B(Y)-C(X) pose,
+    # matching the slicer exporter's endpoint surface-normal construction.
+    high[:3] += _rotated_reference_offsets(
+        np.asarray([low[3]], dtype=np.float64),
+        np.asarray([low[4]], dtype=np.float64),
+        np.asarray([low[5]], dtype=np.float64),
+        np.asarray((0.0, 0.0, float(new_lift)), dtype=np.float64),
+    )[0]
     template = event_index
     print_code = _code(move_types, "PRINT")
     travel_code = _code(move_types, "TRAVEL")
