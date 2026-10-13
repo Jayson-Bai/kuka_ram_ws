@@ -19,6 +19,7 @@ from typing import Any
 
 import numpy as np
 
+from . import npz_workspace as _storage
 from .polynomial_interpolator import sample_global_curve_iter
 from .types import GlobalCurveCommand, Position
 
@@ -115,11 +116,15 @@ def _part_files(path: Path) -> list[Path]:
 
 def _read_parts(
     files: list[Path],
+    workspace=None,
 ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray], list[str]]:
     chunks: list[dict[str, np.ndarray]] = []
     for path in files:
-        with np.load(path, allow_pickle=False) as data:
-            chunks.append({key: data[key].copy() for key in data.files})
+        if workspace is not None:
+            chunks.append(workspace.read(path))
+        else:
+            with np.load(path, allow_pickle=False) as data:
+                chunks.append({key: data[key].copy() for key in data.files})
     first_keys = set(chunks[0])
     missing = sorted(_REQUIRED - first_keys)
     if missing:
@@ -141,7 +146,23 @@ def _read_parts(
         for key, value in static.items():
             if not np.array_equal(value, chunk[key]):
                 raise ValueError(f"NPZ part {part_index} static field differs: {key}")
-    arrays = {key: np.concatenate([chunk[key] for chunk in chunks]) for key in row_keys}
+    if workspace is None:
+        arrays = {key: np.concatenate([chunk[key] for chunk in chunks]) for key in row_keys}
+    else:
+        static = {key: value.copy() for key, value in static.items()}
+        arrays = _storage.DiskArrays(workspace)
+        for key in row_keys:
+            if len(chunks) == 1 and chunks[0][key].dtype == _storage.concatenated_dtype([chunks[0][key]]):
+                arrays.put(key, chunks[0][key])
+            else:
+                arrays.put(key, workspace.concatenate([chunk[key] for chunk in chunks]))
+                for chunk in chunks:
+                    workspace.release(chunk[key])
+        adopted = {id(value) for value in arrays.values()}
+        for chunk in chunks:
+            for value in chunk.values():
+                if id(value) not in adopted:
+                    workspace.release(value)
     present_precision = [key for key in _HIGH_PRECISION_FIELDS if key in arrays]
     if present_precision and len(present_precision) != len(_HIGH_PRECISION_FIELDS):
         raise ValueError("NPZ high-precision fields must be provided as a complete x64..e64 set")
@@ -288,6 +309,10 @@ def _rows_array(rows: list[dict[str, Any]], arrays: dict[str, np.ndarray]) -> di
 
 
 def _replace(arrays: dict[str, np.ndarray], start: int, end: int, rows: list[dict[str, Any]]) -> None:
+    if isinstance(arrays, _storage.DiskArrays):
+        arrays.check_row_objects(len(rows))
+        arrays.replace(start, end, _rows_array(rows, arrays))
+        return
     resulting_rows = len(arrays["seq"]) - (end - start) + len(rows)
     if resulting_rows > _MAX_ESTIMATED_ROWS:
         raise ValueError(
@@ -316,7 +341,7 @@ def _sample_segment(start: np.ndarray, end: np.ndarray, e_start: float, delta_e:
         feedrate=float(feed_mm_s) * 60.0, line=0, raw=raw,
         constraints=[], original_moves=[],
     )
-    return list(sample_global_curve_iter(
+    return _storage.materialize_samples(sample_global_curve_iter(
         curve, dt=float(dt), target_velocity=float(feed_mm_s), t_acc=2.0, t_dec=2.0,
     ))
 
@@ -325,6 +350,8 @@ def _motion_rows(
     arrays, template, samples, block_id, role_code, move_type_code,
     tool_id=None, timing_category=_TIMING_TRAVEL,
 ):
+    if isinstance(arrays, _storage.DiskArrays):
+        arrays.check_row_objects(len(samples))
     rows = []
     for sample in samples:
         row = _row(arrays, template)
@@ -356,6 +383,8 @@ def _motion_rows(
 def _wait_rows(arrays, template, pose, e_start, delta_e, duration, *, block_id, role_code,
                print_code, dt, path_end=False, timing_category=_TIMING_WAIT):
     count = max(1, int(math.ceil(max(float(duration), dt) / dt)))
+    if isinstance(arrays, _storage.DiskArrays):
+        arrays.check_row_objects(count)
     rows = []
     for index in range(1, count + 1):
         row = _row(arrays, template)
@@ -1111,9 +1140,48 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                resin_z_print_compensation_mm: float | None = None,
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
-               cut_wait_s: float | None = None) -> dict[str, Any]:
+               cut_wait_s: float | None = None,
+               storage_mode: str = "auto") -> dict[str, Any]:
+    """Inject identically with RAM or temporary disk-backed column storage.
+
+    ``auto`` selects disk storage by uncompressed size before loading arrays,
+    or spills to disk if the estimated rebuilt arrays exceed the RAM budget.
+    ``memory`` retains the original 4M-row protection; ``disk`` is useful for
+    constrained machines and deterministic equivalence tests. No mode changes
+    the sampler, trajectory construction, NPZ schema or final safety checks.
+    """
+    if storage_mode not in ("auto", "memory", "disk"):
+        raise ValueError("storage_mode must be auto, memory or disk")
     files = _part_files(Path(input_path).expanduser())
-    arrays, static, key_order = _read_parts(files)
+    size = _storage.uncompressed_bytes(files)
+    effective_params = params or LocalInjectionParams(
+        tool_offset=tool_offset,
+        resin_z_print_compensation_mm=resin_z_print_compensation_mm,
+        tool_change_safe_lift_mm=tool_change_safe_lift_mm,
+        cut_lift_mm=cut_lift_mm, cut_wait_s=cut_wait_s,
+    )
+    if storage_mode == "memory":
+        return _inject_npz(input_path, output_path, params=effective_params)
+    with _storage.NpzWorkspace() as workspace:
+        read_from_disk = storage_mode == "disk" or size > _storage.IN_MEMORY_BYTES
+        if read_from_disk:
+            workspace.check_space(size * 3)
+        return _inject_npz(
+            input_path, output_path, params=effective_params,
+            workspace=workspace, read_from_disk=read_from_disk,
+        )
+
+
+def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
+               params: LocalInjectionParams | None = None,
+               tool_offset: tuple[float, float, float] | None = None,
+               resin_z_print_compensation_mm: float | None = None,
+               tool_change_safe_lift_mm: float | None = None,
+               cut_lift_mm: float | None = None,
+               cut_wait_s: float | None = None,
+               workspace=None, read_from_disk=True) -> dict[str, Any]:
+    files = _part_files(Path(input_path).expanduser())
+    arrays, static, key_order = _read_parts(files, workspace if read_from_disk else None)
     _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
     manifest = _json_manifest(static["core_injection_manifest"])
@@ -1174,7 +1242,19 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         safe=safe, lift=lift, wait=wait,
         new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
-    if estimated_rows > _MAX_ESTIMATED_ROWS:
+    row_bytes = sum(value.dtype.itemsize for value in arrays.values())
+    if workspace is not None and not isinstance(arrays, _storage.DiskArrays) and (
+        estimated_rows > _MAX_ESTIMATED_ROWS
+        or estimated_rows * row_bytes > _storage.IN_MEMORY_BYTES
+    ):
+        workspace.check_space(estimated_rows * row_bytes * 3)
+        memory_arrays = arrays
+        arrays = _storage.DiskArrays(workspace)
+        for key in list(memory_arrays):
+            arrays[key] = memory_arrays.pop(key)
+    if isinstance(arrays, _storage.DiskArrays):
+        arrays.check_size(estimated_rows)
+    elif estimated_rows > _MAX_ESTIMATED_ROWS:
         raise ValueError(
             "local injection exceeds the safe in-memory row budget: "
             f"estimated {estimated_rows:,} rows > {_MAX_ESTIMATED_ROWS:,}; "
