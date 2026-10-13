@@ -288,6 +288,13 @@ def _rows_array(rows: list[dict[str, Any]], arrays: dict[str, np.ndarray]) -> di
 
 
 def _replace(arrays: dict[str, np.ndarray], start: int, end: int, rows: list[dict[str, Any]]) -> None:
+    resulting_rows = len(arrays["seq"]) - (end - start) + len(rows)
+    if resulting_rows > _MAX_ESTIMATED_ROWS:
+        raise ValueError(
+            "local injection exceeds the safe in-memory row budget: "
+            f"replacement would produce {resulting_rows:,} rows > {_MAX_ESTIMATED_ROWS:,}; "
+            "use Core full export for this parameter magnitude"
+        )
     replacement = _rows_array(rows, arrays)
     for key in _row_keys(arrays):
         arrays[key] = np.concatenate((arrays[key][:start], replacement[key], arrays[key][end:]))
@@ -1044,7 +1051,7 @@ def _event_counts(
 
 def _estimate_injected_rows(
     arrays, manifest, *, tool_changed, resin_changed, delta_resin,
-    safe, lift, wait, new_offset, feed, dt,
+    safe, lift, wait, new_offset, feed, dt, roles,
 ):
     estimated = int(len(arrays["seq"]))
     blocks = manifest.get("blocks", [])
@@ -1065,12 +1072,36 @@ def _estimate_injected_rows(
         lift != float(base_parameters.get("cut_lift_mm", 20.0))
         or wait != float(base_parameters.get("cut_wait_s", 15.0))
     ):
-        cut_blocks = sum(block.get("kind") == "cut" for block in blocks)
         phase_s = max(
             float(wait), 2.0 * max(float(lift), 0.0) / max(feed, 1e-9) + 9.0
         )
         cut_rows = int(math.ceil(max(phase_s, dt) / dt))
-        estimated += cut_blocks * cut_rows
+        credited_blocks = set()
+        for block in blocks:
+            if block.get("kind") != "cut":
+                continue
+            bid = int(block["id"])
+            replaced_action_rows = 0
+            if bid not in credited_blocks and "src_line" in arrays:
+                indices = np.flatnonzero(arrays["core_injection_block_id"] == bid)
+                block_roles = arrays["core_injection_role"][indices]
+                events = indices[block_roles == _code(roles, "cut_event")]
+                if len(events) == 1:
+                    # _rebuild_cut replaces these non-event action rows. Rows
+                    # before the CUT and tail rows from other source commands
+                    # are retained, so they must never receive budget credit.
+                    cut_line = str(int(block.get("source_line", -1))).encode("ascii")
+                    replaced_action_rows = int(np.count_nonzero(
+                        (indices > events[0])
+                        & (block_roles == _code(roles, "cut_action"))
+                        & (arrays["event_flag"][indices] == 0)
+                        & (arrays["src_line"][indices] == cut_line)
+                    ))
+                credited_blocks.add(bid)
+            # Keep the input footprint and all existing motion/connector rows
+            # as headroom. A shrinking block cannot fund growth in another
+            # block; _replace also checks the actual size before concatenation.
+            estimated += max(0, cut_rows - replaced_action_rows)
     return estimated
 
 
@@ -1141,7 +1172,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         tool_changed=tool_offset_changed or safe_changed,
         resin_changed=resin_changed, delta_resin=new_resin - current_resin,
         safe=safe, lift=lift, wait=wait,
-        new_offset=new_offset, feed=feed, dt=dt,
+        new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
     if estimated_rows > _MAX_ESTIMATED_ROWS:
         raise ValueError(
