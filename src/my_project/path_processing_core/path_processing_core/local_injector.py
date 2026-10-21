@@ -22,6 +22,8 @@ import numpy as np
 from . import npz_workspace as _storage
 from .polynomial_interpolator import sample_global_curve_iter
 from .types import GlobalCurveCommand, Position
+from .resin_wipe import RESIN_WIPE_MM, RESIN_WIPE_POLICY, wipe_target_y
+from .resin_extrusion import BOUNDARY_FORMAT, BOUNDARY_PARAMS
 
 _PART_RE = re.compile(r"^(?P<base>.+)_part(?P<part>\d{4})$")
 _MAX_ESTIMATED_ROWS = 4_000_000
@@ -67,6 +69,8 @@ class LocalInjectionParams:
     tool_change_safe_lift_mm: float | None = None
     cut_lift_mm: float | None = None
     cut_wait_s: float | None = None
+    resin_layer_end_retract_mm: float | None = None
+    resin_layer_start_prime_mm: float | None = None
 
     def as_overrides(self) -> dict[str, Any]:
         out: dict[str, Any] = {}
@@ -80,13 +84,14 @@ class LocalInjectionParams:
         for name in (
             "resin_z_print_compensation_mm", "tool_change_safe_lift_mm",
             "cut_lift_mm", "cut_wait_s",
+            "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ):
             value = getattr(self, name)
             if value is not None:
                 value = float(value)
                 if not math.isfinite(value):
                     raise ValueError(f"{name} must be finite")
-                if name in ("tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s") and value < 0:
+                if name in ("tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s", *BOUNDARY_PARAMS) and value < 0:
                     raise ValueError(f"{name} must be >= 0")
                 out[name] = value
         return out
@@ -567,7 +572,185 @@ def _apply_global_transforms(
     _sync_public_pose(arrays)
 
 
-def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_lift, dt, feed):
+def _resin_extrusion_plans(arrays, manifest, roles, overrides, dt):
+    requested = {key: overrides[key] for key in BOUNDARY_PARAMS if key in overrides}
+    if not requested:
+        return []
+    catalog = manifest.get("resin_extrusion_boundaries", {})
+    if catalog.get("format") != BOUNDARY_FORMAT:
+        raise ValueError(
+            "当前 Core NPZ 缺少实体树脂首末路径标识，无法保证排除 primeline；"
+            "请使用更新后的 Core 从原 GCode 或 R/F 源 NPZ 重新导出。"
+        )
+    plans, seen = [], set()
+    for entry in catalog.get("entries", []):
+        parameter = entry.get("parameter")
+        if parameter not in requested:
+            continue
+        layer = int(entry["layer"])
+        identity = (parameter, layer)
+        if identity in seen:
+            raise ValueError("duplicate resin entity-layer extrusion boundary")
+        seen.add(identity)
+        value = float(requested[parameter])
+        if not entry.get("available"):
+            if value == 0.0:
+                continue
+            raise ValueError(f"第 {layer + 1} 层缺少可独立修改的 {parameter} 段，请重新导出并保留原预挤出/回抽段。")
+        if abs(value - float(entry["distance_mm"])) <= 1e-9:
+            continue
+        role, sign = BOUNDARY_PARAMS[parameter]
+        selected = (
+            (arrays["core_injection_role"] == _code(roles, role))
+            & (arrays["layer_index"] == int(entry["wait_layer"]))
+            & (arrays["event_flag"] == 0) & (arrays["tool_id"] == 2)
+        )
+        if "src_line" in arrays:
+            selected &= arrays["src_line"] == str(int(entry["source_line"])).encode("ascii")
+        indices = np.flatnonzero(selected)
+        if not len(indices) or int(indices[0]) == 0 or not np.all(np.diff(indices) == 1):
+            raise ValueError("resin entity-layer extrusion boundary is missing or ambiguous")
+        start, end = int(indices[0]), int(indices[-1])
+        origin = _pose_from_arrays(arrays, start - 1)
+        pose_keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else ("x", "y", "z", "a", "b", "c")
+        if any(not np.allclose(arrays[key][start:end + 1], origin[axis],
+                               rtol=0.0, atol=1e-6) for axis, key in enumerate(pose_keys)):
+            raise ValueError("resin boundary extrusion must be stationary")
+        e_key = "e64" if _has_high_precision(arrays) else "e"
+        actual_delta = float(arrays[e_key][end] - arrays[e_key][start - 1])
+        if not math.isclose(actual_delta, sign * float(entry["distance_mm"]),
+                            rel_tol=0.0, abs_tol=1e-5):
+            raise ValueError("resin boundary extrusion does not match its source metadata")
+        speed = float(entry["speed_mm_s"])
+        if not math.isfinite(speed) or speed <= 0.0:
+            raise ValueError("resin boundary extrusion speed must be positive and finite")
+        count = max(1, int(math.ceil(max(value / speed, dt) / dt)))
+        plans.append((entry, start, end, value, sign, speed, count))
+    return plans
+
+
+def _rebuild_resin_extrusion(arrays, static, roles, plans, dt):
+    """Change only selected waits and preserve every later extrusion increment."""
+    event_vocab = _decode_vocab(static["event_type_vocab_keys"], static["event_type_vocab_vals"])
+    reset_code = _code(event_vocab, "extrude_reset")
+    for entry, start, end, value, sign, speed, count in sorted(plans, key=lambda plan: plan[1], reverse=True):
+        e_key = "e64" if _has_high_precision(arrays) else "e"
+        initial_e = float(arrays[e_key][start - 1])
+        old_delta = float(arrays[e_key][end]) - initial_e
+        new_delta = sign * value
+        rows = _wait_rows(
+            arrays, start, _pose_from_arrays(arrays, start - 1),
+            initial_e, new_delta, value / speed,
+            block_id=int(arrays["core_injection_block_id"][start]),
+            role_code=_code(roles, entry["role"]),
+            print_code=int(arrays["move_type"][start]), dt=dt,
+            path_end=bool(arrays["path_end_flag"][end]),
+        )
+        following = np.flatnonzero(
+            ((arrays["event_flag"][end + 1:] != 0) & (arrays["event_type"][end + 1:] == reset_code))
+            | (arrays["tool_id"][end + 1:] != 2)
+        )
+        stop = end + 1 + int(following[0]) if len(following) else len(arrays["seq"])
+        difference = new_delta - old_delta
+        for key in ("e", "e64"):
+            if key in arrays:
+                arrays[key][end + 1:stop] += difference
+        _replace(arrays, start, end + 1, rows)
+        entry["distance_mm"] = value
+
+
+def _plan_resin_wipe_migrations(arrays, manifest, roles, move_types):
+    """Recover the last resin layer's Y range for older marked Core files."""
+    migrations = set()
+    print_codes = [_code(move_types, name) for name in ("PRINT", "PRINT_FIT")
+                   if name in move_types.values()]
+    event_role = _code(roles, "tool_change_event")
+    for block in manifest.get("blocks", []):
+        if block.get("kind") != "tool_change":
+            continue
+        specification = block.get("resin_end_wipe")
+        if specification is not None:
+            if specification.get("policy") != RESIN_WIPE_POLICY:
+                raise ValueError("unsupported resin end wipe policy")
+            continue
+        target = block.get("to_tool", block.get("target_tool_id"))
+        if target is None or int(target) != 1:
+            continue
+        indices = np.flatnonzero(arrays["core_injection_block_id"] == int(block["id"]))
+        events = indices[arrays["core_injection_role"][indices] == event_role]
+        if not len(events) or not len(indices) or int(indices[0]) <= 0:
+            continue
+        stop = int(indices[0])
+        if int(arrays["tool_id"][stop - 1]) != 2:
+            continue
+        other = np.flatnonzero(arrays["tool_id"][:stop] != 2)
+        begin = int(other[-1]) + 1 if len(other) else 0
+        moving = np.zeros(stop - begin, dtype=bool)
+        for axis in ("x", "y", "z"):
+            key = _HIGH_PRECISION_MAP[axis] if _has_high_precision(arrays) else axis
+            moving[1:] |= np.abs(np.diff(arrays[key][begin:stop])) > 1e-9
+        candidates = begin + np.flatnonzero(
+            moving & (arrays["event_flag"][begin:stop] == 0)
+            & np.isin(arrays["move_type"][begin:stop], print_codes)
+        )
+        if not len(candidates):
+            continue
+        layer = int(arrays["layer_index"][candidates[-1]])
+        candidates = candidates[arrays["layer_index"][candidates] == layer]
+        # Include the start of each moving sample, not stationary prime/retract.
+        points = np.unique(np.concatenate((candidates, np.maximum(candidates - 1, begin))))
+        y_key = "y64" if _has_high_precision(arrays) else "y"
+        block["resin_end_wipe"] = {
+            "policy": RESIN_WIPE_POLICY, "layer": layer,
+            "y_min": float(np.min(arrays[y_key][points])),
+            "y_max": float(np.max(arrays[y_key][points])),
+            "resin_end_xy": _pose_from_arrays(arrays, int(candidates[-1]))[:2].tolist(),
+        }
+        migrations.add(int(block["id"]))
+    return migrations
+
+
+def _legacy_resin_tail_start(arrays, start, move_types, reset_code):
+    """Recognize only the old straight 5/20 mm move after a reset anchor."""
+    first = start + 1
+    travel_code = _code(move_types, "TRAVEL")
+    while first > 0 and arrays["event_flag"][first - 1] == 0 and int(
+        arrays["move_type"][first - 1]
+    ) == travel_code and int(arrays["tool_id"][first - 1]) == 2:
+        first -= 1
+    if first >= start or first < 2:
+        return None
+    if not (arrays["event_flag"][first - 2] != 0
+            and int(arrays["event_type"][first - 2]) == reset_code):
+        return None
+    origin = _pose_from_arrays(arrays, first - 1)
+    end = _pose_from_arrays(arrays, start)
+    distance = float(np.linalg.norm(end[:3] - origin[:3]))
+    if not any(abs(distance - known) < 1e-4 for known in (5.0, 20.0)):
+        return None
+    if not np.allclose(origin[2:], end[2:], rtol=0.0, atol=1e-6):
+        return None
+    direction = end[:3] - origin[:3]
+    e_key = "e64" if _has_high_precision(arrays) else "e"
+    if not np.allclose(arrays[e_key][first:start + 1], arrays[e_key][first - 1],
+                       rtol=0.0, atol=1e-9):
+        return None
+    keys = _HIGH_PRECISION_POSE_FIELDS if _has_high_precision(arrays) else ("x", "y", "z", "a", "b", "c")
+    poses = np.column_stack([arrays[key][first:start + 1] for key in keys])
+    ratios = (poses[:, :3] - origin[:3]) @ direction / distance**2
+    if (
+        np.any(ratios < -1e-6) or np.any(ratios > 1.0 + 1e-6)
+        or np.any(np.diff(ratios) < -1e-6)
+        or not np.allclose(poses[:, :3], origin[:3] + ratios[:, None] * direction,
+                           rtol=0.0, atol=1e-5)
+        or not np.allclose(poses[:, 3:], origin[3:], rtol=0.0, atol=1e-6)
+    ):
+        return None
+    return first
+
+
+def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_lift, dt, feed,
+                  legacy_tail_reset_code=None):
     """Rebuild the Core-generated pre-tool rows and post-event RSI bridge."""
     bid = int(block["id"])
     pre_code = _code(roles, "tool_change_pre")
@@ -582,7 +765,23 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     start_index = int(indices[0]) - 1
     if start_index < 0:
         raise ValueError(f"tool block {bid} has no preceding pose")
+    remove_start = int(pre[0]) if len(pre) else event_index
+    if legacy_tail_reset_code is not None:
+        legacy_start = _legacy_resin_tail_start(
+            arrays, start_index, move_types, legacy_tail_reset_code,
+        )
+        if legacy_start is not None:
+            remove_start = legacy_start
+            start_index = legacy_start - 1
     start = _pose_from_arrays(arrays, start_index)
+    specification = block.get("resin_end_wipe")
+    if legacy_tail_reset_code is not None and specification is not None and not np.allclose(
+        start[:2], specification["resin_end_xy"], rtol=0.0, atol=1e-5,
+    ):
+        raise ValueError(
+            "cannot identify the legacy resin layer-end travel; re-export this Core NPZ "
+            "instead of replacing an unmarked source route"
+        )
     start_e = float(arrays["e64"][start_index] if "e64" in arrays else arrays["e"][start_index])
     # Core manifests record tool changes as ``from_tool`` / ``to_tool``.
     # ``target_tool_id`` is accepted only for compatibility with older
@@ -595,7 +794,10 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     target_tool = int(target_tool_raw)
     sign = 1.0 if target_tool == 1 else -1.0
     has_offset = bool(np.any(np.abs(new_offset) > 1e-9))
-    lifted = start.copy()
+    wiped = start.copy()
+    if specification is not None:
+        wiped[1] = wipe_target_y(start[1], specification)
+    lifted = wiped.copy()
     lifted[2] += max(0.0, float(safe_lift))
     target = lifted.copy()
     rotated_offset = _rotated_reference_offsets(
@@ -606,11 +808,20 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     )[0]
     target[:3] += sign * rotated_offset
     rows = []
+    if specification is not None:
+        samples = _sample_segment(
+            start, wiped, start_e, 0.0,
+            raw="resin_layer_end_y_wipe", feed_mm_s=feed, dt=dt,
+        )
+        rows.extend(_motion_rows(
+            arrays, event_index, samples, bid, pre_code,
+            _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
+        ))
     if has_offset or safe_lift > 1e-9:
         template = event_index
         if safe_lift > 1e-9:
             samples = _sample_segment(
-                start, lifted, start_e, 0.0,
+                wiped, lifted, start_e, 0.0,
                 raw="tool_change_safe_lift", feed_mm_s=feed, dt=dt,
             )
             rows.extend(_motion_rows(
@@ -628,10 +839,7 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
             ))
     if rows:
         rows[-1]["path_end_flag"] = 1
-    if len(pre):
-        _replace(arrays, int(pre[0]), int(pre[-1]) + 1, rows)
-    else:
-        _replace(arrays, event_index, event_index, rows)
+    _replace(arrays, remove_start, int(pre[-1]) + 1 if len(pre) else event_index, rows)
 
     # Rebuild the event-to-RSI bridge as a separate synthetic region.  Older
     # Core files have no bridge marker; insert it before their first ordinary
@@ -982,6 +1190,7 @@ def _write_offset_metadata(path: Path, manifest: dict[str, Any]) -> Path:
         "resin_z_print_compensation_mm": float(
             base["resin_z_print_compensation_mm"]
         ),
+        **{key: float(base[key]) for key in BOUNDARY_PARAMS if key in base},
     }
     fd, raw = tempfile.mkstemp(
         prefix=f".{target.name}.", suffix=".tmp", dir=target.parent
@@ -1091,7 +1300,7 @@ def _estimate_injected_rows(
         estimated += resin_rows * 4
     if tool_changed:
         tool_blocks = sum(block.get("kind") == "tool_change" for block in blocks)
-        travel_mm = max(float(safe), 0.0) + float(
+        travel_mm = RESIN_WIPE_MM + max(float(safe), 0.0) + float(
             np.linalg.norm(np.asarray(new_offset, dtype=float))
         )
         tool_rows = int(math.ceil(max(travel_mm / max(feed * dt, 1e-9), 1.0) * 4.0))
@@ -1141,6 +1350,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
+               resin_layer_end_retract_mm: float | None = None,
+               resin_layer_start_prime_mm: float | None = None,
                storage_mode: str = "auto") -> dict[str, Any]:
     """Inject identically with RAM or temporary disk-backed column storage.
 
@@ -1159,6 +1370,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm, cut_wait_s=cut_wait_s,
+        resin_layer_end_retract_mm=resin_layer_end_retract_mm,
+        resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )
     if storage_mode == "memory":
         return _inject_npz(input_path, output_path, params=effective_params)
@@ -1179,6 +1392,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
+               resin_layer_end_retract_mm: float | None = None,
+               resin_layer_start_prime_mm: float | None = None,
                workspace=None, read_from_disk=True) -> dict[str, Any]:
     files = _part_files(Path(input_path).expanduser())
     arrays, static, key_order = _read_parts(files, workspace if read_from_disk else None)
@@ -1193,6 +1408,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm,
         cut_wait_s=cut_wait_s,
+        resin_layer_end_retract_mm=resin_layer_end_retract_mm,
+        resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )).as_overrides()
     if not overrides:
         raise ValueError("at least one local injection parameter is required")
@@ -1202,6 +1419,10 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     )
     move_types = _decode_vocab(
         static["move_type_vocab_keys"], static["move_type_vocab_vals"]
+    )
+    wipe_migrations = _plan_resin_wipe_migrations(arrays, manifest, roles, move_types)
+    extrusion_plans = _resin_extrusion_plans(
+        arrays, manifest, roles, overrides, float(manifest.get("sample_period_s", 0.004)),
     )
     base = manifest.get("base_parameters", {})
     current_offset = np.asarray(base.get("tool_offset", [0.0, 0.0, 0.0]), dtype=float)
@@ -1237,11 +1458,13 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     )
     estimated_rows = _estimate_injected_rows(
         arrays, manifest,
-        tool_changed=tool_offset_changed or safe_changed,
+        tool_changed=tool_offset_changed or safe_changed or bool(wipe_migrations),
         resin_changed=resin_changed, delta_resin=new_resin - current_resin,
         safe=safe, lift=lift, wait=wait,
         new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
+    estimated_rows += sum(max(0, count - (end - start + 1))
+                          for _, start, end, _, _, _, count in extrusion_plans)
     row_bytes = sum(value.dtype.itemsize for value in arrays.values())
     if workspace is not None and not isinstance(arrays, _storage.DiskArrays) and (
         estimated_rows > _MAX_ESTIMATED_ROWS
@@ -1260,6 +1483,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
             f"estimated {estimated_rows:,} rows > {_MAX_ESTIMATED_ROWS:,}; "
             "use Core full export for this parameter magnitude"
         )
+    _rebuild_resin_extrusion(arrays, static, roles, extrusion_plans, dt)
     if resin_changed:
         _rebuild_resin(arrays, manifest, roles, move_types, new_resin, current_resin, dt, feed)
     _apply_global_transforms(
@@ -1282,8 +1506,17 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         if block.get("kind") == "cut" and cut_changed:
             _rebuild_cut(arrays, static, manifest, roles, move_types, block, lift, wait, dt, feed)
     for block in manifest.get("blocks", []):
-        if block.get("kind") == "tool_change" and (tool_offset_changed or safe_changed):
-            _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe, dt, feed)
+        if block.get("kind") == "tool_change" and (
+            tool_offset_changed or safe_changed or int(block["id"]) in wipe_migrations
+        ):
+            event_vocab = _decode_vocab(static["event_type_vocab_keys"], static["event_type_vocab_vals"])
+            _rebuild_tool(
+                arrays, manifest, roles, move_types, block, new_offset, safe, dt, feed,
+                legacy_tail_reset_code=(
+                    _code(event_vocab, "extrude_reset")
+                    if int(block["id"]) in wipe_migrations else None
+                ),
+            )
     _reassign_path_ids(arrays, roles, move_types, current_resin, new_resin)
     _repair(arrays, dt)
     manifest["base_parameters"] = dict(base)

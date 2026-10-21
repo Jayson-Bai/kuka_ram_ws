@@ -31,6 +31,8 @@ from .bspline_approximation import GlobalSplinePlanner
 from .polynomial_interpolator import sample_global_curve_iter
 from .rsi_timing import RsiTimingAccumulator
 from .rsi_validation import validate_final_npz
+from .resin_wipe import command_resin_wipes, wipe_target_y
+from .resin_extrusion import command_resin_boundaries
 
 
 @dataclass
@@ -240,6 +242,8 @@ def export_npz(
         "post_anchor": 7,
         "resin_z_compensation": 8,
         "tool_change_bridge": 9,
+        "resin_layer_start_prime": 10,
+        "resin_layer_end_retract": 11,
     }
     injection_role_keys = np.array(list(injection_role_map.keys()), dtype="S32")
     injection_role_vals = np.array(list(injection_role_map.values()), dtype=np.uint8)
@@ -1306,7 +1310,8 @@ def export_npz(
         resin_z_offset = resin_z_print_compensation_mm
 
     def _append_extrude_wait(
-            cmd: ExtrudeWait, layer: int, subtype: str, occ: int, mark_path_end: bool = True):
+            cmd: ExtrudeWait, layer: int, subtype: str, occ: int, mark_path_end: bool = True,
+            boundary_role: str | None = None):
         nonlocal seq, processed_rows, last_pose, last_feedrate_mm_min
         nonlocal active_injection_block_id, active_injection_kind
         hold_row = last_pose or CsvRow(
@@ -1347,6 +1352,8 @@ def export_npz(
                 wait_marker_role = injection_role_map["none"]
             else:
                 wait_marker_role = injection_role_map["none"]
+            if boundary_role is not None:
+                wait_marker_role = injection_role_map[boundary_role]
             row = CsvRow(
                 seq=seq,
                 x=hold_row.x,
@@ -1750,6 +1757,11 @@ def export_npz(
 
     total_cmds = len(parsed_commands)
 
+    resin_wipes = command_resin_wipes(parsed_commands, initial_tool_id, _map_gcode_tool)
+    resin_boundary_commands, resin_boundary_catalog = command_resin_boundaries(
+        parsed_commands, initial_tool_id, _map_gcode_tool,
+    )
+
     injection_blocks = [{
         "id": 1,
         "kind": "resin_z_compensation",
@@ -1780,6 +1792,8 @@ def export_npz(
                     "anchor": "next_effective_print_path",
                     "injectable_parameters": ["tool_offset", "tool_change_safe_lift_mm"],
                     "target_tool_id": int(mapped),
+                    **({"resin_end_wipe": resin_wipes[command_index]}
+                       if command_index in resin_wipes else {}),
                 })
                 next_block_id += 1
                 scan_tool = mapped
@@ -1815,6 +1829,7 @@ def export_npz(
         "overrideable_parameters": [
             "tool_offset", "resin_z_print_compensation_mm",
             "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
+            "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ],
         "precision_fields": {
             "consumer_float32": ["x", "y", "z", "a", "b", "c", "e", "planned_time_s"],
@@ -1831,6 +1846,7 @@ def export_npz(
             {"parameter": "resin_z_print_compensation_mm", "selection": "all trajectory rows after resin_z_compensation anchor", "operation": "translate_z_by_delta_from_base", "exclude_role": "resin_z_compensation"},
         ],
         "blocks": injection_blocks,
+        "resin_extrusion_boundaries": resin_boundary_catalog,
     }, ensure_ascii=False, separators=(",", ":"))
 
     def _is_external_npz_start_xy_travel(cmd) -> bool:
@@ -1911,16 +1927,35 @@ def export_npz(
                     ox, oy, oz = tool_offset
                     has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
                     safe_lift = max(0.0, float(tool_change_safe_lift_mm))
-                    if has_offset or safe_lift > 1e-9:
+                    if has_offset or safe_lift > 1e-9 or idx in resin_wipes:
                         last_row = last_pose
                         if last_row is not None:
                             from .types import Position as _Pos
                             start_p = _Pos(last_row.x, last_row.y, last_row.z,
                                            last_row.a, last_row.b, last_row.c)
+                            if idx in resin_wipes:
+                                wipe_end = _Pos(
+                                    start_p.x, wipe_target_y(start_p.y, resin_wipes[idx]),
+                                    start_p.z, start_p.a, start_p.b, start_p.c,
+                                )
+                                wipe_gc = GlobalCurveCommand(
+                                    type="TRAVEL", cmd="SPLINE", start_pos=start_p,
+                                    control_points=[wipe_end, wipe_end, wipe_end],
+                                    e_val=last_row.e, delta_e=0.0,
+                                    feedrate=default_feed_mm_s * 60.0,
+                                    line=cmd.line, raw="resin_layer_end_y_wipe",
+                                    constraints=[], original_moves=[],
+                                )
+                                _append_sample(
+                                    wipe_gc, cmd.layer, cmd.subtype, occ,
+                                    marker_block_id=active_injection_block_id,
+                                    marker_role=injection_role_map["tool_change_pre"],
+                                )
+                                start_p = wipe_end
                             offset_start_p = start_p
                             if safe_lift > 1e-9:
-                                lifted_p = _Pos(last_row.x, last_row.y, last_row.z + safe_lift,
-                                                last_row.a, last_row.b, last_row.c)
+                                lifted_p = _Pos(start_p.x, start_p.y, start_p.z + safe_lift,
+                                                start_p.a, start_p.b, start_p.c)
                                 lift_gc = GlobalCurveCommand(
                                     type="TRAVEL",
                                     cmd="SPLINE",
@@ -2034,7 +2069,11 @@ def export_npz(
             occ = occ_counters.get((layer, subtype), 0)
             if occ == 0:
                 occ = _ensure_segment(layer, subtype)
-            _append_extrude_wait(cmd, layer, subtype, occ)
+            boundary = resin_boundary_commands.get(idx) if enable_extrude_wait else None
+            _append_extrude_wait(
+                cmd, layer, subtype, occ,
+                boundary_role=boundary["role"] if boundary is not None else None,
+            )
             continue
 
         # 轨迹分段收集

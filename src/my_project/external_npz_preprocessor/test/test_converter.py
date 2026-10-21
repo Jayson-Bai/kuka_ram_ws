@@ -229,10 +229,7 @@ def test_first_material_layers_and_destination_travels_use_dedicated_speeds():
         240.0,  # destination is the first fiber layer
         780.0,  # destination is a later fiber layer
     ]
-    assert [travel.feedrate for travel in layer_end_travels] == [
-        240.0,  # first resin-bearing layer
-        780.0,  # later resin layer
-    ]
+    assert not layer_end_travels  # Core owns the single pre-tool Y wipe.
 
 
 def test_marks_only_fiber_curves_with_custom_start_acceleration_time():
@@ -428,7 +425,7 @@ def test_adds_prime_before_paths_and_retract_after_resin_paths():
     ]
 
 
-def test_final_resin_path_travels_20mm_inward_before_tool_change():
+def test_final_resin_path_retracts_and_resets_before_core_tool_change():
     job = SourceJob(
         meta={},
         layers=[
@@ -477,10 +474,10 @@ def test_final_resin_path_travels_20mm_inward_before_tool_change():
         and cmd.raw == "external_npz_resin_layer_end_travel"
     ]
 
-    assert len(layer_end_travels) == 1
+    assert not layer_end_travels
     final_curve = resin_curves[-1]
     final_index = commands.index(final_curve)
-    curve, retract, reset, anchor, travel = commands[final_index:final_index + 5]
+    curve, retract, reset, anchor, tool_change = commands[final_index:final_index + 5]
     assert curve is final_curve
     assert isinstance(retract, ExtrudeWait)
     assert retract.raw == "external_npz_retract"
@@ -488,25 +485,11 @@ def test_final_resin_path_travels_20mm_inward_before_tool_change():
     assert reset.raw == "external_npz_path_reset"
     assert isinstance(anchor, ExtrudeWait)
     assert anchor.raw == "external_npz_reset_anchor"
-    assert travel is layer_end_travels[0]
-    assert travel.e_val == pytest.approx(0.0)
-    assert travel.delta_e == pytest.approx(0.0)
-    assert travel.feedrate == pytest.approx(240.0)
-    assert travel.start_pos == final_curve.control_points[-1]
-    assert travel.pos.x == pytest.approx(10.0 - 20.0 / np.sqrt(2.0))
-    assert travel.pos.y == pytest.approx(10.0 - 20.0 / np.sqrt(2.0))
-    assert travel.pos.z == pytest.approx(2.5)
-    assert (travel.pos.a, travel.pos.b, travel.pos.c) == pytest.approx((1.0, 2.0, 3.0))
-
-    fiber_tool_change_index = next(
-        index
-        for index, cmd in enumerate(commands)
-        if isinstance(cmd, ToolChangeCommand) and cmd.tool == 0
-    )
-    assert commands.index(travel) < fiber_tool_change_index
+    assert isinstance(tool_change, ToolChangeCommand)
+    assert tool_change.tool == 0
 
 
-def test_layer_end_inward_travel_is_added_only_to_resin_bearing_layers():
+def test_converter_does_not_add_legacy_layer_end_travel():
     job = SourceJob(
         meta={},
         layers=[
@@ -536,15 +519,7 @@ def test_layer_end_inward_travel_is_added_only_to_resin_bearing_layers():
         and cmd.raw == "external_npz_resin_layer_end_travel"
     ]
 
-    assert [travel.layer for travel in layer_end_travels] == [0, 2]
-    assert all(
-        np.hypot(
-            travel.pos.x - travel.start_pos.x,
-            travel.pos.y - travel.start_pos.y,
-        )
-        == pytest.approx(20.0)
-        for travel in layer_end_travels
-    )
+    assert not layer_end_travels
 
 
 def test_resin_path_end_resets_then_anchors_before_travel_with_zero_e():

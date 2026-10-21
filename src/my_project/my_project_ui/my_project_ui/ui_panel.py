@@ -352,6 +352,11 @@ _CUT_DEFAULTS = {
     "cut_lift_mm": 20.0,
     "cut_wait_s": 15.0,
 }
+_CORE_RESIN_EXTRUSION_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "core_resin_extrusion.json")
+_CORE_RESIN_EXTRUSION_DEFAULTS = {
+    "resin_layer_end_retract_mm": None,
+    "resin_layer_start_prime_mm": None,
+}
 _NPZ_OFFSET_TOLERANCE_MM = 0.005
 _NPZ_RELATED_LAUNCH_PARAMS = (
     "npz_path",
@@ -382,8 +387,8 @@ _PID_DEFAULTS = {
         "min_integral": 0.0},
     "resin": {
         "kp": 1.782,
-        "ki": 0.6,
-        "kd": 150.0,
+        "ki": 0.51,
+        "kd": 172.5,
         "max_output": 100.0,
         "min_output": 63.18,
         "max_integral": 105.3,
@@ -455,6 +460,35 @@ def _save_cut_config(
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
     with open(_CUT_CONFIG_PATH, "w", encoding="utf-8") as handle:
         json.dump(values, handle, ensure_ascii=False, indent=2)
+
+
+def _optional_resin_extrusion_mm(value):
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    result = float(value)
+    if not math.isfinite(result) or result < 0.0:
+        raise ValueError("实体树脂层首/层末挤出距离必须是非负有限数字，或留空沿用原值")
+    return result
+
+
+def _load_core_resin_extrusion_config():
+    try:
+        with open(_CORE_RESIN_EXTRUSION_CONFIG_PATH, "r", encoding="utf-8") as handle:
+            data = json.load(handle)
+        if not isinstance(data, dict):
+            raise ValueError("invalid Core resin extrusion settings")
+        return {key: _optional_resin_extrusion_mm(data.get(key))
+                for key in _CORE_RESIN_EXTRUSION_DEFAULTS}
+    except (OSError, TypeError, ValueError):
+        return dict(_CORE_RESIN_EXTRUSION_DEFAULTS)
+
+
+def _save_core_resin_extrusion_config(values):
+    settings = {key: _optional_resin_extrusion_mm(values.get(key))
+                for key in _CORE_RESIN_EXTRUSION_DEFAULTS}
+    os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
+    with open(_CORE_RESIN_EXTRUSION_CONFIG_PATH, "w", encoding="utf-8") as handle:
+        json.dump(settings, handle, ensure_ascii=False, indent=2)
 
 
 def _format_tool_offset(offset):
@@ -2217,11 +2251,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "tool_change_safe_lift_mm": cut_cfg["tool_change_safe_lift_mm"],
             "cut_lift_mm": cut_cfg["cut_lift_mm"],
             "cut_wait_s": cut_cfg["cut_wait_s"],
+            **_load_core_resin_extrusion_config(),
         }
         local_fields = (
             ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
             ("cut_lift_mm", "CUT 抬升", "mm", "CUT 阶段的局部抬升距离。"),
             ("cut_wait_s", "CUT 等待", "s", "CUT 阶段的局部等待时间。"),
+            ("resin_layer_end_retract_mm", "实体树脂层末回抽", "mm", "仅控制每层实体最后一条树脂路径后的回抽供料距离 E（不是喷头移动距离）；不影响 primeline 或中间路径。留空沿用原值，0 取消此处回抽；速度沿用原段。"),
+            ("resin_layer_start_prime_mm", "实体树脂层首预挤出", "mm", "仅控制每层实体第一条树脂路径前的预挤出供料距离 E（不是喷头移动距离），包括首层实体；不影响 primeline 或中间路径。留空沿用原值，0 取消此处预挤出；速度沿用原段。"),
         )
         for column, (key, label_text, unit, tip) in enumerate(local_fields):
             card = QtWidgets.QWidget()
@@ -2234,18 +2271,35 @@ class _UiStatusWidget(QtWidgets.QWidget):
             label.setAlignment(QtCore.Qt.AlignCenter)
             label.setToolTip(tip)
 
-            inp = _NoWheelDoubleSpinBox()
-            inp.setRange(0.0, 100000.0)
-            inp.setDecimals(3)
-            inp.setSingleStep(0.1)
-            inp.setValue(float(local_defaults[key]))
+            if key in _CORE_RESIN_EXTRUSION_DEFAULTS:
+                inp = QtWidgets.QLineEdit()
+                inp.setPlaceholderText("沿用原值")
+                validator = QtGui.QDoubleValidator(0.0, 100000.0, 3, inp)
+                validator.setNotation(QtGui.QDoubleValidator.StandardNotation)
+                inp.setValidator(validator)
+                if local_defaults[key] is not None:
+                    inp.setText(f"{local_defaults[key]:g}")
+            else:
+                inp = _NoWheelDoubleSpinBox()
+                inp.setRange(0.0, 100000.0)
+                inp.setDecimals(3)
+                inp.setSingleStep(0.1)
+                inp.setValue(float(local_defaults[key]))
             inp.setMinimumHeight(28)
             inp.setToolTip(tip)
             self._local_injection_inputs[key] = inp
 
+            # Persist local injection tweaks as soon as the user edits a field,
+            # mirroring how tool offsets auto-save on change. The cut/extrusion
+            # values live under ~/.config/my_project and never enter git.
+            if key in _CORE_RESIN_EXTRUSION_DEFAULTS:
+                inp.editingFinished.connect(self._on_local_injection_changed)
+            else:
+                inp.valueChanged.connect(self._on_local_injection_changed)
+
             card_layout.addWidget(label)
             card_layout.addWidget(inp)
-            local_grid.addWidget(card, 0, column)
+            local_grid.addWidget(card, column // 3, column % 3)
 
         local_grid.setColumnStretch(0, 1)
         local_grid.setColumnStretch(1, 1)
@@ -5372,6 +5426,29 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._fiber_z_print_comp_spin.value(),
         )
 
+    def _on_local_injection_changed(self, _value=None):
+        """Auto-persist local injection params (cut lift/wait, safe lift,
+        resin extrusion) to ~/.config/my_project on every edit."""
+        try:
+            values = self._local_injection_values()
+            _save_cut_config(
+                values["cut_lift_mm"],
+                values["cut_wait_s"],
+                tool_change_safe_lift_mm=values["tool_change_safe_lift_mm"],
+            )
+            _save_core_resin_extrusion_config(values)
+            if hasattr(self, "_offset_status"):
+                self._offset_status.setText("已自动保存剪切/注入参数。")
+                self._offset_status.setStyleSheet("color: #1b6e3c;")
+        except ValueError:
+            # Invalid/transient input while typing; ignore until the field
+            # settles on a parseable value.
+            pass
+        except Exception as exc:
+            if hasattr(self, "_offset_status"):
+                self._offset_status.setText(f"自动保存失败: {exc}")
+                self._offset_status.setStyleSheet("color: #b42318;")
+
     def current_resin_z_print_compensation(self):
         return self._resin_z_print_comp_spin.value()
 
@@ -5413,6 +5490,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
         }
         for key, inp in self._local_injection_inputs.items():
             try:
+                if key in _CORE_RESIN_EXTRUSION_DEFAULTS:
+                    values[key] = _optional_resin_extrusion_mm(inp.text())
+                    continue
                 value = float(inp.value()) if hasattr(inp, "value") else float(inp.text())
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{key} 不是有效数字") from exc
@@ -5589,6 +5669,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 used_cut_wait_s,
                 tool_change_safe_lift_mm=used_safe_lift_mm,
             )
+            _save_core_resin_extrusion_config(local_injection_values)
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
                 and source_ext in (".gcode", ".gc", ".g")
@@ -5632,6 +5713,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
+                        resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
+                        resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
                 elif source_ext == ".npz":
                     self.export_progress.emit("读取约定格式 NPZ...")
@@ -5699,6 +5782,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
+                        resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
+                        resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
                     stats["base_export_total_s"] = base_stats.get("total_s", 0.0)
 
@@ -5906,6 +5991,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             self._export_status.setStyleSheet("color: #b42318;")
             return
 
+        try:
+            local_values = self._local_injection_values()
+            _save_core_resin_extrusion_config(local_values)
+        except (ValueError, OSError) as exc:
+            self._export_status.setText(f"无效的注入参数: {exc}")
+            self._export_status.setStyleSheet("color: #b42318;")
+            return
+
         source_path = Path(npz_file)
         output_path = source_path.with_name(source_path.stem + "_injected.npz")
         self._npz_out_input.setText(str(output_path))
@@ -5914,8 +6007,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._export_progress.setRange(0, 0)
         self._export_status.setText("正在注入 Core NPZ 并执行安全检查...")
         self._export_status.setStyleSheet("color: #b15e00;")
-
-        local_values = self._local_injection_values()
 
         def _inject_worker():
             try:
@@ -5933,6 +6024,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     tool_change_safe_lift_mm=local_values["tool_change_safe_lift_mm"],
                     cut_lift_mm=local_values["cut_lift_mm"],
                     cut_wait_s=local_values["cut_wait_s"],
+                    resin_layer_end_retract_mm=local_values.get("resin_layer_end_retract_mm"),
+                    resin_layer_start_prime_mm=local_values.get("resin_layer_start_prime_mm"),
                 )
                 self.export_progress.emit("运行最终 4 ms 轨迹安全审查...")
                 stats["rsi_validation"] = validate_final_npz(
