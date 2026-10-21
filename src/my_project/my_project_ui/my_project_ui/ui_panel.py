@@ -387,7 +387,7 @@ _PID_DEFAULTS = {
         "min_integral": 0.0},
     "resin": {
         "kp": 1.782,
-        "ki": 0.51,
+        "ki": 0.6745,
         "kd": 172.5,
         "max_output": 100.0,
         "min_output": 63.18,
