@@ -7,6 +7,8 @@ closed instead of producing a best-effort trajectory.
 """
 from __future__ import annotations
 
+from .cut_sync import cut_holds, cut_sync_payload, sync_payload
+
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import hashlib
@@ -70,6 +72,8 @@ class LocalInjectionParams:
     cut_lift_mm: float | None = None
     cut_wait_s: float | None = None
     cut_settle_s: float | None = None
+    cut_lift_settle_s: float | None = None
+    cut_retract_settle_s: float | None = None
     resin_layer_end_retract_mm: float | None = None
     resin_layer_start_prime_mm: float | None = None
 
@@ -85,6 +89,7 @@ class LocalInjectionParams:
         for name in (
             "resin_z_print_compensation_mm", "tool_change_safe_lift_mm",
             "cut_lift_mm", "cut_wait_s", "cut_settle_s",
+            "cut_lift_settle_s", "cut_retract_settle_s",
             "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ):
             value = getattr(self, name)
@@ -94,7 +99,7 @@ class LocalInjectionParams:
                     raise ValueError(f"{name} must be finite")
                 if name in (
                     "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
-                    "cut_settle_s", *BOUNDARY_PARAMS,
+                    "cut_settle_s", "cut_lift_settle_s", "cut_retract_settle_s", *BOUNDARY_PARAMS,
                 ) and value < 0:
                     raise ValueError(f"{name} must be >= 0")
                 out[name] = value
@@ -940,7 +945,7 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
 
 def _rebuild_cut(
     arrays, static, manifest, roles, move_types, block,
-    new_lift, new_wait, new_settle, dt, feed,
+    new_lift, new_wait, new_settle, dt, feed, new_retract_settle=None,
 ):
     """Rebuild the CUT handshake with the canonical Core row contract."""
     bid = int(block["id"])
@@ -954,15 +959,21 @@ def _rebuild_cut(
         raise ValueError(f"CUT block {bid} is incomplete")
     event_index = int(cut_events[0])
     event_vocab = _decode_vocab(static["event_type_vocab_keys"], static["event_type_vocab_vals"])
+    cut_event_code = _code(event_vocab, "cut")
     reset_code = _code(event_vocab, "extrude_reset")
-    resets = [
+    reset_events = [
         int(i) for i in np.flatnonzero(
             mask & (arrays["event_flag"] != 0)
             & (arrays["event_type"] == reset_code)
-        ) if int(i) > event_index
+        )
     ]
+    resets = [index for index in reset_events if index > event_index]
     if len(resets) < 2:
         raise ValueError(f"CUT block {bid} does not contain the full post-CUT reset sequence")
+    # Current Core output opens the block with a reset anchor in front of the
+    # lift; legacy output goes straight from the path end to the CUT event.
+    anchor_reset = max(
+        (index for index in reset_events if index < event_index), default=None)
 
     old_indices = [int(i) for i in indices]
     cut_line = str(int(block.get("source_line", -1))).encode("ascii")
@@ -999,8 +1010,31 @@ def _rebuild_cut(
     ]
     connector_set = set(connector)
 
-    low = _pose_from_arrays(arrays, event_index - 1)
-    low_e = float(arrays["e64"][event_index - 1] if "e64" in arrays else arrays["e"][event_index - 1])
+    # Events are intentionally excluded from the global fiber compensation.
+    # In the current layout the first block row is therefore a reset event at
+    # the uncompensated path end, not the low pose used by the rebuilt lift.
+    # Take the first non-event row after that anchor.  Legacy files start with
+    # the CUT event itself, so their low pose is the row immediately before it.
+    if anchor_reset is not None:
+        low_candidates = [
+            int(index) for index in indices
+            if anchor_reset < int(index) < event_index
+            and int(arrays["event_flag"][index]) == 0
+        ]
+        if not low_candidates:
+            raise ValueError(f"CUT block {bid} has no lifted-path anchor")
+        block_start = low_candidates[0]
+    else:
+        block_start = int(indices[0])
+        if int(arrays["event_flag"][block_start]) != 0:
+            if block_start <= 0:
+                raise ValueError(f"CUT block {bid} has no preceding low pose")
+            block_start -= 1
+    low = _pose_from_arrays(arrays, block_start)
+    # A reset anchor re-bases trajectory E to zero, so the lift starts at 0
+    # instead of the raw path E.
+    low_e = 0.0 if anchor_reset is not None else float(
+        arrays["e64"][block_start] if "e64" in arrays else arrays["e"][block_start])
     high = low.copy()
     # CUT is the one lift whose frame belongs to the curved print path.  Its
     # flat-reference +Z vector follows the row's KUKA A(Z)-B(Y)-C(X) pose,
@@ -1014,7 +1048,29 @@ def _rebuild_cut(
     template = event_index
     print_code = _code(move_types, "PRINT")
     travel_code = _code(move_types, "TRAVEL")
-    rows = [_row(arrays, index) for index in old_indices if index <= event_index]
+    # Only the pre-CUT reset anchor is carried over; the CUT event and its
+    # lift/hold rows are regenerated below.  Current Core output dispatches
+    # CUT at the start of the lift, while legacy output places it before the
+    # lift as well.  Copying pre-event rows would duplicate local motion.
+    rows = []
+    if anchor_reset is not None:
+        rows.append(_row(arrays, anchor_reset))
+        rows.extend(_wait_rows(
+            arrays, template, low, 0.0, 0.0, dt,
+            block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+            timing_category=_TIMING_CUT,
+        ))
+    cut_row = _row(arrays, event_index)
+    if (int(cut_row["event_flag"]) != 0
+            and int(cut_row["event_type"]) == cut_event_code):
+        source_payload = bytes(
+            cut_row["payload"]).split(b"\x00", 1)[0].decode("ascii")
+        cut_row["payload"] = cut_sync_payload(
+            source_payload, expected_syncs=2).encode("ascii")
+    # The CUT event precedes the lift.  Firmware starts the actuator descent
+    # while RSI is still moving through the generated local Z lift.
+    _set_pose(cut_row, low, e=low_e)
+    rows.append(cut_row)
 
     if new_lift > 1e-9:
         samples = _sample_segment(
@@ -1026,12 +1082,23 @@ def _rebuild_cut(
             int(arrays["tool_id"][event_index]), _TIMING_CUT,
         ))
 
-    settle_s = max(0.0, float(new_settle))
+    settle_s, retract_settle_s = cut_holds(new_settle, new_settle, new_retract_settle)
+
+    def _sync_row(e_value):
+        row = _row(arrays, event_index)
+        _set_pose(row, high, e=float(e_value))
+        row["event_type"] = _code(event_vocab, "extrude_sync")
+        row["payload"] = sync_payload(int(row["tool_id"]), e_value, new_wait).encode("ascii")
+        row["core_injection_role"] = action_code
+        row["path_end_flag"] = 0
+        return row
+
     rows.extend(_wait_rows(
         arrays, template, high, float(new_lift), 0.0, settle_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
+    rows.append(_sync_row(float(new_lift)))
 
     def _reset_row(index, e_value):
         row = _row(arrays, index)
@@ -1052,8 +1119,9 @@ def _rebuild_cut(
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
+    rows.append(_sync_row(-float(new_lift)))
     rows.extend(_wait_rows(
-        arrays, template, high, -float(new_lift), 0.0, settle_s,
+        arrays, template, high, -float(new_lift), 0.0, retract_settle_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
@@ -1070,7 +1138,7 @@ def _rebuild_cut(
         - lift_duration_s
         - settle_s
         - retract_duration_s
-        - settle_s,
+        - retract_settle_s,
     )
     if remaining > 1e-9:
         rows.extend(_wait_rows(
@@ -1355,6 +1423,7 @@ def _event_counts(
 def _estimate_injected_rows(
     arrays, manifest, *, tool_changed, resin_changed, delta_resin,
     safe, lift, wait, settle, new_offset, feed, dt, roles,
+    retract_settle=None,
 ):
     estimated = int(len(arrays["seq"]))
     blocks = manifest.get("blocks", [])
@@ -1371,15 +1440,24 @@ def _estimate_injected_rows(
         tool_rows = int(math.ceil(max(travel_mm / max(feed * dt, 1e-9), 1.0) * 4.0))
         estimated += tool_blocks * tool_rows
     base_parameters = manifest.get("base_parameters", {})
+    if retract_settle is None:
+        retract_settle = settle
+    base_lift_hold, base_retract_hold = cut_holds(
+        float(base_parameters.get("cut_settle_s", 3.0)),
+        base_parameters.get("cut_lift_settle_s"),
+        base_parameters.get("cut_retract_settle_s"),
+    )
     if (
         lift != float(base_parameters.get("cut_lift_mm", 20.0))
         or wait != float(base_parameters.get("cut_wait_s", 15.0))
-        or settle != float(base_parameters.get("cut_settle_s", 3.0))
+        or settle != base_lift_hold
+        or retract_settle != base_retract_hold
     ):
         phase_s = max(
             float(wait),
             2.0 * max(float(lift), 0.0) / max(feed, 1e-9)
-            + 2.0 * max(float(settle), 0.0),
+            + max(float(settle), 0.0)
+            + max(float(retract_settle), 0.0),
         )
         cut_rows = int(math.ceil(max(phase_s, dt) / dt))
         credited_blocks = set()
@@ -1419,6 +1497,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
                cut_settle_s: float | None = None,
+               cut_lift_settle_s: float | None = None,
+               cut_retract_settle_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                storage_mode: str = "auto") -> dict[str, Any]:
@@ -1440,6 +1520,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm, cut_wait_s=cut_wait_s,
         cut_settle_s=cut_settle_s,
+        cut_lift_settle_s=cut_lift_settle_s,
+        cut_retract_settle_s=cut_retract_settle_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )
@@ -1463,6 +1545,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
                cut_settle_s: float | None = None,
+               cut_lift_settle_s: float | None = None,
+               cut_retract_settle_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                workspace=None, read_from_disk=True) -> dict[str, Any]:
@@ -1473,6 +1557,10 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     manifest = _json_manifest(static["core_injection_manifest"])
     source_manifest_format = manifest["format"]
     _ensure_role_vocab(static, "tool_change_bridge", 9)
+    event_names = _decode_vocab(static["event_type_vocab_keys"], static["event_type_vocab_vals"])
+    if "extrude_sync" not in event_names.values():
+        static["event_type_vocab_keys"] = np.append(static["event_type_vocab_keys"], np.asarray([b"extrude_sync"], dtype=static["event_type_vocab_keys"].dtype))
+        static["event_type_vocab_vals"] = np.append(static["event_type_vocab_vals"], np.asarray([max(event_names) + 1], dtype=static["event_type_vocab_vals"].dtype))
     overrides = (params or LocalInjectionParams(
         tool_offset=tool_offset,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
@@ -1480,6 +1568,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         cut_lift_mm=cut_lift_mm,
         cut_wait_s=cut_wait_s,
         cut_settle_s=cut_settle_s,
+        cut_lift_settle_s=cut_lift_settle_s,
+        cut_retract_settle_s=cut_retract_settle_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )).as_overrides()
@@ -1520,6 +1610,10 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     base_lift = float(base.get("cut_lift_mm", 20.0))
     base_wait = float(base.get("cut_wait_s", 15.0))
     base_settle = float(base.get("cut_settle_s", 3.0))
+    base_lift_hold, base_retract_hold = cut_holds(base_settle, base.get("cut_lift_settle_s"), base.get("cut_retract_settle_s"))
+    lift_hold, retract_hold = cut_holds(settle,
+        overrides.get("cut_lift_settle_s", None if "cut_settle_s" in overrides else base_lift_hold),
+        overrides.get("cut_retract_settle_s", None if "cut_settle_s" in overrides else base_retract_hold))
     tool_offset_changed = not np.allclose(new_offset, current_offset, rtol=0.0, atol=1e-9)
     resin_changed = abs(new_resin - current_resin) > 1e-9
     safe_changed = (
@@ -1534,11 +1628,13 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
             and abs(settle - base_settle) > 1e-9
         )
     )
+    cut_changed = cut_changed or lift_hold != base_lift_hold or retract_hold != base_retract_hold or base.get("cut_sync_version") != 1
     estimated_rows = _estimate_injected_rows(
         arrays, manifest,
         tool_changed=tool_offset_changed or safe_changed or bool(wipe_migrations),
         resin_changed=resin_changed, delta_resin=new_resin - current_resin,
-        safe=safe, lift=lift, wait=wait, settle=settle,
+        safe=safe, lift=lift, wait=wait, settle=lift_hold,
+        retract_settle=retract_hold,
         new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
     estimated_rows += sum(max(0, count - (end - start + 1))
@@ -1584,7 +1680,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         if block.get("kind") == "cut" and cut_changed:
             _rebuild_cut(
                 arrays, static, manifest, roles, move_types, block,
-                lift, wait, settle, dt, feed,
+                lift, wait, lift_hold, dt, feed, retract_hold,
             )
     for block in manifest.get("blocks", []):
         if block.get("kind") == "tool_change" and (
@@ -1602,6 +1698,11 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     _repair(arrays, dt)
     manifest["base_parameters"] = dict(base)
     manifest["base_parameters"].update(overrides)
+    manifest["base_parameters"].update(cut_lift_settle_s=lift_hold,
+        cut_retract_settle_s=retract_hold, cut_sync_version=1)
+    for block in manifest.get("blocks", []):
+        if block.get("kind") == "cut":
+            block["injectable_parameters"] = list(dict.fromkeys(block.get("injectable_parameters", []) + ["cut_lift_settle_s", "cut_retract_settle_s"]))
     injected_at = datetime.now(timezone.utc).isoformat()
     calibration_id = _calibration_id(new_offset, new_resin)
     manifest.update({

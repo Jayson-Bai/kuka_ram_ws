@@ -228,3 +228,150 @@ def test_local_injection_rebuilds_both_cut_holds_from_settle_parameter(tmp_path)
             assert np.allclose(expected[key], actual[key], rtol=0.0, atol=1e-12), key
         else:
             assert np.array_equal(expected[key], actual[key]), key
+
+
+def test_cut_emits_two_blocking_absolute_e_release_barriers(tmp_path):
+    commands = [
+        _move("TRAVEL", _p(0, 0), _p(0, 0), 0, 0, "TRAVEL"),
+        _move("PRINT", _p(0, 0), _p(10, 0), 1, 0, "FIBER_PRINT"),
+        MCommand(
+            type="M_COMMAND",
+            code="CUT",
+            params={"P": 1.0},
+            line=2,
+            layer=0,
+            subtype="FIBER_PRINT",
+            raw="external_npz_cut",
+        ),
+    ]
+    output = tmp_path / "cut_sync.npz"
+    export_npz(
+        commands,
+        str(output),
+        initial_tool_id=1,
+        cut_lift_mm=2.0,
+        cut_wait_s=0.0,
+        cut_settle_s=0.25,
+        external_npz_cut_absolute_e=True,
+    )
+
+    data = _read(output)
+    events = _vocab(data, "event_type")
+    event_names = np.asarray([
+        events[int(value)] if int(data["event_flag"][index]) else ""
+        for index, value in enumerate(data["event_type"])
+    ])
+    cut_indices = np.flatnonzero(event_names == "cut")
+    sync_indices = np.flatnonzero(event_names == "extrude_sync")
+
+    assert len(cut_indices) == 1
+    assert len(sync_indices) == 2
+    cut_index = int(cut_indices[0])
+    assert bytes(data["payload"][cut_index]).split(b"\x00", 1)[0] == b"1 sync_v1:2"
+    assert np.all(data["core_injection_block_id"][sync_indices]
+                  == data["core_injection_block_id"][cut_index])
+    assert np.array_equal(data["trigger_seq"][sync_indices],
+                          data["seq"][sync_indices])
+
+    sync_payloads = [
+        bytes(data["payload"][index]).split(b"\x00", 1)[0].decode("ascii").split()
+        for index in sync_indices
+    ]
+    assert [int(fields[0]) for fields in sync_payloads] == [1, 1]
+    assert [float(fields[1]) for fields in sync_payloads] == [2.0, -2.0]
+    assert [int(fields[2]) for fields in sync_payloads] == [30000, 30000]
+    assert np.allclose(data["z"][sync_indices], 2.5)
+    assert np.allclose(data["e"][sync_indices], [2.0, -2.0])
+
+
+def test_fiber_cut_is_dispatched_with_lift_then_gated_before_retract(tmp_path):
+    """Fiber end -> CUT command and lift -> hold -> retract -> next path."""
+    commands = [
+        _move("TRAVEL", _p(0, 0), _p(0, 0), 0, 0, "TRAVEL"),
+        _move("PRINT", _p(0, 0), _p(10, 0), 1, 0, "FIBER_PRINT"),
+        MCommand(
+            type="M_COMMAND",
+            code="CUT",
+            params={"P": 1.0},
+            line=2,
+            layer=0,
+            subtype="FIBER_PRINT",
+            raw="external_npz_cut",
+        ),
+        _move("TRAVEL", _p(10, 0), _p(12, 0), 3, 0, "TRAVEL"),
+        _move("PRINT", _p(12, 0), _p(20, 0), 4, 0, "FIBER_PRINT"),
+    ]
+    output = tmp_path / "cut_order.npz"
+    export_npz(
+        commands,
+        str(output),
+        initial_tool_id=1,
+        cut_lift_mm=2.0,
+        cut_wait_s=0.0,
+        cut_lift_settle_s=0.2,
+        cut_retract_settle_s=0.1,
+        external_npz_cut_absolute_e=True,
+    )
+
+    data = _read(output)
+    events = _vocab(data, "event_type")
+    event_names = np.asarray([
+        events[int(value)] if int(data["event_flag"][index]) else ""
+        for index, value in enumerate(data["event_type"])
+    ])
+    cut_position = int(np.flatnonzero(event_names == "cut")[0])
+    sync_positions = [
+        int(index) for index in np.flatnonzero(event_names == "extrude_sync")
+    ]
+    assert len(sync_positions) == 2
+
+    order = np.arange(len(data["seq"]))
+    z = np.asarray(data["z"], dtype=np.float64)
+    e = np.asarray(data["e"], dtype=np.float64)
+    trajectory = np.flatnonzero(data["event_flag"] == 0)
+
+    # CUT is sent at the lift start, not after the lift dwell.  Its anchor
+    # remains the reset path-end pose so RSI can begin the local Z move while
+    # the firmware actuator sequence runs in parallel.
+    lift_rows = np.flatnonzero(
+        (order > cut_position)
+        & (order < sync_positions[0])
+        & (e > 1e-9)
+        & (e < 2.0 - 1e-9)
+    )
+    assert len(lift_rows) > 0
+    assert cut_position < int(lift_rows[0])
+    previous_motion = int(trajectory[trajectory < cut_position][-1])
+    assert np.isclose(z[cut_position], z[previous_motion])
+    assert e[cut_position] == 0.0
+
+    # The command overlaps the lift, while the first hard sync remains after
+    # the complete fixed lift hold and therefore also waits for cutter DONE.
+    assert sync_positions[0] > int(lift_rows[-1])
+    hold_rows = np.flatnonzero(
+        (order > lift_rows[-1]) & (order < sync_positions[0])
+    )
+    assert len(hold_rows) > 0
+    assert np.allclose(z[hold_rows], 2.5)
+    assert np.allclose(e[hold_rows], 2.0)
+    hold_seconds = float(data["planned_time_s"][hold_rows[-1]]) - float(
+        data["planned_time_s"][lift_rows[-1]]
+    )
+    assert hold_seconds >= 0.2 - 1e-6
+    assert hold_seconds <= 0.2 + 0.05
+
+    assert np.isclose(z[sync_positions[0]], 2.5)
+    assert np.isclose(e[sync_positions[0]], 2.0)
+    retract_rows = np.flatnonzero(
+        (order > sync_positions[0])
+        & (order < sync_positions[1])
+        & (e < 2.0 - 1e-9)
+    )
+    assert len(retract_rows) > 0
+    assert np.isclose(e[retract_rows[-1]], -2.0)
+    assert np.isclose(e[sync_positions[1]], -2.0)
+    assert np.allclose(z[cut_position:sync_positions[0] + 1][
+        data["event_flag"][cut_position:sync_positions[0] + 1] == 0
+    ], np.maximum(z[cut_position:sync_positions[0] + 1][
+        data["event_flag"][cut_position:sync_positions[0] + 1] == 0
+    ], z[previous_motion]))

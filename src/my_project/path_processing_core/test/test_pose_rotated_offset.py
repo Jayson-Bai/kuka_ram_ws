@@ -177,8 +177,10 @@ def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
             & (data["event_flag"] == 0)
         )
         assert len(action_rows) > 0
+        # The CUT row is now after the lift and its fixed hold.  Use the first
+        # stationary CUT-action row, anchored at the fiber path endpoint.
         low = np.asarray(
-            [data[name][event_index - 1] for name in ("x", "y", "z", "a", "b", "c")],
+            [data[name][action_rows[0]] for name in ("x", "y", "z", "a", "b", "c")],
             dtype=np.float64,
         )
         action_xyz = np.column_stack(

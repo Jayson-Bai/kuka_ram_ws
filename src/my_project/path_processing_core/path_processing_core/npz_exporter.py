@@ -8,6 +8,8 @@ gcode_planner 的 npz 导出器（分片）.
 
 from __future__ import annotations
 
+from .cut_sync import cut_holds, cut_sync_payload, sync_payload
+
 from dataclasses import dataclass, replace
 from typing import List, Optional
 from pathlib import Path
@@ -129,6 +131,8 @@ def export_npz(
     cut_lift_mm: float = 20.0,
     cut_wait_s: float = 15.0,
     cut_settle_s: float = 3.0,
+    cut_lift_settle_s: float | None = None,
+    cut_retract_settle_s: float | None = None,
     fiber_retract_length_mm: float | None = None,
     external_npz_cut_absolute_e: bool = False,
 ) -> dict:
@@ -174,6 +178,8 @@ def export_npz(
     }
 
     last_pose_map = {}
+    cut_lift_settle_s, cut_retract_settle_s = cut_holds(
+        cut_settle_s, cut_lift_settle_s, cut_retract_settle_s)
     current_tool = int(initial_tool_id)  # 1=纤维(T0), 2=树脂(T1)
     seq = 0
     planner = GlobalSplinePlanner()
@@ -223,6 +229,7 @@ def export_npz(
         "tool_change_cf": 6,
         "tool_change_resin": 7,
         "cut": 8,
+        "extrude_sync": 9,
     }
     move_type_keys = np.array(list(move_type_map.keys()), dtype="S32")
     move_type_vals = np.array(list(move_type_map.values()), dtype=np.uint8)
@@ -1423,13 +1430,18 @@ def export_npz(
             and (cmd.raw or "") == "external_npz_cut"
         )
         if is_external_npz_fiber_cut:
-            # Keep converter-generated fiber CUT extrusion phases independent
-            # from path E and from each other:
-            # reset -> CUT -> lift 0..L -> settle -> reset ->
-            # retract 0..-L -> settle -> reset -> remaining high hold.
-            # CUT stays nonblocking; putting the first reset before it prevents
-            # RSI from advancing to an E=0 anchor before the reset handshake.
-            settle_s = max(0.0, float(cut_settle_s))
+            # Fiber CUT is a physical sequence, so its order is part of the
+            # contract:
+            #   reset anchor -> CUT command -> lift 0..+L -> lift hold ->
+            #   sync(+L) completion barrier -> reset -> retract 0..-L ->
+            #   sync(-L) -> retract hold -> reset -> remaining high hold.
+            # CUT is dispatched as the local Z lift begins.  The firmware
+            # starts its original actuator descent, performs both MOS cutter
+            # pulses, then raises the actuator.  The first extrude_sync keeps
+            # RSI in WAIT until that complete physical sequence has finished,
+            # so the retract cannot begin while either cutter stroke is live.
+            lift_settle_s = cut_lift_settle_s
+            retract_settle_s = cut_retract_settle_s
             lift_mm = max(0.0, float(cut_lift_mm))
             wait_s = max(0.0, float(cut_wait_s))
             lift_feedrate = max(float(default_feed_mm_s), 1e-9) * 60.0
@@ -1456,7 +1468,16 @@ def export_npz(
                 ), layer, subtype, occ, mark_path_end=mark_path_end)
 
             _append_cut_reset_anchor()
-            _emit_event(ev, layer, subtype, occ, marker_role=injection_role_map["cut_event"])
+
+            # Dispatch CUT before the lift rows.  RSI treats CUT as
+            # nonblocking, so the command and the local Z lift advance in the
+            # same RSI cycle.  Firmware completion is gated by the sync row
+            # after the lift hold.
+            sync_ev = replace(
+                ev, payload=cut_sync_payload(ev.payload, expected_syncs=2))
+            _emit_event(
+                sync_ev, layer, subtype, occ,
+                marker_role=injection_role_map["cut_event"])
 
             if lift_mm > 1e-9:
                 hold_row = last_pose or CsvRow(
@@ -1504,7 +1525,7 @@ def export_npz(
 
             _append_extrude_wait(ExtrudeWait(
                 type="EXTRUDE_WAIT",
-                wait_sec=settle_s,
+                wait_sec=lift_settle_s,
                 delta_e=0.0,
                 feedrate=lift_feedrate,
                 line=cmd.line or 0,
@@ -1512,6 +1533,13 @@ def export_npz(
                 subtype=subtype,
                 raw="external_npz_cut_lift_settle",
             ), layer, subtype, occ, mark_path_end=False)
+
+            _emit_event(_PendingEvent(
+                event_type="extrude_sync",
+                payload=sync_payload(current_tool, lift_mm, wait_s),
+                src_line=cmd.line or 0,
+                tool_id=current_tool,
+            ), layer, subtype, occ)
 
             # The reset at +L makes the equal retract a separate absolute
             # interval 0..-L instead of allowing it to inherit lift E.
@@ -1528,9 +1556,16 @@ def export_npz(
                     raw="cut_safety_retract",
                 ), layer, subtype, occ, mark_path_end=False)
 
+            _emit_event(_PendingEvent(
+                event_type="extrude_sync",
+                payload=sync_payload(current_tool, -lift_mm, wait_s),
+                src_line=cmd.line or 0,
+                tool_id=current_tool,
+            ), layer, subtype, occ)
+
             _append_extrude_wait(ExtrudeWait(
                 type="EXTRUDE_WAIT",
-                wait_sec=settle_s,
+                wait_sec=retract_settle_s,
                 delta_e=0.0,
                 feedrate=retract_feedrate,
                 line=cmd.line or 0,
@@ -1545,9 +1580,9 @@ def export_npz(
                 0.0,
                 wait_s
                 - lift_duration_s
-                - settle_s
+                - lift_settle_s
                 - retract_duration_s
-                - settle_s,
+                - retract_settle_s,
             )
             _append_cut_reset_anchor(mark_path_end=remaining_wait_s <= 1e-9)
             if remaining_wait_s > 1e-9:
@@ -1815,6 +1850,7 @@ def export_npz(
                 "anchor": "next_effective_print_path",
                 "injectable_parameters": [
                     "cut_lift_mm", "cut_wait_s", "cut_settle_s",
+                        "cut_lift_settle_s", "cut_retract_settle_s",
                 ],
             })
             next_block_id += 1
@@ -1831,13 +1867,16 @@ def export_npz(
             "cut_lift_mm": float(cut_lift_mm),
             "cut_wait_s": float(cut_wait_s),
             "cut_settle_s": float(cut_settle_s),
+            "cut_lift_settle_s": cut_lift_settle_s,
+            "cut_retract_settle_s": cut_retract_settle_s,
+            "cut_sync_version": 1,
             "fiber_retract_length_mm": None if fiber_retract_length_mm is None else float(fiber_retract_length_mm),
             "default_feed_mm_s": float(default_feed_mm_s),
         },
         "overrideable_parameters": [
             "tool_offset", "resin_z_print_compensation_mm",
             "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
-            "cut_settle_s",
+            "cut_settle_s", "cut_lift_settle_s", "cut_retract_settle_s",
             "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ],
         "precision_fields": {
@@ -2389,6 +2428,7 @@ def _npz_exporter(output_path: str, rows: List[CsvRow], chunk_size: int) -> None
         "tool_change_cf": 6,
         "tool_change_resin": 7,
         "cut": 8,
+        "extrude_sync": 9,
     }
     # 使用定长字节串，便于 C++ 侧 cnpy 读取
     move_type_keys = np.array(list(move_type_map.keys()), dtype="S32")

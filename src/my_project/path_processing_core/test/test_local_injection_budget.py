@@ -63,6 +63,14 @@ def test_unchanged_cut_parameters_do_not_add_rebuild_budget():
     assert _estimate(arrays, manifest, lift=20.0, wait=15.0) == len(arrays["seq"])
 
 
+def test_asymmetric_cut_holds_are_summed_in_budget_estimate():
+    arrays, manifest = _cut_arrays([100])
+    expected_rows = int(np.ceil((2.0 * 12.5 / 20.0 + 10.0 + 1.0) / 0.004))
+    assert _estimate(
+        arrays, manifest, settle=10.0, retract_settle=1.0,
+    ) == len(arrays["seq"]) + expected_rows - 100
+
+
 def test_duplicate_catalog_entry_cannot_reuse_replacement_credit():
     arrays, manifest = _cut_arrays([4503])
     manifest["blocks"].append(dict(manifest["blocks"][0]))
