@@ -350,10 +350,8 @@ _CUT_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "cut_params.json")
 _CUT_DEFAULTS = {
     "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
     "cut_lift_mm": 20.0,
-    "cut_wait_s": 15.0,
-    "cut_settle_s": 3.0,
-    "cut_lift_settle_s": 3.0,
-    "cut_retract_settle_s": 3.0,
+    "cut_retract_delay_s": 0.5,
+    "cut_travel_delay_s": 1.0,
 }
 _CORE_RESIN_EXTRUSION_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "core_resin_extrusion.json")
 _CORE_RESIN_EXTRUSION_DEFAULTS = {
@@ -436,14 +434,7 @@ def _load_cut_config():
         with open(_CUT_CONFIG_PATH, "r", encoding="utf-8") as handle:
             data = json.load(handle)
         return {
-            key: float(
-                data.get(
-                    key,
-                    data.get("cut_settle_s", default)
-                    if key in ("cut_lift_settle_s", "cut_retract_settle_s")
-                    else default,
-                )
-            )
+            key: float(data.get(key, default))
             for key, default in _CUT_DEFAULTS.items()
         }
     except Exception:
@@ -452,11 +443,9 @@ def _load_cut_config():
 
 def _save_cut_config(
     cut_lift_mm,
-    cut_wait_s,
     tool_change_safe_lift_mm=None,
-    cut_settle_s=None,
-    cut_lift_settle_s=None,
-    cut_retract_settle_s=None,
+    cut_retract_delay_s=None,
+    cut_travel_delay_s=None,
 ):
     current = _load_cut_config()
     values = {
@@ -466,18 +455,12 @@ def _save_cut_config(
             else float(tool_change_safe_lift_mm)
         ),
         "cut_lift_mm": float(cut_lift_mm),
-        "cut_wait_s": float(cut_wait_s),
-        "cut_settle_s": (
-            current["cut_settle_s"]
-            if cut_settle_s is None else float(cut_settle_s)
-        ),
     }
     for key, value in (
-        ("cut_lift_settle_s", cut_lift_settle_s),
-        ("cut_retract_settle_s", cut_retract_settle_s),
+        ("cut_retract_delay_s", cut_retract_delay_s),
+        ("cut_travel_delay_s", cut_travel_delay_s),
     ):
-        fallback = cut_settle_s if cut_settle_s is not None else current[key]
-        values[key] = float(value if value is not None else fallback)
+        values[key] = float(value if value is not None else current[key])
     if any(not math.isfinite(value) or value < 0.0 for value in values.values()):
         raise ValueError("剪切参数必须是非负有限数字")
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
@@ -2273,17 +2256,15 @@ class _UiStatusWidget(QtWidgets.QWidget):
         local_defaults = {
             "tool_change_safe_lift_mm": cut_cfg["tool_change_safe_lift_mm"],
             "cut_lift_mm": cut_cfg["cut_lift_mm"],
-            "cut_wait_s": cut_cfg["cut_wait_s"],
-            "cut_lift_settle_s": cut_cfg["cut_lift_settle_s"],
-            "cut_retract_settle_s": cut_cfg["cut_retract_settle_s"],
+            "cut_retract_delay_s": cut_cfg["cut_retract_delay_s"],
+            "cut_travel_delay_s": cut_cfg["cut_travel_delay_s"],
             **_load_core_resin_extrusion_config(),
         }
         local_fields = (
             ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
             ("cut_lift_mm", "CUT 抬升", "mm", "CUT 阶段的局部抬升距离。"),
-            ("cut_wait_s", "CUT 等待", "s", "CUT 阶段的局部等待时间。"),
-            ("cut_lift_settle_s", "CUT 回抽前保持", "s", "固件确认抬升送料和剪切完成后，回抽前的保持时间。"),
-            ("cut_retract_settle_s", "CUT 回抽后保持", "s", "固件确认回抽目标完成后的保持时间；等待窗口不足也不提前放行。"),
+            ("cut_retract_delay_s", "剪切完成到回抽延时", "s", "固件回报两次剪切和抬升送料完成后，回抽开始前的保持时间。"),
+            ("cut_travel_delay_s", "回抽完成到横移延时", "s", "固件回报回抽到达目标后，移动到下一路径起点前的保持时间。"),
         )
         for column, (key, label_text, unit, tip) in enumerate(local_fields):
             card = QtWidgets.QWidget()
@@ -2421,7 +2402,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
             ("plot_layer_xy", "true", "每层生成 XY 路径图"),
             ("plot_stride", "5", "绘图采样步长"),
             ("cut_lift_mm", f"{cut_cfg['cut_lift_mm']}", "剪切抬升距离（mm）"),
-            ("cut_wait_s", f"{cut_cfg['cut_wait_s']}", "剪切等待时间（s）"),
+            ("cut_retract_delay_s", f"{cut_cfg['cut_retract_delay_s']}", "剪切完成到回抽延时（s）"),
+            ("cut_travel_delay_s", f"{cut_cfg['cut_travel_delay_s']}", "回抽完成到横移延时（s）"),
         ]
         self._planner_inputs = {}
         for param_name, default_val, desc in _PLANNER_PARAMS:
@@ -2468,7 +2450,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "fiber_retract_speed_mm_s": 5.0,
             "fiber_fan_enabled": True,
             "external_cut_lift_mm": cut_cfg["cut_lift_mm"],
-            "external_cut_wait_s": cut_cfg["cut_wait_s"],
             "travel_feed_mm_s": 10.0,
             "first_layer_travel_feed_mm_s": 10.0,
             "prime_settle_s": 0.5,
@@ -2868,12 +2849,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     "剪切抬升距离 mm",
                     _external_spin(
                         external_defaults["external_cut_lift_mm"],
-                        maximum=1000.0,
-                    ),
-                    "external_cut_wait_s",
-                    "剪切等待时间 s",
-                    _external_spin(
-                        external_defaults["external_cut_wait_s"],
                         maximum=1000.0,
                     ),
                 ),
@@ -4140,7 +4115,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f" | 剪切流程 {_format_print_duration(msg.planned_cut_time_s)}"
         )
         self._print_time_event_label.setText(
-            f"注入参数  剪切等待 {msg.cut_injected_wait_s:g}s × "
+            f"注入参数  剪切延时 {msg.cut_injected_wait_s:g}s × "
             f"{int(msg.planned_cut_count)} = "
             f"{_format_print_duration(msg.planned_cut_injected_wait_time_s)}"
             "（已包含于剪切流程）"
@@ -5458,10 +5433,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             values = self._local_injection_values()
             _save_cut_config(
                 values["cut_lift_mm"],
-                values["cut_wait_s"],
                 tool_change_safe_lift_mm=values["tool_change_safe_lift_mm"],
-                cut_lift_settle_s=values["cut_lift_settle_s"],
-                cut_retract_settle_s=values["cut_retract_settle_s"],
+                cut_retract_delay_s=values["cut_retract_delay_s"],
+                cut_travel_delay_s=values["cut_travel_delay_s"],
             )
             if hasattr(self, "_offset_status"):
                 self._offset_status.setText("已自动保存剪切/注入参数。")
@@ -5604,7 +5578,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
             path = save_print_params(process_params)
             _save_cut_config(
                 self._external_npz_inputs["external_cut_lift_mm"].value(),
-                self._external_npz_inputs["external_cut_wait_s"].value(),
             )
             self._export_status.setText(f"已保存外部 NPZ 参数: {path}")
             self._export_status.setStyleSheet("color: #1b6e3c;")
@@ -5648,7 +5621,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 "plot_layer_xy": self._planner_inputs["plot_layer_xy"].isChecked(),
                 "plot_stride": int(self._planner_inputs["plot_stride"].text()),
                 "cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text()),
-                "cut_wait_s": float(self._planner_inputs["cut_wait_s"].text()),
             }
             if params["split_by_layer_type"] and not is_core_injection_source:
                 raise ValueError(
@@ -5656,7 +5628,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     "请关闭该选项并导出单一全局 4 ms 序列"
                 )
             external_cut_lift_mm = params["cut_lift_mm"]
-            external_cut_wait_s = params["cut_wait_s"]
             if source_ext == ".npz" and not is_core_injection_source:
                 from external_npz_preprocessor.param_config import save_print_params
 
@@ -5664,9 +5635,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 save_print_params(external_process_params)
                 external_cut_lift_mm = (
                     self._external_npz_inputs["external_cut_lift_mm"].value()
-                )
-                external_cut_wait_s = (
-                    self._external_npz_inputs["external_cut_wait_s"].value()
                 )
             else:
                 external_process_params = None
@@ -5678,13 +5646,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 if source_ext == ".npz"
                 else params["cut_lift_mm"]
             )
-            used_cut_wait_s = (
-                local_injection_values["cut_wait_s"]
-                if is_core_injection_source
-                else external_cut_wait_s
-                if source_ext == ".npz"
-                else params["cut_wait_s"]
-            )
             used_safe_lift_mm = (
                 local_injection_values["tool_change_safe_lift_mm"]
                 if is_core_injection_source
@@ -5692,10 +5653,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             )
             _save_cut_config(
                 used_cut_lift_mm,
-                used_cut_wait_s,
                 tool_change_safe_lift_mm=used_safe_lift_mm,
-                cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
-                cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
+                cut_retract_delay_s=local_injection_values["cut_retract_delay_s"],
+                cut_travel_delay_s=local_injection_values["cut_travel_delay_s"],
             )
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
@@ -5739,9 +5699,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                             "tool_change_safe_lift_mm"
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
-                        cut_wait_s=local_injection_values["cut_wait_s"],
-                        cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
-                        cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
+                        cut_retract_delay_s=local_injection_values["cut_retract_delay_s"],
+                        cut_travel_delay_s=local_injection_values["cut_travel_delay_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -5757,7 +5716,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         process_params,
                         progress_callback=progress_cb,
                         cut_lift_mm=external_cut_lift_mm,
-                        cut_wait_s=external_cut_wait_s,
                     )
                 elif source_ext in (".gcode", ".gc", ".g"):
                     self.export_progress.emit("读取 GCode...")
@@ -5790,7 +5748,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         enable_extrude_wait=True,
                         resin_z_print_compensation_mm=0.0,
                         cut_lift_mm=params["cut_lift_mm"],
-                        cut_wait_s=params["cut_wait_s"],
                     )
                 else:
                     raise ValueError(f"不支持的源文件格式: {source_ext or '(无扩展名)'}")
@@ -5810,9 +5767,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                             "tool_change_safe_lift_mm"
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
-                        cut_wait_s=local_injection_values["cut_wait_s"],
-                        cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
-                        cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
+                        cut_retract_delay_s=local_injection_values["cut_retract_delay_s"],
+                        cut_travel_delay_s=local_injection_values["cut_travel_delay_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -6053,9 +6009,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     ],
                     tool_change_safe_lift_mm=local_values["tool_change_safe_lift_mm"],
                     cut_lift_mm=local_values["cut_lift_mm"],
-                    cut_wait_s=local_values["cut_wait_s"],
-                    cut_lift_settle_s=local_values["cut_lift_settle_s"],
-                    cut_retract_settle_s=local_values["cut_retract_settle_s"],
+                    cut_retract_delay_s=local_values["cut_retract_delay_s"],
+                    cut_travel_delay_s=local_values["cut_travel_delay_s"],
                     resin_layer_end_retract_mm=local_values.get("resin_layer_end_retract_mm"),
                     resin_layer_start_prime_mm=local_values.get("resin_layer_start_prime_mm"),
                 )

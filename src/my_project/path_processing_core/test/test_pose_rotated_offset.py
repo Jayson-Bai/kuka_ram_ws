@@ -157,7 +157,7 @@ def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
         tool_offset=(0.0, 0.0, 0.0),
         resin_z_print_compensation_mm=0.0,
         cut_lift_mm=20.0,
-        cut_wait_s=15.0,
+        cut_travel_delay_s=15.0,
         external_npz_cut_absolute_e=True,
     )
     inject_npz(source, ready, cut_lift_mm=10.0)

@@ -31,14 +31,14 @@ def _export(path, *, chunk_size=100000, curved=False):
         commands, str(path), dt=0.004, default_feed_mm_s=20.0,
         enable_extrude_wait=True, tool_offset=(0.0, 0.0, 0.0),
         resin_z_print_compensation_mm=0.0, tool_change_safe_lift_mm=20.0,
-        cut_lift_mm=20.0, cut_wait_s=15.0, external_npz_cut_absolute_e=True,
+        cut_lift_mm=20.0, external_npz_cut_absolute_e=True,
         chunk_size=chunk_size,
     )
 
 
 PARAMS = dict(
     tool_offset=(-0.34, -0.24, 3.25), resin_z_print_compensation_mm=-34.0,
-    tool_change_safe_lift_mm=10.0, cut_lift_mm=12.5, cut_wait_s=12.0,
+    tool_change_safe_lift_mm=10.0, cut_lift_mm=12.5,
 )
 
 

@@ -56,7 +56,12 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
         captured["kwargs"] = kwargs
         return {"rows": 0, "parts": 0, "total_s": 0.0}
 
+    def fake_inject_npz(input_path, output_path, **kwargs):
+        captured.setdefault("inject_kwargs", kwargs)
+        return {"rows": 0}
+
     monkeypatch.setattr(runner, "export_npz", fake_export_npz)
+    monkeypatch.setattr(runner, "inject_npz", fake_inject_npz)
 
     runner.convert_external_npz(
         source,
@@ -67,16 +72,27 @@ def test_convert_uses_shared_head_calibration_offsets(tmp_path, monkeypatch):
         ),
         calibration_path=calibration_path,
         cut_lift_mm=22.0,
-        cut_wait_s=11.0,
+        cut_retract_delay_s=0.5,
+        cut_travel_delay_s=1.0,
     )
 
-    assert captured["kwargs"]["tool_offset"] == (2.0, -3.0, 4.0)
-    assert captured["kwargs"]["resin_z_print_compensation_mm"] == 1.25
+    # Base export must stay zero-offset; calibrated offsets are applied by the
+    # local injection step so the two stages stay separable.
+    assert captured["kwargs"]["tool_offset"] == (0.0, 0.0, 0.0)
+    assert captured["kwargs"]["resin_z_print_compensation_mm"] == 0.0
     assert captured["kwargs"]["cut_lift_mm"] == 22.0
-    assert captured["kwargs"]["cut_wait_s"] == 11.0
+    assert captured["kwargs"]["cut_retract_delay_s"] == 0.5
+    assert captured["kwargs"]["cut_travel_delay_s"] == 1.0
     assert captured["kwargs"]["default_feed_mm_s"] == 7.0
     assert "fiber_retract_length_mm" not in captured["kwargs"]
     assert captured["kwargs"]["external_npz_cut_absolute_e"] is True
+
+    inject_kwargs = captured["inject_kwargs"]
+    assert tuple(inject_kwargs["tool_offset"]) == (2.0, -3.0, 4.0)
+    assert inject_kwargs["resin_z_print_compensation_mm"] == 1.25
+    assert inject_kwargs["cut_lift_mm"] == 22.0
+    assert inject_kwargs["cut_retract_delay_s"] == 0.5
+    assert inject_kwargs["cut_travel_delay_s"] == 1.0
 
 
 def test_exporter_uses_curve_start_acceleration_without_changing_default(tmp_path, monkeypatch):
@@ -517,7 +533,6 @@ def test_external_cut_uses_timed_resets_to_isolate_lift_and_retract(tmp_path):
         default_feed_mm_s=10.0,
         enable_extrude_wait=True,
         cut_lift_mm=12.5,
-        cut_wait_s=15.0,
         initial_tool_id=1,
         external_npz_cut_absolute_e=True,
     )
@@ -534,28 +549,26 @@ def test_external_cut_uses_timed_resets_to_isolate_lift_and_retract(tmp_path):
         assert np.isclose(data["e"][cut_idx - 1], 0.0)
         assert np.isclose(data["e"][cut_idx], 0.0)
 
-        lift_and_settle = list(range(cut_idx + 1, high_reset))
-        assert np.isclose(np.max(data["z"][lift_and_settle]), 12.5)
-        assert np.isclose(np.max(data["e"][lift_and_settle]), 12.5)
-        assert np.isclose(data["e"][lift_and_settle[-1]], 12.5)
-        assert sum(np.isclose(data["e"][idx], 12.5) for idx in lift_and_settle) >= 3
+        lift_and_delay = list(range(cut_idx + 1, high_reset))
+        assert np.isclose(np.max(data["z"][lift_and_delay]), 12.5)
+        assert np.isclose(np.max(data["e"][lift_and_delay]), 12.5)
+        assert np.isclose(data["e"][lift_and_delay[-1]], 12.5)
+        assert sum(np.isclose(data["e"][idx], 12.5) for idx in lift_and_delay) >= 3
 
         high_anchor = high_reset + 1
         assert np.isclose(data["e"][high_reset], 12.5)
         assert np.isclose(data["e"][high_anchor], 0.0)
-        retract_and_settle = list(range(high_anchor + 1, final_cut_reset))
-        assert np.allclose(data["z"][retract_and_settle], 12.5)
-        assert np.isclose(np.min(data["e"][retract_and_settle]), -12.5)
-        assert np.isclose(data["e"][retract_and_settle[-1]], -12.5)
-        assert sum(np.isclose(data["e"][idx], -12.5) for idx in retract_and_settle) >= 3
+        retract_and_delay = list(range(high_anchor + 1, final_cut_reset))
+        assert np.allclose(data["z"][retract_and_delay], 12.5)
+        assert np.isclose(np.min(data["e"][retract_and_delay]), -12.5)
+        assert np.isclose(data["e"][retract_and_delay[-1]], -12.5)
+        assert sum(np.isclose(data["e"][idx], -12.5) for idx in retract_and_delay) >= 3
 
-        final_anchor = final_cut_reset + 1
+        # The final reset anchors E back to 0 for the next path; the two
+        # anchored delays live between the sync barriers and their resets, so
+        # no trailing high-hold rows remain after the last reset.
         assert np.isclose(data["e"][final_cut_reset], -12.5)
-        assert np.isclose(data["e"][final_anchor], 0.0)
-        trailing_wait = list(range(final_anchor + 1, path_reset))
-        assert trailing_wait
-        assert np.allclose(data["z"][trailing_wait], 12.5)
-        assert np.allclose(data["e"][trailing_wait], 0.0)
+        assert np.isclose(data["e"][final_cut_reset + 1], 0.0)
 
 
 def test_fiber_cut_and_ui_actions_use_independent_absolute_e_boundaries(tmp_path):
@@ -612,7 +625,6 @@ def test_fiber_cut_and_ui_actions_use_independent_absolute_e_boundaries(tmp_path
         params,
         calibration_path=calibration_path,
         cut_lift_mm=20.0,
-        cut_wait_s=0.0,
     )
 
     data = np.load(out)
@@ -809,14 +821,16 @@ def test_convert_writes_startup_events_and_tool_reset_order_to_npz(tmp_path):
             "extrude_reset",
             "extrude_reset",
             "cut",
+            "extrude_sync",
             "extrude_reset",
+            "extrude_sync",
             "extrude_reset",
             "extrude_reset",
             "extrude_reset",
         ]
 
         cut_row_idx = events.index("cut")
-        assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1"
+        assert data["payload"][cut_row_idx].decode("utf-8").rstrip("\x00") == "1 sync_v1:2"
 
 
 def test_convert_skips_fiber_startup_events_when_source_has_no_fiber_paths(tmp_path):

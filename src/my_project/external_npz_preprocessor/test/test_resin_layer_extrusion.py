@@ -42,7 +42,7 @@ def _source(tmp_path):
     )
     source = tmp_path / "source.npz"
     export_npz(commands, str(source), enable_extrude_wait=True,
-               tool_change_safe_lift_mm=2, cut_lift_mm=1, cut_wait_s=0.004)
+               tool_change_safe_lift_mm=2, cut_lift_mm=1, cut_travel_delay_s=0.004)
     return source, commands
 
 

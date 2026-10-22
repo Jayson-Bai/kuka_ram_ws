@@ -208,12 +208,11 @@ def test_local_injection_rebuilds_both_cut_holds_from_settle_parameter(tmp_path)
     common = dict(
         initial_tool_id=1,
         cut_lift_mm=2.0,
-        cut_wait_s=0.0,
         external_npz_cut_absolute_e=True,
     )
-    export_npz(commands, str(base), cut_settle_s=0.25, **common)
-    export_npz(commands, str(direct), cut_settle_s=1.0, **common)
-    inject_npz(base, injected, cut_settle_s=1.0)
+    export_npz(commands, str(base), cut_retract_delay_s=0.25, **common)
+    export_npz(commands, str(direct), cut_retract_delay_s=1.0, **common)
+    inject_npz(base, injected, cut_retract_delay_s=1.0)
 
     expected = _read(direct)
     actual = _read(injected)
@@ -222,8 +221,8 @@ def test_local_injection_rebuilds_both_cut_holds_from_settle_parameter(tmp_path)
         if key == "core_injection_manifest":
             expected_manifest = json.loads(str(expected[key].item()))
             actual_manifest = json.loads(str(actual[key].item()))
-            assert expected_manifest["base_parameters"]["cut_settle_s"] == 1.0
-            assert actual_manifest["base_parameters"]["cut_settle_s"] == 1.0
+            assert expected_manifest["base_parameters"]["cut_retract_delay_s"] == 1.0
+            assert actual_manifest["base_parameters"]["cut_retract_delay_s"] == 1.0
         elif np.issubdtype(expected[key].dtype, np.number):
             assert np.allclose(expected[key], actual[key], rtol=0.0, atol=1e-12), key
         else:
@@ -250,8 +249,7 @@ def test_cut_emits_two_blocking_absolute_e_release_barriers(tmp_path):
         str(output),
         initial_tool_id=1,
         cut_lift_mm=2.0,
-        cut_wait_s=0.0,
-        cut_settle_s=0.25,
+        cut_retract_delay_s=0.25,
         external_npz_cut_absolute_e=True,
     )
 
@@ -279,7 +277,7 @@ def test_cut_emits_two_blocking_absolute_e_release_barriers(tmp_path):
     ]
     assert [int(fields[0]) for fields in sync_payloads] == [1, 1]
     assert [float(fields[1]) for fields in sync_payloads] == [2.0, -2.0]
-    assert [int(fields[2]) for fields in sync_payloads] == [30000, 30000]
+    assert [int(fields[2]) for fields in sync_payloads] == [40000, 40000]
     assert np.allclose(data["z"][sync_indices], 2.5)
     assert np.allclose(data["e"][sync_indices], [2.0, -2.0])
 
@@ -307,9 +305,8 @@ def test_fiber_cut_is_dispatched_with_lift_then_gated_before_retract(tmp_path):
         str(output),
         initial_tool_id=1,
         cut_lift_mm=2.0,
-        cut_wait_s=0.0,
-        cut_lift_settle_s=0.2,
-        cut_retract_settle_s=0.1,
+        cut_retract_delay_s=0.2,
+        cut_travel_delay_s=0.1,
         external_npz_cut_absolute_e=True,
     )
 
@@ -345,20 +342,22 @@ def test_fiber_cut_is_dispatched_with_lift_then_gated_before_retract(tmp_path):
     assert np.isclose(z[cut_position], z[previous_motion])
     assert e[cut_position] == 0.0
 
-    # The command overlaps the lift, while the first hard sync remains after
-    # the complete fixed lift hold and therefore also waits for cutter DONE.
+    # The first hard sync follows the lift directly; the retract delay hold
+    # sits AFTER the sync barrier, anchored to firmware completion.
     assert sync_positions[0] > int(lift_rows[-1])
-    hold_rows = np.flatnonzero(
-        (order > lift_rows[-1]) & (order < sync_positions[0])
+    delay_rows = np.flatnonzero(
+        (order > sync_positions[0])
+        & (order < sync_positions[1])
+        & (np.isclose(e, 2.0))
+        & (data["event_flag"] == 0)
     )
-    assert len(hold_rows) > 0
-    assert np.allclose(z[hold_rows], 2.5)
-    assert np.allclose(e[hold_rows], 2.0)
-    hold_seconds = float(data["planned_time_s"][hold_rows[-1]]) - float(
-        data["planned_time_s"][lift_rows[-1]]
+    assert len(delay_rows) > 0
+    assert np.allclose(z[delay_rows], 2.5)
+    delay_seconds = float(data["planned_time_s"][delay_rows[-1]]) - float(
+        data["planned_time_s"][sync_positions[0]]
     )
-    assert hold_seconds >= 0.2 - 1e-6
-    assert hold_seconds <= 0.2 + 0.05
+    assert delay_seconds >= 0.2 - 1e-6
+    assert delay_seconds <= 0.2 + 0.05
 
     assert np.isclose(z[sync_positions[0]], 2.5)
     assert np.isclose(e[sync_positions[0]], 2.0)

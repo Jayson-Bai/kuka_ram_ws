@@ -7,7 +7,7 @@ closed instead of producing a best-effort trajectory.
 """
 from __future__ import annotations
 
-from .cut_sync import cut_holds, cut_sync_payload, sync_payload
+from .cut_sync import cut_sync_payload, sync_payload
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -70,10 +70,8 @@ class LocalInjectionParams:
     resin_z_print_compensation_mm: float | None = None
     tool_change_safe_lift_mm: float | None = None
     cut_lift_mm: float | None = None
-    cut_wait_s: float | None = None
-    cut_settle_s: float | None = None
-    cut_lift_settle_s: float | None = None
-    cut_retract_settle_s: float | None = None
+    cut_retract_delay_s: float | None = None
+    cut_travel_delay_s: float | None = None
     resin_layer_end_retract_mm: float | None = None
     resin_layer_start_prime_mm: float | None = None
 
@@ -88,8 +86,7 @@ class LocalInjectionParams:
             out["tool_offset"] = list(values)
         for name in (
             "resin_z_print_compensation_mm", "tool_change_safe_lift_mm",
-            "cut_lift_mm", "cut_wait_s", "cut_settle_s",
-            "cut_lift_settle_s", "cut_retract_settle_s",
+            "cut_lift_mm", "cut_retract_delay_s", "cut_travel_delay_s",
             "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ):
             value = getattr(self, name)
@@ -98,8 +95,8 @@ class LocalInjectionParams:
                 if not math.isfinite(value):
                     raise ValueError(f"{name} must be finite")
                 if name in (
-                    "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
-                    "cut_settle_s", "cut_lift_settle_s", "cut_retract_settle_s", *BOUNDARY_PARAMS,
+                    "tool_change_safe_lift_mm", "cut_lift_mm",
+                    "cut_retract_delay_s", "cut_travel_delay_s", *BOUNDARY_PARAMS,
                 ) and value < 0:
                     raise ValueError(f"{name} must be >= 0")
                 out[name] = value
@@ -945,7 +942,7 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
 
 def _rebuild_cut(
     arrays, static, manifest, roles, move_types, block,
-    new_lift, new_wait, new_settle, dt, feed, new_retract_settle=None,
+    new_lift, new_retract_delay, new_travel_delay, dt, feed,
 ):
     """Rebuild the CUT handshake with the canonical Core row contract."""
     bid = int(block["id"])
@@ -1082,23 +1079,19 @@ def _rebuild_cut(
             int(arrays["tool_id"][event_index]), _TIMING_CUT,
         ))
 
-    settle_s, retract_settle_s = cut_holds(new_settle, new_settle, new_retract_settle)
-
+    # The two injectable delays are anchored to firmware completion, not to
+    # path end: each post-sync hold only starts after the matching extrude_sync
+    # barrier reports EVDONE.  retract_delay_s sits between the +L lift sync
+    # (which already requires CUT done) and the reset/retract; travel_delay_s
+    # sits between the -L retract sync and the reset/travel.
     def _sync_row(e_value):
         row = _row(arrays, event_index)
         _set_pose(row, high, e=float(e_value))
         row["event_type"] = _code(event_vocab, "extrude_sync")
-        row["payload"] = sync_payload(int(row["tool_id"]), e_value, new_wait).encode("ascii")
+        row["payload"] = sync_payload(int(row["tool_id"]), e_value, 30.0).encode("ascii")
         row["core_injection_role"] = action_code
         row["path_end_flag"] = 0
         return row
-
-    rows.extend(_wait_rows(
-        arrays, template, high, float(new_lift), 0.0, settle_s,
-        block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
-        timing_category=_TIMING_CUT,
-    ))
-    rows.append(_sync_row(float(new_lift)))
 
     def _reset_row(index, e_value):
         row = _row(arrays, index)
@@ -1107,45 +1100,41 @@ def _rebuild_cut(
         row["core_injection_role"] = action_code
         return row
 
+    # Confirm the lifted feed (and the CUT behind it) before the delay.
+    rows.append(_sync_row(float(new_lift)))
+    if new_retract_delay > 1e-9:
+        rows.extend(_wait_rows(
+            arrays, template, high, float(new_lift), 0.0, float(new_retract_delay),
+            block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+            timing_category=_TIMING_CUT,
+        ))
+
     rows.append(_reset_row(resets[0], float(new_lift)))
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, 0.0, dt,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
-    lift_duration_s = float(new_lift) / max(feed, 1e-9)
+    retract_duration_s = float(new_lift) / max(feed, 1e-9)
     rows.extend(_wait_rows(
-        arrays, template, high, 0.0, -float(new_lift), lift_duration_s,
+        arrays, template, high, 0.0, -float(new_lift), retract_duration_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
+    # Confirm the retract reached -L before the travel delay.
     rows.append(_sync_row(-float(new_lift)))
-    rows.extend(_wait_rows(
-        arrays, template, high, -float(new_lift), 0.0, retract_settle_s,
-        block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
-        timing_category=_TIMING_CUT,
-    ))
+    if new_travel_delay > 1e-9:
+        rows.extend(_wait_rows(
+            arrays, template, high, -float(new_lift), 0.0, float(new_travel_delay),
+            block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
+            timing_category=_TIMING_CUT,
+        ))
     rows.append(_reset_row(resets[1], -float(new_lift)))
     rows.extend(_wait_rows(
         arrays, template, high, 0.0, 0.0, dt,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
         timing_category=_TIMING_CUT,
     ))
-    retract_duration_s = float(new_lift) / max(feed, 1e-9)
-    remaining = max(
-        0.0,
-        float(new_wait)
-        - lift_duration_s
-        - settle_s
-        - retract_duration_s
-        - retract_settle_s,
-    )
-    if remaining > 1e-9:
-        rows.extend(_wait_rows(
-            arrays, template, high, 0.0, 0.0, remaining,
-            block_id=bid, role_code=action_code, print_code=print_code,
-            dt=dt, timing_category=_TIMING_CUT,
-        ))
 
     if source_action_path_end:
         for row in reversed(rows):
@@ -1358,10 +1347,11 @@ def _write_timing(
         ) * float(dt)
         event_counts = _event_counts(arrays, static)
         manifest = _json_manifest(static["core_injection_manifest"])
-        injected_cut_wait_s = max(
-            0.0,
-            float(manifest.get("base_parameters", {}).get("cut_wait_s", 15.0)),
-        )
+        cut_params = manifest.get("base_parameters", {})
+        injected_retract_delay_s = max(
+            0.0, float(cut_params.get("cut_retract_delay_s", 0.5)))
+        injected_travel_delay_s = max(
+            0.0, float(cut_params.get("cut_travel_delay_s", 1.0)))
         cut_count = int(event_counts.get("cut", 0))
         payload.update({
             "version": 2,
@@ -1376,9 +1366,16 @@ def _write_timing(
             "planned_travel_time_s": float(durations[_TIMING_TRAVEL]),
             "planned_wait_time_s": float(durations[_TIMING_WAIT]),
             "planned_cut_time_s": float(durations[_TIMING_CUT]),
-            "cut_injected_wait_s": injected_cut_wait_s,
+            "cut_retract_delay_s": injected_retract_delay_s,
+            "cut_travel_delay_s": injected_travel_delay_s,
+            "planned_cut_delay_time_s": (
+                (injected_retract_delay_s + injected_travel_delay_s) * cut_count
+            ),
+            # Legacy PrintTimingPlan/UiStatus fields still read these totals.
+            "cut_injected_wait_s": (
+                injected_retract_delay_s + injected_travel_delay_s),
             "planned_cut_injected_wait_time_s": (
-                injected_cut_wait_s * cut_count
+                (injected_retract_delay_s + injected_travel_delay_s) * cut_count
             ),
             "planned_cut_count": cut_count,
             "planned_tool_change_count": int(
@@ -1422,8 +1419,7 @@ def _event_counts(
 
 def _estimate_injected_rows(
     arrays, manifest, *, tool_changed, resin_changed, delta_resin,
-    safe, lift, wait, settle, new_offset, feed, dt, roles,
-    retract_settle=None,
+    safe, lift, retract_delay, travel_delay, new_offset, feed, dt, roles,
 ):
     estimated = int(len(arrays["seq"]))
     blocks = manifest.get("blocks", [])
@@ -1440,24 +1436,15 @@ def _estimate_injected_rows(
         tool_rows = int(math.ceil(max(travel_mm / max(feed * dt, 1e-9), 1.0) * 4.0))
         estimated += tool_blocks * tool_rows
     base_parameters = manifest.get("base_parameters", {})
-    if retract_settle is None:
-        retract_settle = settle
-    base_lift_hold, base_retract_hold = cut_holds(
-        float(base_parameters.get("cut_settle_s", 3.0)),
-        base_parameters.get("cut_lift_settle_s"),
-        base_parameters.get("cut_retract_settle_s"),
-    )
     if (
         lift != float(base_parameters.get("cut_lift_mm", 20.0))
-        or wait != float(base_parameters.get("cut_wait_s", 15.0))
-        or settle != base_lift_hold
-        or retract_settle != base_retract_hold
+        or retract_delay != float(base_parameters.get("cut_retract_delay_s", 0.5))
+        or travel_delay != float(base_parameters.get("cut_travel_delay_s", 1.0))
     ):
-        phase_s = max(
-            float(wait),
+        phase_s = (
             2.0 * max(float(lift), 0.0) / max(feed, 1e-9)
-            + max(float(settle), 0.0)
-            + max(float(retract_settle), 0.0),
+            + max(float(retract_delay), 0.0)
+            + max(float(travel_delay), 0.0)
         )
         cut_rows = int(math.ceil(max(phase_s, dt) / dt))
         credited_blocks = set()
@@ -1495,10 +1482,8 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                resin_z_print_compensation_mm: float | None = None,
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
-               cut_wait_s: float | None = None,
-               cut_settle_s: float | None = None,
-               cut_lift_settle_s: float | None = None,
-               cut_retract_settle_s: float | None = None,
+               cut_retract_delay_s: float | None = None,
+               cut_travel_delay_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                storage_mode: str = "auto") -> dict[str, Any]:
@@ -1518,10 +1503,9 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         tool_offset=tool_offset,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
-        cut_lift_mm=cut_lift_mm, cut_wait_s=cut_wait_s,
-        cut_settle_s=cut_settle_s,
-        cut_lift_settle_s=cut_lift_settle_s,
-        cut_retract_settle_s=cut_retract_settle_s,
+        cut_lift_mm=cut_lift_mm,
+        cut_retract_delay_s=cut_retract_delay_s,
+        cut_travel_delay_s=cut_travel_delay_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )
@@ -1543,10 +1527,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
                resin_z_print_compensation_mm: float | None = None,
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
-               cut_wait_s: float | None = None,
-               cut_settle_s: float | None = None,
-               cut_lift_settle_s: float | None = None,
-               cut_retract_settle_s: float | None = None,
+               cut_retract_delay_s: float | None = None,
+               cut_travel_delay_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                workspace=None, read_from_disk=True) -> dict[str, Any]:
@@ -1566,10 +1548,8 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm,
-        cut_wait_s=cut_wait_s,
-        cut_settle_s=cut_settle_s,
-        cut_lift_settle_s=cut_lift_settle_s,
-        cut_retract_settle_s=cut_retract_settle_s,
+        cut_retract_delay_s=cut_retract_delay_s,
+        cut_travel_delay_s=cut_travel_delay_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )).as_overrides()
@@ -1593,8 +1573,6 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     new_resin = float(overrides.get("resin_z_print_compensation_mm", current_resin))
     safe = float(overrides.get("tool_change_safe_lift_mm", base.get("tool_change_safe_lift_mm", 20.0)))
     lift = float(overrides.get("cut_lift_mm", base.get("cut_lift_mm", 20.0)))
-    wait = float(overrides.get("cut_wait_s", base.get("cut_wait_s", 15.0)))
-    settle = float(overrides.get("cut_settle_s", base.get("cut_settle_s", 3.0)))
     dt = float(manifest.get("sample_period_s", 0.004))
     feed = float(base.get("default_feed_mm_s", 10.0))
     if dt <= 0 or feed <= 0:
@@ -1608,12 +1586,10 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     # their ordering, timing, reset count, and E phases.
     base_safe = float(base.get("tool_change_safe_lift_mm", 20.0))
     base_lift = float(base.get("cut_lift_mm", 20.0))
-    base_wait = float(base.get("cut_wait_s", 15.0))
-    base_settle = float(base.get("cut_settle_s", 3.0))
-    base_lift_hold, base_retract_hold = cut_holds(base_settle, base.get("cut_lift_settle_s"), base.get("cut_retract_settle_s"))
-    lift_hold, retract_hold = cut_holds(settle,
-        overrides.get("cut_lift_settle_s", None if "cut_settle_s" in overrides else base_lift_hold),
-        overrides.get("cut_retract_settle_s", None if "cut_settle_s" in overrides else base_retract_hold))
+    base_retract_delay = float(base.get("cut_retract_delay_s", 0.5))
+    base_travel_delay = float(base.get("cut_travel_delay_s", 1.0))
+    retract_delay = float(overrides.get("cut_retract_delay_s", base_retract_delay))
+    travel_delay = float(overrides.get("cut_travel_delay_s", base_travel_delay))
     tool_offset_changed = not np.allclose(new_offset, current_offset, rtol=0.0, atol=1e-9)
     resin_changed = abs(new_resin - current_resin) > 1e-9
     safe_changed = (
@@ -1622,19 +1598,22 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     )
     cut_changed = (
         ("cut_lift_mm" in overrides and abs(lift - base_lift) > 1e-9)
-        or ("cut_wait_s" in overrides and abs(wait - base_wait) > 1e-9)
         or (
-            "cut_settle_s" in overrides
-            and abs(settle - base_settle) > 1e-9
+            "cut_retract_delay_s" in overrides
+            and abs(retract_delay - base_retract_delay) > 1e-9
+        )
+        or (
+            "cut_travel_delay_s" in overrides
+            and abs(travel_delay - base_travel_delay) > 1e-9
         )
     )
-    cut_changed = cut_changed or lift_hold != base_lift_hold or retract_hold != base_retract_hold or base.get("cut_sync_version") != 1
+    cut_changed = cut_changed or base.get("cut_sync_version") != 1
     estimated_rows = _estimate_injected_rows(
         arrays, manifest,
         tool_changed=tool_offset_changed or safe_changed or bool(wipe_migrations),
         resin_changed=resin_changed, delta_resin=new_resin - current_resin,
-        safe=safe, lift=lift, wait=wait, settle=lift_hold,
-        retract_settle=retract_hold,
+        safe=safe, lift=lift,
+        retract_delay=retract_delay, travel_delay=travel_delay,
         new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
     estimated_rows += sum(max(0, count - (end - start + 1))
@@ -1680,7 +1659,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         if block.get("kind") == "cut" and cut_changed:
             _rebuild_cut(
                 arrays, static, manifest, roles, move_types, block,
-                lift, wait, lift_hold, dt, feed, retract_hold,
+                lift, retract_delay, travel_delay, dt, feed,
             )
     for block in manifest.get("blocks", []):
         if block.get("kind") == "tool_change" and (
@@ -1698,11 +1677,12 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     _repair(arrays, dt)
     manifest["base_parameters"] = dict(base)
     manifest["base_parameters"].update(overrides)
-    manifest["base_parameters"].update(cut_lift_settle_s=lift_hold,
-        cut_retract_settle_s=retract_hold, cut_sync_version=1)
+    manifest["base_parameters"].update(
+        cut_retract_delay_s=retract_delay,
+        cut_travel_delay_s=travel_delay, cut_sync_version=1)
     for block in manifest.get("blocks", []):
         if block.get("kind") == "cut":
-            block["injectable_parameters"] = list(dict.fromkeys(block.get("injectable_parameters", []) + ["cut_lift_settle_s", "cut_retract_settle_s"]))
+            block["injectable_parameters"] = list(dict.fromkeys(block.get("injectable_parameters", []) + ["cut_retract_delay_s", "cut_travel_delay_s"]))
     injected_at = datetime.now(timezone.utc).isoformat()
     calibration_id = _calibration_id(new_offset, new_resin)
     manifest.update({

@@ -257,8 +257,8 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         resin_z_print_compensation_mm=0.0,
         tool_change_safe_lift_mm=20.0,
         cut_lift_mm=20.0,
-        cut_wait_s=15.0,
-        cut_settle_s=3.0,
+        cut_retract_delay_s=0.5,
+        cut_travel_delay_s=1.0,
         external_npz_cut_absolute_e=True,
     )
     changed = dict(base)
@@ -267,8 +267,8 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         resin_z_print_compensation_mm=-33.3,
         tool_change_safe_lift_mm=10.0,
         cut_lift_mm=12.0,
-        cut_wait_s=12.0,
-        cut_settle_s=0.5,
+        cut_retract_delay_s=1.2,
+        cut_travel_delay_s=2.0,
     )
 
     export_npz(_commands(), str(source), **base)
@@ -280,8 +280,8 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         resin_z_print_compensation_mm=changed["resin_z_print_compensation_mm"],
         tool_change_safe_lift_mm=changed["tool_change_safe_lift_mm"],
         cut_lift_mm=changed["cut_lift_mm"],
-        cut_wait_s=changed["cut_wait_s"],
-        cut_settle_s=changed["cut_settle_s"],
+        cut_retract_delay_s=changed["cut_retract_delay_s"],
+        cut_travel_delay_s=changed["cut_travel_delay_s"],
     )
 
     with np.load(direct, allow_pickle=False) as direct_data, np.load(
@@ -313,8 +313,9 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         "planned_travel_time_s",
         "planned_wait_time_s",
         "planned_cut_time_s",
-        "cut_injected_wait_s",
-        "planned_cut_injected_wait_time_s",
+        "cut_retract_delay_s",
+        "cut_travel_delay_s",
+        "planned_cut_delay_time_s",
     ):
         assert injected_timing[key] == pytest.approx(
             direct_timing[key], abs=0.005)
@@ -324,10 +325,11 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         "planned_unquantified_event_count",
     ):
         assert injected_timing[key] == direct_timing[key]
-    assert direct_timing["cut_injected_wait_s"] == changed["cut_wait_s"]
-    assert injected_timing["cut_injected_wait_s"] == changed["cut_wait_s"]
-    assert direct_timing["planned_cut_injected_wait_time_s"] == (
-        changed["cut_wait_s"] * direct_timing["planned_cut_count"]
+    assert direct_timing["cut_retract_delay_s"] == changed["cut_retract_delay_s"]
+    assert injected_timing["cut_retract_delay_s"] == changed["cut_retract_delay_s"]
+    assert direct_timing["planned_cut_delay_time_s"] == (
+        (changed["cut_retract_delay_s"] + changed["cut_travel_delay_s"])
+        * direct_timing["planned_cut_count"]
     )
 
 
@@ -343,14 +345,13 @@ def test_fiber_offset_change_keeps_resin_return_target_and_print_rows_fixed(tmp_
         resin_z_print_compensation_mm=-33.3,
         tool_change_safe_lift_mm=20.0,
         cut_lift_mm=20.0,
-        cut_wait_s=15.0,
+        cut_travel_delay_s=15.0,
         external_npz_cut_absolute_e=True,
     )
     common = dict(
         resin_z_print_compensation_mm=-33.3,
         tool_change_safe_lift_mm=10.0,
         cut_lift_mm=12.0,
-        cut_wait_s=12.0,
     )
 
     export_npz(_two_way_tool_change_commands(), str(source), **base)
@@ -425,7 +426,6 @@ def test_random_multilayer_injection_matches_full_export_after_fiber_z_only_chan
         resin_z_print_compensation_mm=-33.3,
         tool_change_safe_lift_mm=10.0,
         cut_lift_mm=12.0,
-        cut_wait_s=12.0,
         external_npz_cut_absolute_e=True,
     )
 
@@ -448,7 +448,6 @@ def test_random_multilayer_injection_matches_full_export_after_fiber_z_only_chan
         resin_z_print_compensation_mm=-33.3,
         tool_change_safe_lift_mm=10.0,
         cut_lift_mm=12.0,
-        cut_wait_s=12.0,
     )
 
     with np.load(full_325, allow_pickle=False) as old, np.load(

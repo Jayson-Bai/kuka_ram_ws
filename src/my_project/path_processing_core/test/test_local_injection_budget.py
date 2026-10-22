@@ -13,7 +13,7 @@ from test_minimal_dual_material_equivalence import _commands
 def _estimate(arrays, manifest, **overrides):
     values = dict(
         tool_changed=False, resin_changed=False, delta_resin=0.0,
-            safe=10.0, lift=12.5, wait=12.0, settle=3.0,
+            safe=10.0, lift=12.5, retract_delay=0.5, travel_delay=1.0,
             new_offset=(0.0, 0.0, 0.0),
         feed=20.0, dt=0.004, roles={41: "cut_event", 42: "cut_action"},
     )
@@ -41,7 +41,7 @@ def _cut_arrays(counts, total=None):
         blocks.append({"id": bid, "kind": "cut", "source_line": 7})
         start = end
     return arrays, {"blocks": blocks, "base_parameters": {
-        "cut_lift_mm": 20.0, "cut_wait_s": 15.0,
+        "cut_lift_mm": 20.0,
     }}
 
 
@@ -50,31 +50,31 @@ def test_many_existing_cuts_do_not_double_count_source_rows():
     arrays, manifest = _cut_arrays([4503] * 360, total=3_110_069)
     assert len(arrays["seq"]) + 360 * 3000 > injector._MAX_ESTIMATED_ROWS
     assert _estimate(arrays, manifest) == len(arrays["seq"])
-    assert _estimate(arrays, manifest, wait=120.0) > injector._MAX_ESTIMATED_ROWS
+    assert _estimate(arrays, manifest, travel_delay=120.0) > injector._MAX_ESTIMATED_ROWS
 
 
 def test_shrinking_cut_cannot_fund_another_cut_growth():
     arrays, manifest = _cut_arrays([4503, 100])
-    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 2900
+    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 588
 
 
 def test_unchanged_cut_parameters_do_not_add_rebuild_budget():
     arrays, manifest = _cut_arrays([100])
-    assert _estimate(arrays, manifest, lift=20.0, wait=15.0) == len(arrays["seq"])
+    assert _estimate(arrays, manifest, lift=20.0) == len(arrays["seq"])
 
 
-def test_asymmetric_cut_holds_are_summed_in_budget_estimate():
+def test_asymmetric_cut_delays_are_summed_in_budget_estimate():
     arrays, manifest = _cut_arrays([100])
     expected_rows = int(np.ceil((2.0 * 12.5 / 20.0 + 10.0 + 1.0) / 0.004))
     assert _estimate(
-        arrays, manifest, settle=10.0, retract_settle=1.0,
+        arrays, manifest, retract_delay=10.0, travel_delay=1.0,
     ) == len(arrays["seq"]) + expected_rows - 100
 
 
 def test_duplicate_catalog_entry_cannot_reuse_replacement_credit():
     arrays, manifest = _cut_arrays([4503])
     manifest["blocks"].append(dict(manifest["blocks"][0]))
-    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 3000
+    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 688
 
 
 def test_budget_keeps_events_connectors_and_other_source_rows():
@@ -87,15 +87,15 @@ def test_budget_keeps_events_connectors_and_other_source_rows():
     arrays["event_flag"][0] = 0
     arrays["core_injection_role"][4] = 41
     arrays["event_flag"][4] = 1
-    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 3000 - 96
+    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 688 - 96
 
 
 def test_ambiguous_or_missing_markers_do_not_receive_credit():
     arrays, manifest = _cut_arrays([100])
     arrays["core_injection_role"][1] = 41
-    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 3000
+    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 688
     del arrays["src_line"]
-    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 3000
+    assert _estimate(arrays, manifest) == len(arrays["seq"]) + 688
 
 
 def test_actual_replacement_limit_is_checked_before_allocating(monkeypatch):
@@ -123,14 +123,14 @@ def test_budget_fix_preserves_all_injection_output_fields(tmp_path, monkeypatch)
         _commands(), str(source), dt=0.004, default_feed_mm_s=20.0,
         enable_extrude_wait=True, tool_offset=(0.0, 0.0, 0.0),
         resin_z_print_compensation_mm=0.0, tool_change_safe_lift_mm=20.0,
-        cut_lift_mm=20.0, cut_wait_s=15.0, external_npz_cut_absolute_e=True,
+        cut_lift_mm=20.0, external_npz_cut_absolute_e=True,
     )
     params = dict(
         tool_offset=(-0.34, -0.24, 3.25), resin_z_print_compensation_mm=-34.0,
-        tool_change_safe_lift_mm=10.0, cut_lift_mm=12.5, cut_wait_s=12.0,
+        tool_change_safe_lift_mm=10.0, cut_lift_mm=12.5,
     )
     with pytest.raises(ValueError, match="safe in-memory row budget"):
-        injector.inject_npz(source, checked, **dict(params, cut_wait_s=100_000.0))
+        injector.inject_npz(source, checked, **dict(params, cut_travel_delay_s=100_000.0))
     assert not checked.exists()
     injector.inject_npz(source, checked, **params)
     monkeypatch.setattr(injector, "_estimate_injected_rows", lambda *a, **kw: 0)

@@ -67,7 +67,8 @@ def convert_external_npz(
     progress_callback=None,
     calibration_path: str | Path = DEFAULT_HEAD_CALIBRATION_PATH,
     cut_lift_mm: float = 20.0,
-    cut_wait_s: float = 15.0,
+    cut_retract_delay_s: float = 0.5,
+    cut_travel_delay_s: float = 1.0,
 ) -> dict:
     resolved_output = resolve_output_path(source_path, output_path)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
@@ -90,7 +91,8 @@ def convert_external_npz(
         tool_offset=(0.0, 0.0, 0.0),
         resin_z_print_compensation_mm=0.0,
         cut_lift_mm=cut_lift_mm,
-        cut_wait_s=cut_wait_s,
+        cut_retract_delay_s=cut_retract_delay_s,
+        cut_travel_delay_s=cut_travel_delay_s,
         external_npz_cut_absolute_e=True,
     )
     try:
@@ -100,7 +102,8 @@ def convert_external_npz(
             tool_offset=tool_offset,
             resin_z_print_compensation_mm=resin_z_print_compensation_mm,
             cut_lift_mm=cut_lift_mm,
-            cut_wait_s=cut_wait_s,
+            cut_retract_delay_s=cut_retract_delay_s,
+            cut_travel_delay_s=cut_travel_delay_s,
         )
     finally:
         base_output.unlink(missing_ok=True)

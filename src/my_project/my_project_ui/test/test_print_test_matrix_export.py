@@ -125,11 +125,8 @@ def test_formal_npz_export_exposes_and_passes_cut_lift_parameters():
         "    def _on_export_progress", 1)[0]
 
     assert "cut_cfg[\x27cut_lift_mm\x27]" in src
-    assert "cut_cfg[\x27cut_wait_s\x27]" in src
     assert '"cut_lift_mm": float(self._planner_inputs["cut_lift_mm"].text())' in formal_export
-    assert '"cut_wait_s": float(self._planner_inputs["cut_wait_s"].text())' in formal_export
     assert 'cut_lift_mm=params["cut_lift_mm"]' in formal_export
-    assert 'cut_wait_s=params["cut_wait_s"]' in formal_export
 
 
 def test_npz_selection_validates_saved_resin_z_print_compensation():

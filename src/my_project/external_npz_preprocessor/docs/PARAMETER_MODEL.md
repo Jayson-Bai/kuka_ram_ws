@@ -77,8 +77,8 @@ This parameter is attached to fiber `GlobalCurveCommand` objects as curve-level 
 - `default_a/default_b/default_c`: pose values appended to Nx3 source paths.
 - `dt`: sample period forwarded to `npz_exporter`.
 - `cut_lift_mm`: Z lift distance after a fiber `CUT`; default `20.0`.
-- `cut_wait_s`: total wait time measured from the exported `cut` event trigger; default `15.0`.
-- `cut_settle_s`: terminal hold at the lifted extrusion phase and again after the equal safety retract; default `3.0`.
+- `cut_retract_delay_s`: hold at the lifted pose after the firmware reports CUT + lift feed done, before the safety retract; default `0.5`.
+- `cut_travel_delay_s`: hold at the lifted pose after the firmware reports the retract done, before moving to the next path start; default `1.0`.
 
 ## Prime and Retract
 
@@ -98,12 +98,12 @@ A one-path fiber layer is both first and last. Layers without fiber emit no fibe
 Every printable path, including the generated primeline and final path, ends at an explicit E boundary:
 
 - Resin: `PRINT -> retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
-- Non-final fiber in a layer: `PRINT -> pre-CUT reset -> CUT -> lift/feed -> cut_settle_s hold -> reset -> fixed retract -> cut_settle_s hold -> reset -> remaining high hold -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
+- Non-final fiber in a layer: `PRINT -> pre-CUT reset -> CUT -> lift/feed -> sync(+L) -> cut_retract_delay_s hold -> reset -> fixed retract -> sync(-L) -> cut_travel_delay_s hold -> reset -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
 - Layer-final fiber: the same isolated CUT sequence, then `reset -> UI retract -> external_npz_path_reset -> external_npz_reset_anchor -> optional travel(E=0)`.
 
-For external-NPZ fiber CUT, the blocking pre-CUT reset establishes E=0 before the nonblocking `cut` event. `cut_lift_mm=L` then produces two reset-isolated absolute-E intervals: lift/feed `0→+L`, followed by fixed retract `0→-L`. Each interval holds its terminal E for `cut_settle_s` seconds before reset, so neither phase can be truncated by the next reset or inherit path/UI E.
+For external-NPZ fiber CUT, the blocking pre-CUT reset establishes E=0 before the nonblocking `cut` event. `cut_lift_mm=L` then produces two reset-isolated absolute-E intervals: lift/feed `0→+L`, followed by fixed retract `0→-L`. Each interval ends with a hard `extrude_sync` barrier that waits for the firmware `EVDONE`; only then does the configured hold run.
 
-The two `cut_settle_s` holds and both motions consume the existing `cut_wait_s` budget measured from the `cut` event; XYZ stays at the lifted pose until that total window ends. If the configured window is shorter than the complete safety sequence, completion takes precedence. CUT does not consume `fiber_prime_length_mm=P` or `fiber_retract_length_mm=R`; UI prime remains `0→+P`, UI retract remains `0→-R`, and their configured speeds remain independent.
+`cut_retract_delay_s` anchors the first hold to the CUT+lift completion report and gates the retract; `cut_travel_delay_s` anchors the second hold to the retract completion report and gates travel. Neither delay is a leftover from a shared wait window. CUT does not consume `fiber_prime_length_mm=P` or `fiber_retract_length_mm=R`; UI prime remains `0→+P`, UI retract remains `0→-R`, and their configured speeds remain independent.
 
 The existing tool-change `G92 E0` / `ResetECommand` remains unchanged and is additive to the per-path and phase resets. The reset event is exported at the old E value; only the exact internal `external_npz_reset_anchor` marker makes the following one-`dt` row start at `E=0`. Converter-side `current_e` is then zero, travel remains at `E=0`, and ordinary GCode behavior is unchanged.
 

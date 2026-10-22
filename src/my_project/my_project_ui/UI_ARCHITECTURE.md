@@ -330,14 +330,14 @@ sequenceDiagram
 - 正式打印源文件选择支持 `.gcode/.gc/.g` 和约定格式 `.npz` 两类输入
 - GCode 输入走 `gcode_planner.gcode_parser`，约定源 NPZ 输入走 `external_npz_preprocessor`
 - 两条链路最终都调用 `path_processing_core.npz_exporter.export_npz()` 写出系统 NPZ，UI 只负责路由、参数收集和偏置一致性校验
-- UI 在正式导出参数中暴露 `cut_lift_mm`、`cut_wait_s`、`cut_lift_settle_s` 和 `cut_retract_settle_s`；上位机“现场局部注入参数”也暴露这四个字段，并传给共享 injector。UI 不自行展开剪切抬升、等待、回抽或完成握手
+- UI 在现场局部注入参数中暴露 `cut_lift_mm`、`cut_retract_delay_s` 和 `cut_travel_delay_s`，并传给共享 injector。两段延时分别锚定固件"剪切+抬升送料完成"和"回抽完成"之后的高位保持；UI 不自行展开剪切抬升、回抽或完成握手
 - 三维预览仍使用 `gcode_planner.path_preview` 提取系统 NPZ 中的预览路径，并优先按 `preview_layer_index` 分层
 
 **正式打印导出约束**:
 
 - 正式打印 UI 显示并保存树脂 Z 打印补偿，以及纤维头 X/Y/Z 直接偏置
 - 本轮正式打印导出仍沿用既有补偿行为：`export_npz()` 接收 `tool_offset=(纤维头 X, 纤维头 Y, 纤维头 Z)` 和 `resin_z_print_compensation_mm=树脂 Z`；切到纤维头时 Z 向实际补偿为 `树脂 Z + 纤维头 Z 偏置`，不再使用旧的目标减当前喷头相减逻辑
-- 正式打印导出参数包含 `cut_lift_mm=20.0`、`cut_wait_s=15.0`、`cut_lift_settle_s=3.0` 和 `cut_retract_settle_s=3.0` 默认值；这些值同时作用于 GCode 和约定源 NPZ 导出路径。两段固定保持相互独立；旧配置或旧接口只提供 `cut_settle_s` 时，用它同时回退到两段以保持兼容。`cut_wait_s` 是从抬升开始的总安全窗口，窗口不足时仍完整执行抬升、剪切完成、回抽完成和两段固定保持
+- 局部注入参数包含 `cut_lift_mm=20.0`、`cut_retract_delay_s=0.5` 和 `cut_travel_delay_s=1.0` 默认值。两段延时相互独立，均以固件完成握手为锚点；窗口不足时也不提前放行，由 extrude_sync 超时兜底
 - 现场局部注入不再显示树脂层末回抽和树脂层首预挤出两项数值控件，但相关接口参数及已有配置文件继续保留，避免破坏旧调用；CUT 的两段固定保持可在现场注入界面直接修改
 - 正式打印导出尚未接入测试模式的新复合补偿模型；复合矩阵中的树脂到纤维相对补偿只用于测试模式临时动作
 

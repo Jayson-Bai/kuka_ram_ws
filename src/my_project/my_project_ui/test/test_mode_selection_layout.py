@@ -202,12 +202,10 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"角点细分段数"' in export_section
     assert '"external_cut_lift_mm"' in export_section
     assert '"剪切抬升距离 mm"' in export_section
-    assert '"external_cut_wait_s"' in export_section
-    assert '"剪切等待时间 s"' in export_section
-    assert '"cut_lift_settle_s": cut_cfg["cut_lift_settle_s"]' in export_section
-    assert '"cut_retract_settle_s": cut_cfg["cut_retract_settle_s"]' in export_section
-    assert '"CUT 回抽前保持"' in export_section
-    assert '"CUT 回抽后保持"' in export_section
+    assert '"cut_retract_delay_s": cut_cfg["cut_retract_delay_s"]' in export_section
+    assert '"cut_travel_delay_s": cut_cfg["cut_travel_delay_s"]' in export_section
+    assert '"剪切完成到回抽延时"' in export_section
+    assert '"回抽完成到横移延时"' in export_section
     assert (
         'self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")'
         in export_section
@@ -241,9 +239,7 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"primeline_x_mm": saved_params.primeline_x_mm' in src
     assert '"prime_settle_s": saved_params.prime_settle_s' in src
     assert 'external_cut_lift_mm = params["cut_lift_mm"]' in src
-    assert 'external_cut_wait_s = params["cut_wait_s"]' in src
     assert 'self._external_npz_inputs["external_cut_lift_mm"].value()' in src
-    assert 'self._external_npz_inputs["external_cut_wait_s"].value()' in src
     assert 'return replace(process_params, dt=planner_params["dt"])' in src
     assert 'and source_ext in (".gcode", ".gc", ".g")' in export_method
     assert "load_print_params" not in npz_branch
@@ -252,7 +248,6 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert "convert_external_npz(" in npz_branch
     assert "process_params," in npz_branch
     assert 'cut_lift_mm=external_cut_lift_mm' in npz_branch
-    assert 'cut_wait_s=external_cut_wait_s' in npz_branch
 
 
 def test_print_test_mode_uses_requested_resin_and_fiber_defaults():
