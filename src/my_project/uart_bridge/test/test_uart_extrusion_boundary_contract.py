@@ -33,11 +33,7 @@ def test_heartbeat_keeps_guards_and_commits_only_after_write_success():
         "void read_loop",
     )
 
-    assert "std::lock_guard<std::mutex> event_lk(event_mutex_);" in heartbeat
-    assert (
-        "paused_.load() || aborted_.load() || event_fault_latched_ || current_event_"
-        in heartbeat
-    )
+    assert "paused_.load() || aborted_.load() || has_pending_event()" in heartbeat
     assert "hb.extrude_abs * scale" in heartbeat
     assert "std::lock_guard<std::mutex> lk(extrude_forward_mutex_)" in heartbeat
     assert "extrusion_forwarder_->prepare" in heartbeat
