@@ -1959,16 +1959,13 @@ def export_npz(
                 if mapped_tool != current_tool:
                     active_injection_block_id = block_id_by_command_index.get(idx, -1)
                     active_injection_kind = "tool_change"
-                    # Move horizontally into the target head frame before
-                    # lifting.  The post-event bridge then starts from this
-                    # high pose and ends directly at the next path start.
+                    # Lift vertically at the current (optionally wiped) pose
+                    # first, then send the tool-change event at the high pose.
+                    # The head-offset horizontal component is merged into the
+                    # single post-event bridge travel instead of a separate
+                    # pre-change horizontal move.
                     safe_lift = max(0.0, float(tool_change_safe_lift_mm))
-                    offset_sign = 1.0 if mapped_tool == 1 else -1.0
-                    has_horizontal = (
-                        abs(float(tool_offset[0])) > 1e-9
-                        or abs(float(tool_offset[1])) > 1e-9
-                    )
-                    if safe_lift > 1e-9 or idx in resin_wipes or has_horizontal:
+                    if safe_lift > 1e-9 or idx in resin_wipes:
                         last_row = last_pose
                         if last_row is not None:
                             from .types import Position as _Pos
@@ -1993,41 +1990,6 @@ def export_npz(
                                     marker_role=injection_role_map["tool_change_pre"],
                                 )
                                 start_p = wipe_end
-                            if has_horizontal:
-                                horizontal_p = _Pos(
-                                    start_p.x + offset_sign * float(tool_offset[0]),
-                                    start_p.y + offset_sign * float(tool_offset[1]),
-                                    start_p.z,
-                                    start_p.a,
-                                    start_p.b,
-                                    start_p.c,
-                                )
-                                horizontal_gc = GlobalCurveCommand(
-                                    type="TRAVEL",
-                                    cmd="SPLINE",
-                                    start_pos=start_p,
-                                    control_points=[
-                                        horizontal_p,
-                                        horizontal_p,
-                                        horizontal_p,
-                                    ],
-                                    e_val=last_row.e,
-                                    delta_e=0.0,
-                                    feedrate=default_feed_mm_s * 60.0,
-                                    line=cmd.line,
-                                    raw="tool_change_pre_offset",
-                                    constraints=[],
-                                    original_moves=[],
-                                )
-                                _append_sample(
-                                    horizontal_gc,
-                                    cmd.layer,
-                                    cmd.subtype,
-                                    occ,
-                                    marker_block_id=active_injection_block_id,
-                                    marker_role=injection_role_map["tool_change_pre"],
-                                )
-                                start_p = horizontal_p
                             if safe_lift > 1e-9:
                                 lifted_p = _Pos(start_p.x, start_p.y, start_p.z + safe_lift,
                                                 start_p.a, start_p.b, start_p.c)

@@ -810,19 +810,11 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     wiped = start.copy()
     if specification is not None:
         wiped[1] = wipe_target_y(start[1], specification)
-    # Core stores the fiber offset in the flat-reference frame.  Rotate it
-    # using the current pose, apply only X/Y for the pre-change transition,
-    # and leave Z exclusively for the subsequent safe lift.
-    rotated_offset = _rotated_reference_offsets(
-        np.asarray([wiped[3]], dtype=np.float64),
-        np.asarray([wiped[4]], dtype=np.float64),
-        np.asarray([wiped[5]], dtype=np.float64),
-        np.asarray(new_offset, dtype=np.float64),
-    )[0]
-    offset_sign = 1.0 if target_tool == 1 else -1.0
-    horizontal = wiped.copy()
-    horizontal[:2] += offset_sign * rotated_offset[:2]
-    lifted = horizontal.copy()
+    # Lift vertically at the current (optionally wiped) pose.  The head-offset
+    # horizontal component is no longer moved before the lift; it is merged
+    # into the single post-event bridge travel to the next path start, whose
+    # destination already carries the target-head frame.
+    lifted = wiped.copy()
     lifted[2] += max(0.0, float(safe_lift))
     target = lifted.copy()
     rows = []
@@ -835,18 +827,9 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
             arrays, event_index, samples, bid, pre_code,
             _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
         ))
-    if not np.allclose(horizontal[:2], wiped[:2], rtol=0.0, atol=1e-9):
-        samples = _sample_segment(
-            wiped, horizontal, start_e, 0.0,
-            raw="tool_change_pre_offset", feed_mm_s=feed, dt=dt,
-        )
-        rows.extend(_motion_rows(
-            arrays, event_index, samples, bid, pre_code,
-            _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
-        ))
     if safe_lift > 1e-9:
         samples = _sample_segment(
-            horizontal, lifted, start_e, 0.0,
+            wiped, lifted, start_e, 0.0,
             raw="tool_change_safe_lift", feed_mm_s=feed, dt=dt,
         )
         rows.extend(_motion_rows(

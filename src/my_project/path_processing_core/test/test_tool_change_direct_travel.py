@@ -119,28 +119,18 @@ def _assert_direct(data, offset):
         wipe = block.get("resin_end_wipe")
         if wipe is not None:
             wiped[1] = wipe["y_max"] + 5.0
-        sign = 1.0 if int(block["to_tool"]) == 1 else -1.0
-        horizontal = wiped.copy()
-        horizontal[:2] += sign * offset[:2]
-        assert np.allclose(
-            xyz[pre[np.isclose(xyz[pre, 2], wiped[2], atol=1e-9)][-1]],
-            horizontal,
-            atol=1e-5,
-        )
-        lifted = horizontal + np.asarray([0.0, 0.0, 10.0])
-        assert np.allclose(
-            xyz[pre[-1]], lifted, atol=1e-5,
-        )
+        # No horizontal head-offset move before the lift: the lifted pose
+        # sits directly above the (optionally wiped) path end, and the
+        # post-change bridge carries the full horizontal offset in one
+        # straight travel to the next path start.
+        lifted = wiped + np.asarray([0.0, 0.0, 10.0])
+        flat = pre[np.isclose(xyz[pre, 2], wiped[2], atol=1e-9)]
+        assert np.allclose(xyz[flat[-1]], wiped, atol=1e-5)
+        assert np.allclose(xyz[pre[-1]], lifted, atol=1e-5)
         assert np.allclose(xyz[pre[-1]], xyz[bridge[1]], atol=1e-9)
+        segment = xyz[bridge[1] + 1:]
         assert not np.any(
-            np.all(
-                np.isclose(
-                    xyz[bridge[1] + 1:],
-                    origin,
-                    atol=1e-6,
-                ),
-                axis=1,
-            )
+            np.all(np.isclose(segment, origin, atol=1e-6), axis=1)
         )
 
 
