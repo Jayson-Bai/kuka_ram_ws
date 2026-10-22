@@ -352,6 +352,8 @@ _CUT_DEFAULTS = {
     "cut_lift_mm": 20.0,
     "cut_wait_s": 15.0,
     "cut_settle_s": 3.0,
+    "cut_lift_settle_s": 3.0,
+    "cut_retract_settle_s": 3.0,
 }
 _CORE_RESIN_EXTRUSION_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "core_resin_extrusion.json")
 _CORE_RESIN_EXTRUSION_DEFAULTS = {
@@ -434,7 +436,14 @@ def _load_cut_config():
         with open(_CUT_CONFIG_PATH, "r", encoding="utf-8") as handle:
             data = json.load(handle)
         return {
-            key: float(data.get(key, default))
+            key: float(
+                data.get(
+                    key,
+                    data.get("cut_settle_s", default)
+                    if key in ("cut_lift_settle_s", "cut_retract_settle_s")
+                    else default,
+                )
+            )
             for key, default in _CUT_DEFAULTS.items()
         }
     except Exception:
@@ -446,6 +455,8 @@ def _save_cut_config(
     cut_wait_s,
     tool_change_safe_lift_mm=None,
     cut_settle_s=None,
+    cut_lift_settle_s=None,
+    cut_retract_settle_s=None,
 ):
     current = _load_cut_config()
     values = {
@@ -461,6 +472,12 @@ def _save_cut_config(
             if cut_settle_s is None else float(cut_settle_s)
         ),
     }
+    for key, value in (
+        ("cut_lift_settle_s", cut_lift_settle_s),
+        ("cut_retract_settle_s", cut_retract_settle_s),
+    ):
+        fallback = cut_settle_s if cut_settle_s is not None else current[key]
+        values[key] = float(value if value is not None else fallback)
     if any(not math.isfinite(value) or value < 0.0 for value in values.values()):
         raise ValueError("剪切参数必须是非负有限数字")
     os.makedirs(_OFFSET_CONFIG_DIR, exist_ok=True)
@@ -2257,16 +2274,16 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "tool_change_safe_lift_mm": cut_cfg["tool_change_safe_lift_mm"],
             "cut_lift_mm": cut_cfg["cut_lift_mm"],
             "cut_wait_s": cut_cfg["cut_wait_s"],
-            "cut_settle_s": cut_cfg["cut_settle_s"],
+            "cut_lift_settle_s": cut_cfg["cut_lift_settle_s"],
+            "cut_retract_settle_s": cut_cfg["cut_retract_settle_s"],
             **_load_core_resin_extrusion_config(),
         }
         local_fields = (
             ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
             ("cut_lift_mm", "CUT 抬升", "mm", "CUT 阶段的局部抬升距离。"),
             ("cut_wait_s", "CUT 等待", "s", "CUT 阶段的局部等待时间。"),
-            ("cut_settle_s", "CUT 终端保持", "s", "CUT 抬升末端和回抽末端各自保持的时间。"),
-            ("resin_layer_end_retract_mm", "实体树脂层末回抽", "mm", "仅控制每层实体最后一条树脂路径后的回抽供料距离 E（不是喷头移动距离）；不影响 primeline 或中间路径。留空沿用原值，0 取消此处回抽；速度沿用原段。"),
-            ("resin_layer_start_prime_mm", "实体树脂层首预挤出", "mm", "仅控制每层实体第一条树脂路径前的预挤出供料距离 E（不是喷头移动距离），包括首层实体；不影响 primeline 或中间路径。留空沿用原值，0 取消此处预挤出；速度沿用原段。"),
+            ("cut_lift_settle_s", "CUT 回抽前保持", "s", "固件确认抬升送料和剪切完成后，回抽前的保持时间。"),
+            ("cut_retract_settle_s", "CUT 回抽后保持", "s", "固件确认回抽目标完成后的保持时间；等待窗口不足也不提前放行。"),
         )
         for column, (key, label_text, unit, tip) in enumerate(local_fields):
             card = QtWidgets.QWidget()
@@ -5443,9 +5460,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 values["cut_lift_mm"],
                 values["cut_wait_s"],
                 tool_change_safe_lift_mm=values["tool_change_safe_lift_mm"],
-                cut_settle_s=values["cut_settle_s"],
+                cut_lift_settle_s=values["cut_lift_settle_s"],
+                cut_retract_settle_s=values["cut_retract_settle_s"],
             )
-            _save_core_resin_extrusion_config(values)
             if hasattr(self, "_offset_status"):
                 self._offset_status.setText("已自动保存剪切/注入参数。")
                 self._offset_status.setStyleSheet("color: #1b6e3c;")
@@ -5677,9 +5694,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 used_cut_lift_mm,
                 used_cut_wait_s,
                 tool_change_safe_lift_mm=used_safe_lift_mm,
-                cut_settle_s=local_injection_values["cut_settle_s"],
+                cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
+                cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
             )
-            _save_core_resin_extrusion_config(local_injection_values)
             self._last_export_split_by_layer_type = (
                 params["split_by_layer_type"]
                 and source_ext in (".gcode", ".gc", ".g")
@@ -5723,7 +5740,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
-                        cut_settle_s=local_injection_values["cut_settle_s"],
+                        cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
+                        cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -5793,7 +5811,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
-                        cut_settle_s=local_injection_values["cut_settle_s"],
+                        cut_lift_settle_s=local_injection_values["cut_lift_settle_s"],
+                        cut_retract_settle_s=local_injection_values["cut_retract_settle_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -6005,7 +6024,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
         try:
             local_values = self._local_injection_values()
-            _save_core_resin_extrusion_config(local_values)
         except (ValueError, OSError) as exc:
             self._export_status.setText(f"无效的注入参数: {exc}")
             self._export_status.setStyleSheet("color: #b42318;")
@@ -6036,7 +6054,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     tool_change_safe_lift_mm=local_values["tool_change_safe_lift_mm"],
                     cut_lift_mm=local_values["cut_lift_mm"],
                     cut_wait_s=local_values["cut_wait_s"],
-                    cut_settle_s=local_values["cut_settle_s"],
+                    cut_lift_settle_s=local_values["cut_lift_settle_s"],
+                    cut_retract_settle_s=local_values["cut_retract_settle_s"],
                     resin_layer_end_retract_mm=local_values.get("resin_layer_end_retract_mm"),
                     resin_layer_start_prime_mm=local_values.get("resin_layer_start_prime_mm"),
                 )

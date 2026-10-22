@@ -204,8 +204,10 @@ def test_formal_print_export_settings_include_external_npz_process_params():
     assert '"剪切抬升距离 mm"' in export_section
     assert '"external_cut_wait_s"' in export_section
     assert '"剪切等待时间 s"' in export_section
-    assert '"cut_settle_s": cut_cfg["cut_settle_s"]' in export_section
-    assert '"CUT 终端保持"' in export_section
+    assert '"cut_lift_settle_s": cut_cfg["cut_lift_settle_s"]' in export_section
+    assert '"cut_retract_settle_s": cut_cfg["cut_retract_settle_s"]' in export_section
+    assert '"CUT 回抽前保持"' in export_section
+    assert '"CUT 回抽后保持"' in export_section
     assert (
         'self._btn_save_external_npz_params = QtWidgets.QPushButton("保存外部 NPZ 参数")'
         in export_section

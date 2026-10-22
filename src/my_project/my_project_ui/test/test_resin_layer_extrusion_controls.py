@@ -78,12 +78,13 @@ def test_all_three_final_injection_calls_receive_optional_values():
             assert keyword.value.args[0].value == key
 
 
-def test_all_three_final_injection_calls_receive_cut_settle():
+def test_all_three_final_injection_calls_receive_both_cut_holds():
     tree = ast.parse(UI_PANEL.read_text(encoding="utf-8"))
     calls = [node for node in ast.walk(tree) if isinstance(node, ast.Call)
              and isinstance(node.func, ast.Name) and node.func.id == "inject_npz"]
     assert len(calls) == 3
     for call in calls:
-        keyword = next(item for item in call.keywords if item.arg == "cut_settle_s")
-        assert isinstance(keyword.value, ast.Subscript)
-        assert keyword.value.slice.value == "cut_settle_s"
+        for key in ("cut_lift_settle_s", "cut_retract_settle_s"):
+            keyword = next(item for item in call.keywords if item.arg == key)
+            assert isinstance(keyword.value, ast.Subscript)
+            assert keyword.value.slice.value == key
