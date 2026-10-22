@@ -128,6 +128,7 @@ def export_npz(
     tool_change_safe_lift_mm: float = 20.0,
     cut_lift_mm: float = 20.0,
     cut_wait_s: float = 15.0,
+    cut_settle_s: float = 3.0,
     fiber_retract_length_mm: float | None = None,
     external_npz_cut_absolute_e: bool = False,
 ) -> dict:
@@ -1428,7 +1429,7 @@ def export_npz(
             # retract 0..-L -> settle -> reset -> remaining high hold.
             # CUT stays nonblocking; putting the first reset before it prevents
             # RSI from advancing to an E=0 anchor before the reset handshake.
-            settle_s = 3.0
+            settle_s = max(0.0, float(cut_settle_s))
             lift_mm = max(0.0, float(cut_lift_mm))
             wait_s = max(0.0, float(cut_wait_s))
             lift_feedrate = max(float(default_feed_mm_s), 1e-9) * 60.0
@@ -1723,7 +1724,8 @@ def export_npz(
         last_pose_map[(layer, subtype)] = hold_row
         last_pose = hold_row
 
-    def _append_pending_tool_change_bridge(next_start_pos, layer, subtype, occ, line):
+    def _append_pending_tool_change_bridge(
+            next_start_pos, layer, subtype, occ, line, mark_path_end=False):
         """Insert sampled RSI motion between a tool-change event and next command."""
         nonlocal pending_tool_change_bridge, last_pose
         pending = pending_tool_change_bridge
@@ -1747,7 +1749,7 @@ def export_npz(
             constraints=[], original_moves=[],
         )
         _append_sample(
-            bridge_gc, layer, subtype, occ, mark_path_end=False,
+            bridge_gc, layer, subtype, occ, mark_path_end=mark_path_end,
             marker_block_id=int(pending["block_id"]),
             marker_role=injection_role_map["tool_change_bridge"],
         )
@@ -1791,6 +1793,9 @@ def export_npz(
                     "roles": ["tool_change_pre", "tool_change_event", "tool_change_bridge", "tool_change_post", "post_anchor"],
                     "anchor": "next_effective_print_path",
                     "injectable_parameters": ["tool_offset", "tool_change_safe_lift_mm"],
+                    "from_tool": int(scan_tool),
+                    "to_tool": int(mapped),
+                    # Retain the field used by older local-injection readers.
                     "target_tool_id": int(mapped),
                     **({"resin_end_wipe": resin_wipes[command_index]}
                        if command_index in resin_wipes else {}),
@@ -1808,7 +1813,9 @@ def export_npz(
                 "subtype": str(getattr(command, "subtype", "TRAVEL") or "TRAVEL"),
                 "roles": ["cut_event", "cut_action", "cut_post", "post_anchor"],
                 "anchor": "next_effective_print_path",
-                "injectable_parameters": ["cut_lift_mm", "cut_wait_s"],
+                "injectable_parameters": [
+                    "cut_lift_mm", "cut_wait_s", "cut_settle_s",
+                ],
             })
             next_block_id += 1
     manifest_json = json.dumps({
@@ -1823,12 +1830,14 @@ def export_npz(
             "tool_change_safe_lift_mm": float(tool_change_safe_lift_mm),
             "cut_lift_mm": float(cut_lift_mm),
             "cut_wait_s": float(cut_wait_s),
+            "cut_settle_s": float(cut_settle_s),
             "fiber_retract_length_mm": None if fiber_retract_length_mm is None else float(fiber_retract_length_mm),
             "default_feed_mm_s": float(default_feed_mm_s),
         },
         "overrideable_parameters": [
             "tool_offset", "resin_z_print_compensation_mm",
             "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
+            "cut_settle_s",
             "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ],
         "precision_fields": {
@@ -1923,11 +1932,16 @@ def export_npz(
                 if mapped_tool != current_tool:
                     active_injection_block_id = block_id_by_command_index.get(idx, -1)
                     active_injection_kind = "tool_change"
-                    # ---- 偏置补偿：在 tool_change 事件前注入安全抬升和 TRAVEL 段 ----
-                    ox, oy, oz = tool_offset
-                    has_offset = abs(ox) > 1e-9 or abs(oy) > 1e-9 or abs(oz) > 1e-9
+                    # Move horizontally into the target head frame before
+                    # lifting.  The post-event bridge then starts from this
+                    # high pose and ends directly at the next path start.
                     safe_lift = max(0.0, float(tool_change_safe_lift_mm))
-                    if has_offset or safe_lift > 1e-9 or idx in resin_wipes:
+                    offset_sign = 1.0 if mapped_tool == 1 else -1.0
+                    has_horizontal = (
+                        abs(float(tool_offset[0])) > 1e-9
+                        or abs(float(tool_offset[1])) > 1e-9
+                    )
+                    if safe_lift > 1e-9 or idx in resin_wipes or has_horizontal:
                         last_row = last_pose
                         if last_row is not None:
                             from .types import Position as _Pos
@@ -1952,7 +1966,41 @@ def export_npz(
                                     marker_role=injection_role_map["tool_change_pre"],
                                 )
                                 start_p = wipe_end
-                            offset_start_p = start_p
+                            if has_horizontal:
+                                horizontal_p = _Pos(
+                                    start_p.x + offset_sign * float(tool_offset[0]),
+                                    start_p.y + offset_sign * float(tool_offset[1]),
+                                    start_p.z,
+                                    start_p.a,
+                                    start_p.b,
+                                    start_p.c,
+                                )
+                                horizontal_gc = GlobalCurveCommand(
+                                    type="TRAVEL",
+                                    cmd="SPLINE",
+                                    start_pos=start_p,
+                                    control_points=[
+                                        horizontal_p,
+                                        horizontal_p,
+                                        horizontal_p,
+                                    ],
+                                    e_val=last_row.e,
+                                    delta_e=0.0,
+                                    feedrate=default_feed_mm_s * 60.0,
+                                    line=cmd.line,
+                                    raw="tool_change_pre_offset",
+                                    constraints=[],
+                                    original_moves=[],
+                                )
+                                _append_sample(
+                                    horizontal_gc,
+                                    cmd.layer,
+                                    cmd.subtype,
+                                    occ,
+                                    marker_block_id=active_injection_block_id,
+                                    marker_role=injection_role_map["tool_change_pre"],
+                                )
+                                start_p = horizontal_p
                             if safe_lift > 1e-9:
                                 lifted_p = _Pos(start_p.x, start_p.y, start_p.z + safe_lift,
                                                 start_p.a, start_p.b, start_p.c)
@@ -1974,34 +2022,6 @@ def export_npz(
                                     marker_block_id=active_injection_block_id,
                                     marker_role=injection_role_map["tool_change_pre"],
                                 )
-                                offset_start_p = lifted_p
-                            if mapped_tool == 1:
-                                end_p = _Pos(offset_start_p.x + ox, offset_start_p.y + oy,
-                                             offset_start_p.z + oz,
-                                             offset_start_p.a, offset_start_p.b, offset_start_p.c)
-                            else:
-                                end_p = _Pos(offset_start_p.x - ox, offset_start_p.y - oy,
-                                             offset_start_p.z - oz,
-                                             offset_start_p.a, offset_start_p.b, offset_start_p.c)
-                            offset_gc = GlobalCurveCommand(
-                                type="TRAVEL",
-                                cmd="SPLINE",
-                                start_pos=offset_start_p,
-                                control_points=[end_p, end_p, end_p],
-                                e_val=last_row.e,
-                                delta_e=0.0,
-                                feedrate=default_feed_mm_s * 60.0,
-                                line=cmd.line,
-                                raw="fallback_linear",
-                                constraints=[],
-                                original_moves=[],
-                            )
-                            _append_sample(
-                                offset_gc, cmd.layer, cmd.subtype, occ,
-                                marker_block_id=active_injection_block_id,
-                                marker_role=injection_role_map["tool_change_pre"],
-                            )
-                    # ---- 偏置补偿结束 ----
 
                     current_tool = mapped_tool
                     _emit_event(
@@ -2079,6 +2099,40 @@ def export_npz(
         # 轨迹分段收集
         if isinstance(cmd, MoveCommand):
             if cmd.is_pure_state_change:
+                continue
+            if (
+                pending_tool_change_bridge is not None
+                and last_pose is not None
+                and cmd.type == "TRAVEL"
+                and abs(float(cmd.delta_e)) <= 1e-12
+            ):
+                # The first post-change travel still starts at the previous
+                # tool's endpoint.  Consume it regardless of its source label
+                # and replace it with one bridge from the lifted event pose to
+                # the destination in the new tool frame.
+                flush_moves()
+                occ = _ensure_segment(cmd.layer, cmd.subtype)
+                target_pos = cmd.pos
+                if (
+                    delay_resin_z_compensation
+                    and not resin_z_compensation_appended
+                    and _is_external_npz_start_xy_travel(cmd)
+                ):
+                    _append_resin_z_print_compensation(cmd.layer, cmd.line)
+                    if abs(float(resin_z_print_compensation_mm)) > 1e-9:
+                        from .types import Position as _Pos
+                        target_pos = _Pos(
+                            target_pos.x,
+                            target_pos.y,
+                            target_pos.z + float(resin_z_print_compensation_mm),
+                            target_pos.a,
+                            target_pos.b,
+                            target_pos.c,
+                        )
+                _append_pending_tool_change_bridge(
+                    target_pos, cmd.layer, cmd.subtype, occ, cmd.line,
+                    mark_path_end=True,
+                )
                 continue
             if current_type is None and last_pose is not None and pending_tool_change_bridge is None:
                 from .types import Position as _Pos

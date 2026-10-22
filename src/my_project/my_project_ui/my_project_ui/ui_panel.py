@@ -351,6 +351,7 @@ _CUT_DEFAULTS = {
     "tool_change_safe_lift_mm": _TEST_TOOL_CHANGE_SAFE_LIFT_DEFAULT_MM,
     "cut_lift_mm": 20.0,
     "cut_wait_s": 15.0,
+    "cut_settle_s": 3.0,
 }
 _CORE_RESIN_EXTRUSION_CONFIG_PATH = os.path.join(_OFFSET_CONFIG_DIR, "core_resin_extrusion.json")
 _CORE_RESIN_EXTRUSION_DEFAULTS = {
@@ -444,6 +445,7 @@ def _save_cut_config(
     cut_lift_mm,
     cut_wait_s,
     tool_change_safe_lift_mm=None,
+    cut_settle_s=None,
 ):
     current = _load_cut_config()
     values = {
@@ -454,6 +456,10 @@ def _save_cut_config(
         ),
         "cut_lift_mm": float(cut_lift_mm),
         "cut_wait_s": float(cut_wait_s),
+        "cut_settle_s": (
+            current["cut_settle_s"]
+            if cut_settle_s is None else float(cut_settle_s)
+        ),
     }
     if any(not math.isfinite(value) or value < 0.0 for value in values.values()):
         raise ValueError("剪切参数必须是非负有限数字")
@@ -2251,12 +2257,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
             "tool_change_safe_lift_mm": cut_cfg["tool_change_safe_lift_mm"],
             "cut_lift_mm": cut_cfg["cut_lift_mm"],
             "cut_wait_s": cut_cfg["cut_wait_s"],
+            "cut_settle_s": cut_cfg["cut_settle_s"],
             **_load_core_resin_extrusion_config(),
         }
         local_fields = (
             ("tool_change_safe_lift_mm", "换头安全抬升", "mm", "换头前的局部安全抬升距离。"),
             ("cut_lift_mm", "CUT 抬升", "mm", "CUT 阶段的局部抬升距离。"),
             ("cut_wait_s", "CUT 等待", "s", "CUT 阶段的局部等待时间。"),
+            ("cut_settle_s", "CUT 终端保持", "s", "CUT 抬升末端和回抽末端各自保持的时间。"),
             ("resin_layer_end_retract_mm", "实体树脂层末回抽", "mm", "仅控制每层实体最后一条树脂路径后的回抽供料距离 E（不是喷头移动距离）；不影响 primeline 或中间路径。留空沿用原值，0 取消此处回抽；速度沿用原段。"),
             ("resin_layer_start_prime_mm", "实体树脂层首预挤出", "mm", "仅控制每层实体第一条树脂路径前的预挤出供料距离 E（不是喷头移动距离），包括首层实体；不影响 primeline 或中间路径。留空沿用原值，0 取消此处预挤出；速度沿用原段。"),
         )
@@ -5435,6 +5443,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 values["cut_lift_mm"],
                 values["cut_wait_s"],
                 tool_change_safe_lift_mm=values["tool_change_safe_lift_mm"],
+                cut_settle_s=values["cut_settle_s"],
             )
             _save_core_resin_extrusion_config(values)
             if hasattr(self, "_offset_status"):
@@ -5668,6 +5677,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                 used_cut_lift_mm,
                 used_cut_wait_s,
                 tool_change_safe_lift_mm=used_safe_lift_mm,
+                cut_settle_s=local_injection_values["cut_settle_s"],
             )
             _save_core_resin_extrusion_config(local_injection_values)
             self._last_export_split_by_layer_type = (
@@ -5713,6 +5723,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
+                        cut_settle_s=local_injection_values["cut_settle_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -5782,6 +5793,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         ],
                         cut_lift_mm=local_injection_values["cut_lift_mm"],
                         cut_wait_s=local_injection_values["cut_wait_s"],
+                        cut_settle_s=local_injection_values["cut_settle_s"],
                         resin_layer_end_retract_mm=local_injection_values.get("resin_layer_end_retract_mm"),
                         resin_layer_start_prime_mm=local_injection_values.get("resin_layer_start_prime_mm"),
                     )
@@ -6024,6 +6036,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
                     tool_change_safe_lift_mm=local_values["tool_change_safe_lift_mm"],
                     cut_lift_mm=local_values["cut_lift_mm"],
                     cut_wait_s=local_values["cut_wait_s"],
+                    cut_settle_s=local_values["cut_settle_s"],
                     resin_layer_end_retract_mm=local_values.get("resin_layer_end_retract_mm"),
                     resin_layer_start_prime_mm=local_values.get("resin_layer_start_prime_mm"),
                 )

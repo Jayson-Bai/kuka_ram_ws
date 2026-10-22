@@ -13,7 +13,8 @@ from test_minimal_dual_material_equivalence import _commands
 def _estimate(arrays, manifest, **overrides):
     values = dict(
         tool_changed=False, resin_changed=False, delta_resin=0.0,
-        safe=10.0, lift=12.5, wait=12.0, new_offset=(0.0, 0.0, 0.0),
+            safe=10.0, lift=12.5, wait=12.0, settle=3.0,
+            new_offset=(0.0, 0.0, 0.0),
         feed=20.0, dt=0.004, roles={41: "cut_event", 42: "cut_action"},
     )
     values.update(overrides)

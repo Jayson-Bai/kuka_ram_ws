@@ -69,6 +69,7 @@ class LocalInjectionParams:
     tool_change_safe_lift_mm: float | None = None
     cut_lift_mm: float | None = None
     cut_wait_s: float | None = None
+    cut_settle_s: float | None = None
     resin_layer_end_retract_mm: float | None = None
     resin_layer_start_prime_mm: float | None = None
 
@@ -83,7 +84,7 @@ class LocalInjectionParams:
             out["tool_offset"] = list(values)
         for name in (
             "resin_z_print_compensation_mm", "tool_change_safe_lift_mm",
-            "cut_lift_mm", "cut_wait_s",
+            "cut_lift_mm", "cut_wait_s", "cut_settle_s",
             "resin_layer_end_retract_mm", "resin_layer_start_prime_mm",
         ):
             value = getattr(self, name)
@@ -91,7 +92,10 @@ class LocalInjectionParams:
                 value = float(value)
                 if not math.isfinite(value):
                     raise ValueError(f"{name} must be finite")
-                if name in ("tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s", *BOUNDARY_PARAMS) and value < 0:
+                if name in (
+                    "tool_change_safe_lift_mm", "cut_lift_mm", "cut_wait_s",
+                    "cut_settle_s", *BOUNDARY_PARAMS,
+                ) and value < 0:
                     raise ValueError(f"{name} must be >= 0")
                 out[name] = value
         return out
@@ -520,7 +524,11 @@ def _apply_global_transforms(
 ):
     role_names = np.array([roles[int(v)] for v in arrays["core_injection_role"]], dtype=object)
     non_event = arrays["event_flag"] == 0
-    tool_mask = (arrays["tool_id"] == 1) & non_event & (role_names != "tool_change_pre")
+    tool_mask = (
+        (arrays["tool_id"] == 1)
+        & non_event
+        & ~np.isin(role_names, ("tool_change_pre", "tool_change_post"))
+    )
     angle_keys = (
         ("a64", "b64", "c64") if _has_high_precision(arrays)
         else ("a", "b", "c")
@@ -792,21 +800,24 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     if target_tool_raw is None:
         raise ValueError(f"tool block {bid} has no target tool")
     target_tool = int(target_tool_raw)
-    sign = 1.0 if target_tool == 1 else -1.0
-    has_offset = bool(np.any(np.abs(new_offset) > 1e-9))
     wiped = start.copy()
     if specification is not None:
         wiped[1] = wipe_target_y(start[1], specification)
-    lifted = wiped.copy()
-    lifted[2] += max(0.0, float(safe_lift))
-    target = lifted.copy()
+    # Core stores the fiber offset in the flat-reference frame.  Rotate it
+    # using the current pose, apply only X/Y for the pre-change transition,
+    # and leave Z exclusively for the subsequent safe lift.
     rotated_offset = _rotated_reference_offsets(
-        np.asarray([lifted[3]]),
-        np.asarray([lifted[4]]),
-        np.asarray([lifted[5]]),
+        np.asarray([wiped[3]], dtype=np.float64),
+        np.asarray([wiped[4]], dtype=np.float64),
+        np.asarray([wiped[5]], dtype=np.float64),
         np.asarray(new_offset, dtype=np.float64),
     )[0]
-    target[:3] += sign * rotated_offset
+    offset_sign = 1.0 if target_tool == 1 else -1.0
+    horizontal = wiped.copy()
+    horizontal[:2] += offset_sign * rotated_offset[:2]
+    lifted = horizontal.copy()
+    lifted[2] += max(0.0, float(safe_lift))
+    target = lifted.copy()
     rows = []
     if specification is not None:
         samples = _sample_segment(
@@ -817,26 +828,24 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
             arrays, event_index, samples, bid, pre_code,
             _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
         ))
-    if has_offset or safe_lift > 1e-9:
-        template = event_index
-        if safe_lift > 1e-9:
-            samples = _sample_segment(
-                wiped, lifted, start_e, 0.0,
-                raw="tool_change_safe_lift", feed_mm_s=feed, dt=dt,
-            )
-            rows.extend(_motion_rows(
-                arrays, template, samples, bid, pre_code,
-                _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
-            ))
-        if has_offset:
-            samples = _sample_segment(
-                lifted, target, start_e, 0.0,
-                raw="fallback_linear", feed_mm_s=feed, dt=dt,
-            )
-            rows.extend(_motion_rows(
-                arrays, template, samples, bid, pre_code,
-                _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
-            ))
+    if not np.allclose(horizontal[:2], wiped[:2], rtol=0.0, atol=1e-9):
+        samples = _sample_segment(
+            wiped, horizontal, start_e, 0.0,
+            raw="tool_change_pre_offset", feed_mm_s=feed, dt=dt,
+        )
+        rows.extend(_motion_rows(
+            arrays, event_index, samples, bid, pre_code,
+            _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
+        ))
+    if safe_lift > 1e-9:
+        samples = _sample_segment(
+            horizontal, lifted, start_e, 0.0,
+            raw="tool_change_safe_lift", feed_mm_s=feed, dt=dt,
+        )
+        rows.extend(_motion_rows(
+            arrays, event_index, samples, bid, pre_code,
+            _code(move_types, "TRAVEL"), int(arrays["tool_id"][start_index]),
+        ))
     if rows:
         rows[-1]["path_end_flag"] = 1
     _replace(arrays, remove_start, int(pre[-1]) + 1 if len(pre) else event_index, rows)
@@ -852,32 +861,87 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
     while scan_from < len(arrays["seq"]) and arrays["event_flag"][scan_from] != 0:
         scan_from += 1
     travel_code = _code(move_types, "TRAVEL")
+    merge_end = scan_from
+    if scan_from < len(arrays["seq"]):
+        old_end = _pose_from_arrays(arrays, scan_from)
+        # Older outputs bridge vertically below the lifted event pose, i.e.
+        # back to the previous path end.  New outputs already bridge to the
+        # post-change travel destination and must keep their next waypoint.
+        returns_to_previous_end = (
+            np.allclose(old_end[:2], wiped[:2], rtol=0.0, atol=1e-5)
+            and np.allclose(old_end[3:], target[3:], rtol=0.0, atol=1e-6)
+            and old_end[2] < target[2] - 1e-6
+        )
+    else:
+        returns_to_previous_end = False
+    if returns_to_previous_end:
+        post_code = _code(roles, "tool_change_post")
+        source_line = bytes(arrays["src_line"][scan_from]).split(b"\x00", 1)[0]
+        e_key = "e64" if "e64" in arrays else "e"
+        e_value = float(arrays[e_key][scan_from])
+        while (
+            merge_end < len(arrays["seq"])
+            and arrays["event_flag"][merge_end] == 0
+            and int(arrays["move_type"][merge_end]) == travel_code
+            and int(arrays["core_injection_block_id"][merge_end]) == bid
+            and int(arrays["core_injection_role"][merge_end]) == post_code
+            and bytes(arrays["src_line"][merge_end]).split(b"\x00", 1)[0] == source_line
+            and abs(float(arrays[e_key][merge_end]) - e_value) <= 1e-9
+        ):
+            merge_end += 1
+        # Legacy Core bridged to the old path end, then sampled the post-change
+        # travel.  Collapse only one unambiguous travel command into the bridge.
+        if b"-" in source_line:
+            merge_end = scan_from
     bridge_rows = []
     if scan_from < len(arrays["seq"]):
-        end = _pose_from_arrays(arrays, scan_from)
+        end_index = merge_end - 1 if merge_end > scan_from else scan_from
+        end = _pose_from_arrays(arrays, end_index)
         e_start = float(arrays["e64"][event_index] if "e64" in arrays else arrays["e"][event_index])
         samples = _sample_segment(target, end, e_start, 0.0, raw="tool_change_post_bridge", feed_mm_s=feed, dt=dt)
+        template = scan_from if merge_end > scan_from or not len(bridge) else int(bridge[0])
         bridge_rows = _motion_rows(
-            arrays, scan_from, samples, bid, bridge_code, travel_code,
+            arrays, template, samples, bid, bridge_code, travel_code,
             tool_id=int(arrays["tool_id"][event_index]),
         )
         if bridge_rows:
-            bridge_rows[-1]["path_end_flag"] = 0
+            path_end_source = merge_end - 1 if merge_end > scan_from else (
+                int(bridge[-1]) if len(bridge) else None
+            )
+            bridge_rows[-1]["path_end_flag"] = (
+                int(arrays["path_end_flag"][path_end_source])
+                if path_end_source is not None else 0
+            )
     if len(bridge):
-        _replace(arrays, int(bridge[0]), int(bridge[-1]) + 1, bridge_rows)
+        _replace(arrays, int(bridge[0]), max(int(bridge[-1]) + 1, merge_end), bridge_rows)
     elif bridge_rows:
         insert_at = event_index + 1
         while insert_at < len(arrays["seq"]) and arrays["event_flag"][insert_at] != 0:
             insert_at += 1
-        _replace(arrays, insert_at, insert_at, bridge_rows)
+        _replace(arrays, insert_at, max(insert_at, merge_end), bridge_rows)
 
     mask = arrays["core_injection_block_id"] == bid
     event_index = int(np.flatnonzero(mask & (arrays["core_injection_role"] == event_code))[0])
+    # Core full export keeps the post-event hold at the shifted high pose.
+    # Older local-injection source rows can still carry the unsafely shifted
+    # base pose after the event.  Move only those held poses to the rebuilt
+    # target; row count, timing, E phase, sequence and role stay untouched.
+    post_code = _code(roles, "tool_change_post")
+    post_rows = np.flatnonzero(
+        mask
+        & (arrays["core_injection_role"] == post_code)
+        & (arrays["event_flag"] == 0)
+    )
+    for post_index in post_rows[post_rows > event_index]:
+        _set_array_pose(arrays, int(post_index), target)
     _set_pose(_row(arrays, event_index), target)
     _set_array_pose(arrays, event_index, target)
 
 
-def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, new_wait, dt, feed):
+def _rebuild_cut(
+    arrays, static, manifest, roles, move_types, block,
+    new_lift, new_wait, new_settle, dt, feed,
+):
     """Rebuild the CUT handshake with the canonical Core row contract."""
     bid = int(block["id"])
     mask = arrays["core_injection_block_id"] == bid
@@ -962,7 +1026,7 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
             int(arrays["tool_id"][event_index]), _TIMING_CUT,
         ))
 
-    settle_s = 3.0
+    settle_s = max(0.0, float(new_settle))
     rows.extend(_wait_rows(
         arrays, template, high, float(new_lift), 0.0, settle_s,
         block_id=bid, role_code=action_code, print_code=print_code, dt=dt,
@@ -1008,11 +1072,12 @@ def _rebuild_cut(arrays, static, manifest, roles, move_types, block, new_lift, n
         - retract_duration_s
         - settle_s,
     )
-    rows.extend(_wait_rows(
-        arrays, template, high, 0.0, 0.0, remaining,
-        block_id=bid, role_code=action_code, print_code=print_code,
-        dt=dt, timing_category=_TIMING_CUT,
-    ))
+    if remaining > 1e-9:
+        rows.extend(_wait_rows(
+            arrays, template, high, 0.0, 0.0, remaining,
+            block_id=bid, role_code=action_code, print_code=print_code,
+            dt=dt, timing_category=_TIMING_CUT,
+        ))
 
     if source_action_path_end:
         for row in reversed(rows):
@@ -1289,7 +1354,7 @@ def _event_counts(
 
 def _estimate_injected_rows(
     arrays, manifest, *, tool_changed, resin_changed, delta_resin,
-    safe, lift, wait, new_offset, feed, dt, roles,
+    safe, lift, wait, settle, new_offset, feed, dt, roles,
 ):
     estimated = int(len(arrays["seq"]))
     blocks = manifest.get("blocks", [])
@@ -1309,9 +1374,12 @@ def _estimate_injected_rows(
     if (
         lift != float(base_parameters.get("cut_lift_mm", 20.0))
         or wait != float(base_parameters.get("cut_wait_s", 15.0))
+        or settle != float(base_parameters.get("cut_settle_s", 3.0))
     ):
         phase_s = max(
-            float(wait), 2.0 * max(float(lift), 0.0) / max(feed, 1e-9) + 9.0
+            float(wait),
+            2.0 * max(float(lift), 0.0) / max(feed, 1e-9)
+            + 2.0 * max(float(settle), 0.0),
         )
         cut_rows = int(math.ceil(max(phase_s, dt) / dt))
         credited_blocks = set()
@@ -1350,6 +1418,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
+               cut_settle_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                storage_mode: str = "auto") -> dict[str, Any]:
@@ -1370,6 +1439,7 @@ def inject_npz(input_path: str | Path, output_path: str | Path | None = None, *,
         resin_z_print_compensation_mm=resin_z_print_compensation_mm,
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm, cut_wait_s=cut_wait_s,
+        cut_settle_s=cut_settle_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )
@@ -1392,6 +1462,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
                tool_change_safe_lift_mm: float | None = None,
                cut_lift_mm: float | None = None,
                cut_wait_s: float | None = None,
+               cut_settle_s: float | None = None,
                resin_layer_end_retract_mm: float | None = None,
                resin_layer_start_prime_mm: float | None = None,
                workspace=None, read_from_disk=True) -> dict[str, Any]:
@@ -1408,6 +1479,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
         tool_change_safe_lift_mm=tool_change_safe_lift_mm,
         cut_lift_mm=cut_lift_mm,
         cut_wait_s=cut_wait_s,
+        cut_settle_s=cut_settle_s,
         resin_layer_end_retract_mm=resin_layer_end_retract_mm,
         resin_layer_start_prime_mm=resin_layer_start_prime_mm,
     )).as_overrides()
@@ -1432,6 +1504,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     safe = float(overrides.get("tool_change_safe_lift_mm", base.get("tool_change_safe_lift_mm", 20.0)))
     lift = float(overrides.get("cut_lift_mm", base.get("cut_lift_mm", 20.0)))
     wait = float(overrides.get("cut_wait_s", base.get("cut_wait_s", 15.0)))
+    settle = float(overrides.get("cut_settle_s", base.get("cut_settle_s", 3.0)))
     dt = float(manifest.get("sample_period_s", 0.004))
     feed = float(base.get("default_feed_mm_s", 10.0))
     if dt <= 0 or feed <= 0:
@@ -1446,6 +1519,7 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     base_safe = float(base.get("tool_change_safe_lift_mm", 20.0))
     base_lift = float(base.get("cut_lift_mm", 20.0))
     base_wait = float(base.get("cut_wait_s", 15.0))
+    base_settle = float(base.get("cut_settle_s", 3.0))
     tool_offset_changed = not np.allclose(new_offset, current_offset, rtol=0.0, atol=1e-9)
     resin_changed = abs(new_resin - current_resin) > 1e-9
     safe_changed = (
@@ -1455,12 +1529,16 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     cut_changed = (
         ("cut_lift_mm" in overrides and abs(lift - base_lift) > 1e-9)
         or ("cut_wait_s" in overrides and abs(wait - base_wait) > 1e-9)
+        or (
+            "cut_settle_s" in overrides
+            and abs(settle - base_settle) > 1e-9
+        )
     )
     estimated_rows = _estimate_injected_rows(
         arrays, manifest,
         tool_changed=tool_offset_changed or safe_changed or bool(wipe_migrations),
         resin_changed=resin_changed, delta_resin=new_resin - current_resin,
-        safe=safe, lift=lift, wait=wait,
+        safe=safe, lift=lift, wait=wait, settle=settle,
         new_offset=new_offset, feed=feed, dt=dt, roles=roles,
     )
     estimated_rows += sum(max(0, count - (end - start + 1))
@@ -1504,7 +1582,10 @@ def _inject_npz(input_path: str | Path, output_path: str | Path | None = None, *
     # final pose, matching direct Core full-export ordering.
     for block in manifest.get("blocks", []):
         if block.get("kind") == "cut" and cut_changed:
-            _rebuild_cut(arrays, static, manifest, roles, move_types, block, lift, wait, dt, feed)
+            _rebuild_cut(
+                arrays, static, manifest, roles, move_types, block,
+                lift, wait, settle, dt, feed,
+            )
     for block in manifest.get("blocks", []):
         if block.get("kind") == "tool_change" and (
             tool_offset_changed or safe_changed or int(block["id"]) in wipe_migrations

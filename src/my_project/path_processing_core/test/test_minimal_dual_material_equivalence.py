@@ -258,6 +258,7 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         tool_change_safe_lift_mm=20.0,
         cut_lift_mm=20.0,
         cut_wait_s=15.0,
+        cut_settle_s=3.0,
         external_npz_cut_absolute_e=True,
     )
     changed = dict(base)
@@ -267,6 +268,7 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         tool_change_safe_lift_mm=10.0,
         cut_lift_mm=12.0,
         cut_wait_s=12.0,
+        cut_settle_s=0.5,
     )
 
     export_npz(_commands(), str(source), **base)
@@ -279,6 +281,7 @@ def test_minimal_dual_material_core_and_injection_contract(tmp_path):
         tool_change_safe_lift_mm=changed["tool_change_safe_lift_mm"],
         cut_lift_mm=changed["cut_lift_mm"],
         cut_wait_s=changed["cut_wait_s"],
+        cut_settle_s=changed["cut_settle_s"],
     )
 
     with np.load(direct, allow_pickle=False) as direct_data, np.load(
@@ -385,8 +388,14 @@ def test_fiber_offset_change_keeps_resin_return_target_and_print_rows_fixed(tmp_
             & (old["core_injection_role"] == roles["tool_change_event"])
         )
         assert len(return_event) == 1
-        assert float(new["z"][return_event[0]]) == pytest.approx(
-            float(old["z"][return_event[0]]), abs=1e-6
+        assert np.allclose(
+            np.asarray([
+                new[axis][return_event[0]] - old[axis][return_event[0]]
+                for axis in ("x", "y", "z")
+            ]),
+            (0.0, 0.0, -0.2),
+            rtol=0.0,
+            atol=2e-6,
         )
 
         print_mask = (old["event_flag"] == 0) & np.isin(
