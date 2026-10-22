@@ -105,6 +105,11 @@ def _validated_direct_tool_offset(
     return offset
 
 
+# Firmware CUT physical sequence duration (seconds): K1 descent 7.0,
+# MOS pulse1 1.0, rebound 0.3, MOS pulse2 1.0, K2 rise ~2.0.
+_CUT_FIRMWARE_TIME_S = 11.3
+
+
 def export_npz(
     parsed_commands: ParsedCommandList,
     output_path: str,
@@ -2276,11 +2281,20 @@ def export_npz(
             (cut_retract_delay_s + cut_travel_delay_s)
             * int(timing_summary["planned_cut_count"])
         )
-        # Legacy PrintTimingPlan/UiStatus fields still read these totals.
-        timing_summary["cut_injected_wait_s"] = (
-            cut_retract_delay_s + cut_travel_delay_s)
+        # Firmware physical CUT duration per event (K1 7s + dual MOS
+        # 2.3s + K2 ~2s).  The extrude_sync barriers cover this; it is
+        # additive to the trajectory rows and counted in the total.
+        timing_summary["cut_firmware_time_s"] = _CUT_FIRMWARE_TIME_S
+        timing_summary["planned_cut_firmware_time_s"] = (
+            _CUT_FIRMWARE_TIME_S
+            * int(timing_summary["planned_cut_count"])
+        )
+        # Legacy PrintTimingPlan/UiStatus fields: keep the same keys but
+        # report the firmware execution time so the displayed/injected
+        # totals match the new anchored-delay semantics.
+        timing_summary["cut_injected_wait_s"] = _CUT_FIRMWARE_TIME_S
         timing_summary["planned_cut_injected_wait_time_s"] = (
-            timing_summary["planned_cut_delay_time_s"])
+            timing_summary["planned_cut_firmware_time_s"])
         with open(timing_sidecar_path, "w", encoding="utf-8") as f:
             json.dump(timing_summary, f, ensure_ascii=False, indent=2)
     except Exception as exc:

@@ -173,6 +173,8 @@ void NpzLoader::load_timing_metadata(const std::string & path)
   double cut = 0.0;
   double cut_injected_wait = 0.0;
   double cut_injected_wait_total = 0.0;
+  double cut_firmware_time = 0.0;
+  double cut_firmware_total = 0.0;
   double cut_count = 0.0;
   double tool_change_count = 0.0;
   double unquantified_count = 0.0;
@@ -184,6 +186,9 @@ void NpzLoader::load_timing_metadata(const std::string & path)
     read_json_number(content, "cut_injected_wait_s", cut_injected_wait) &&
     read_json_number(
     content, "planned_cut_injected_wait_time_s", cut_injected_wait_total) &&
+    read_json_number(content, "cut_firmware_time_s", cut_firmware_time) &&
+    read_json_number(
+    content, "planned_cut_firmware_time_s", cut_firmware_total) &&
     read_json_number(content, "planned_cut_count", cut_count) &&
     read_json_number(content, "planned_tool_change_count", tool_change_count) &&
     read_json_number(
@@ -192,6 +197,7 @@ void NpzLoader::load_timing_metadata(const std::string & path)
   if (has_breakdown &&
     print_motion >= 0.0 && travel >= 0.0 && wait >= 0.0 && cut >= 0.0 &&
     cut_injected_wait >= 0.0 && cut_injected_wait_total >= 0.0 &&
+    cut_firmware_time >= 0.0 && cut_firmware_total >= 0.0 &&
     cut_count >= 0.0 && tool_change_count >= 0.0 && unquantified_count >= 0.0 &&
     std::abs(cut_injected_wait_total - cut_injected_wait * cut_count) <=
     std::max(0.02, cut_injected_wait_total * 1e-5) &&
@@ -203,6 +209,8 @@ void NpzLoader::load_timing_metadata(const std::string & path)
     planned_cut_time_s_ = cut;
     cut_injected_wait_s_ = cut_injected_wait;
     planned_cut_injected_wait_time_s_ = cut_injected_wait_total;
+    cut_firmware_time_s_ = cut_firmware_time;
+    planned_cut_firmware_time_s_ = cut_firmware_total;
     planned_cut_count_ = static_cast<uint32_t>(std::llround(cut_count));
     planned_tool_change_count_ =
       static_cast<uint32_t>(std::llround(tool_change_count));

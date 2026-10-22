@@ -300,6 +300,8 @@ private:
     out.planned_cut_time_s = 0.0F;
     out.cut_injected_wait_s = 0.0F;
     out.planned_cut_injected_wait_time_s = 0.0F;
+    out.cut_firmware_time_s = 0.0F;
+    out.planned_cut_firmware_time_s = 0.0F;
     out.planned_tool_change_time_s = 0.0F;
     out.planned_tool_change_elapsed_time_s = 0.0F;
     out.tool_change_fixed_time_s = static_cast<float>(tool_change_fixed_time_s_);
@@ -317,7 +319,11 @@ private:
       const float tool_change_total =
         static_cast<float>(timing_plan_->planned_tool_change_count) *
         static_cast<float>(tool_change_fixed_time_s_);
-      const float total = trajectory_total + tool_change_total;
+      const float cut_firmware_total =
+        static_cast<float>(timing_plan_->planned_cut_count) *
+        static_cast<float>(timing_plan_->cut_firmware_time_s);
+      const float total =
+        trajectory_total + tool_change_total + cut_firmware_total;
       const bool new_run = print_time_cache_valid_ &&
         (out.current_traj.seq<print_time_last_seq_ ||
         std::abs(total - print_time_total_s_)>1e-3F ||
@@ -373,7 +379,10 @@ private:
           timing_plan_->planned_cut_injected_wait_time_s;
         print_time_tool_change_s_ = tool_change_total;
         print_time_tool_change_elapsed_s_ = tool_change_elapsed;
-        print_time_cut_count_ = timing_plan_->planned_cut_count;
+        print_time_cut_firmware_s_ =
+        static_cast<float>(timing_plan_->cut_firmware_time_s);
+      print_time_cut_firmware_total_s_ = cut_firmware_total;
+      print_time_cut_count_ = timing_plan_->planned_cut_count;
         print_time_tool_change_count_ = planned_tool_changes;
         print_time_unquantified_event_count_ =
           timing_plan_->planned_unquantified_event_count;
@@ -397,6 +406,8 @@ private:
       out.cut_injected_wait_s = print_time_cut_injected_wait_s_;
       out.planned_cut_injected_wait_time_s =
         print_time_cut_injected_wait_total_s_;
+      out.cut_firmware_time_s = print_time_cut_firmware_s_;
+      out.planned_cut_firmware_time_s = print_time_cut_firmware_total_s_;
       out.planned_tool_change_time_s = print_time_tool_change_s_;
       out.planned_tool_change_elapsed_time_s =
         print_time_tool_change_elapsed_s_;
@@ -455,6 +466,8 @@ private:
   float print_time_wait_s_{0.0F};
   float print_time_cut_s_{0.0F};
   float print_time_cut_injected_wait_s_{0.0F};
+  float print_time_cut_firmware_s_{0.0F};
+  float print_time_cut_firmware_total_s_{0.0F};
   float print_time_cut_injected_wait_total_s_{0.0F};
   float print_time_tool_change_s_{0.0F};
   float print_time_tool_change_elapsed_s_{0.0F};

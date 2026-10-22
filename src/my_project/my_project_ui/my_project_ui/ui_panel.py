@@ -4115,10 +4115,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f" | 剪切流程 {_format_print_duration(msg.planned_cut_time_s)}"
         )
         self._print_time_event_label.setText(
-            f"注入参数  剪切延时 {msg.cut_injected_wait_s:g}s × "
+            f"注入参数  剪切固件执行 {msg.cut_firmware_time_s:g}s × "
             f"{int(msg.planned_cut_count)} = "
-            f"{_format_print_duration(msg.planned_cut_injected_wait_time_s)}"
-            "（已包含于剪切流程）"
+            f"{_format_print_duration(msg.planned_cut_firmware_time_s)}"
             f" | 换头 {msg.tool_change_fixed_time_s:g}s × "
             f"{int(msg.planned_tool_change_count)} = "
             f"{_format_print_duration(msg.planned_tool_change_time_s)}"

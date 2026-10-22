@@ -245,6 +245,10 @@ private:
       static_cast<float>(npz_loader_->cut_injected_wait_s());
     plan.planned_cut_injected_wait_time_s =
       static_cast<float>(npz_loader_->planned_cut_injected_wait_time_s());
+    plan.cut_firmware_time_s =
+      static_cast<float>(npz_loader_->cut_firmware_time_s());
+    plan.planned_cut_firmware_time_s =
+      static_cast<float>(npz_loader_->planned_cut_firmware_time_s());
     plan.planned_cut_count = npz_loader_->planned_cut_count();
     plan.planned_tool_change_count = npz_loader_->planned_tool_change_count();
     plan.planned_unquantified_event_count =

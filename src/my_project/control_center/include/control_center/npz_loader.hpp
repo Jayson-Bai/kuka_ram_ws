@@ -80,6 +80,11 @@ public:
   {
     return planned_cut_injected_wait_time_s_;
   }
+  double cut_firmware_time_s() const {return cut_firmware_time_s_;}
+  double planned_cut_firmware_time_s() const
+  {
+    return planned_cut_firmware_time_s_;
+  }
   uint32_t planned_cut_count() const {return planned_cut_count_;}
   uint32_t planned_tool_change_count() const {return planned_tool_change_count_;}
   uint32_t planned_unquantified_event_count() const
@@ -130,6 +135,8 @@ private:
   double planned_cut_time_s_{0.0};
   double cut_injected_wait_s_{0.0};
   double planned_cut_injected_wait_time_s_{0.0};
+  double cut_firmware_time_s_{0.0};
+  double planned_cut_firmware_time_s_{0.0};
   uint32_t planned_cut_count_{0};
   uint32_t planned_tool_change_count_{0};
   uint32_t planned_unquantified_event_count_{0};

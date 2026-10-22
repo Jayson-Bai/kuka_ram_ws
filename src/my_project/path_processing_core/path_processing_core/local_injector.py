@@ -28,6 +28,11 @@ from .resin_wipe import RESIN_WIPE_MM, RESIN_WIPE_POLICY, wipe_target_y
 from .resin_extrusion import BOUNDARY_FORMAT, BOUNDARY_PARAMS
 
 _PART_RE = re.compile(r"^(?P<base>.+)_part(?P<part>\d{4})$")
+
+# Firmware CUT physical sequence duration (seconds), matching
+# cutter_run_cut_sequence: K1 descent 7.0, MOS pulse1 1.0,
+# rebound 0.3, MOS pulse2 1.0, K2 rise ~2.0.
+_CUT_FIRMWARE_TIME_S = 11.3
 _MAX_ESTIMATED_ROWS = 4_000_000
 _TIMING_PRINT = 0
 _TIMING_TRAVEL = 1
@@ -1371,11 +1376,18 @@ def _write_timing(
             "planned_cut_delay_time_s": (
                 (injected_retract_delay_s + injected_travel_delay_s) * cut_count
             ),
-            # Legacy PrintTimingPlan/UiStatus fields still read these totals.
-            "cut_injected_wait_s": (
-                injected_retract_delay_s + injected_travel_delay_s),
+            # Firmware physical CUT duration per event (K1 7s + dual MOS
+            # 2.3s + K2 ~2s).  extrude_sync barriers cover it; additive
+            # to trajectory rows in the total estimate.
+            "cut_firmware_time_s": _CUT_FIRMWARE_TIME_S,
+            "planned_cut_firmware_time_s": (
+                _CUT_FIRMWARE_TIME_S * cut_count
+            ),
+            # Legacy fields: report the firmware execution time so the
+            # upper-computer estimate matches the anchored-delay model.
+            "cut_injected_wait_s": _CUT_FIRMWARE_TIME_S,
             "planned_cut_injected_wait_time_s": (
-                (injected_retract_delay_s + injected_travel_delay_s) * cut_count
+                _CUT_FIRMWARE_TIME_S * cut_count
             ),
             "planned_cut_count": cut_count,
             "planned_tool_change_count": int(

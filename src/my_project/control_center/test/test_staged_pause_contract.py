@@ -99,6 +99,8 @@ def test_runtime_trajectory_carries_only_offline_lookup_time():
     assert "planned_total_time_s" in timing_plan
     assert "planned_print_motion_time_s" in timing_plan
     assert "planned_cut_injected_wait_time_s" in timing_plan
+    assert "cut_firmware_time_s" in timing_plan
+    assert "planned_cut_firmware_time_s" in timing_plan
     assert "planned_tool_change_count" in timing_plan
     header = _read(NPZ_HEADER)
     assert "planned_time_s" in header
@@ -120,6 +122,8 @@ def test_npz_loader_exposes_optional_timing_metadata():
     assert '"planned_print_motion_time_s"' in loader_cpp
     assert '"cut_injected_wait_s"' in loader_cpp
     assert '"planned_cut_injected_wait_time_s"' in loader_cpp
+    assert '"cut_firmware_time_s"' in loader_cpp
+    assert '"planned_cut_firmware_time_s"' in loader_cpp
     assert '"planned_tool_change_count"' in loader_cpp
 
 
@@ -130,11 +134,20 @@ def test_print_time_adds_only_blocking_tool_change_fixed_duration():
     assert "cut_fixed_time_s" not in system
     assert 'declare_parameter<double>("tool_change_fixed_time_s", 15.0)' in system
     assert "trajectory_total + tool_change_total" in system
-    assert "const float total = trajectory_total + tool_change_total;" in system
+    assert (
+        "const float total =\n        trajectory_total + tool_change_total + cut_firmware_total;"
+        in system
+    )
     assert (
         "timing_plan_->planned_tool_change_count" in system
         and "tool_change_fixed_time_s_" in system
     )
+    assert (
+        "timing_plan_->planned_cut_count" in system
+        and "timing_plan_->cut_firmware_time_s" in system
+    )
+    assert "out.cut_firmware_time_s" in system
+    assert "out.planned_cut_firmware_time_s" in system
     assert "out.current_traj.planned_time_s" in system
     assert "cut_fixed_time_s" not in system
     assert '"cut_fixed_time_s"' not in launch

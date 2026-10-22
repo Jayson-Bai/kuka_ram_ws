@@ -382,7 +382,7 @@ def test_formal_print_remaining_time_is_low_frequency_and_formatted_in_ui():
     assert "空走" in ui_src
     assert "原地等待/挤出动作" in ui_src
     assert "注入参数" in ui_src
-    assert "已包含于剪切流程" in ui_src
+    assert "剪切固件执行" in ui_src
     assert "按约定忽略 加热/风扇/挤出复位" in ui_src
     assert "def _format_print_duration(seconds):" in ui_src
     assert 'return "--"' in ui_src
