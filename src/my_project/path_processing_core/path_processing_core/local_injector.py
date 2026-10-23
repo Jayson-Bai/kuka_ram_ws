@@ -1224,7 +1224,12 @@ def _repair(arrays, dt):
             values[index] = float(trajectory_count) * float(dt)
             trajectory_count += 1
     arrays["planned_time_s"] = values
-    arrays["trigger_seq"] = np.where(event_mask, arrays["seq"], -1).astype(arrays["trigger_seq"].dtype)
+    trigger_dtype = arrays["trigger_seq"].dtype
+    arrays["trigger_seq"] = np.where(
+        event_mask,
+        arrays["seq"].astype(trigger_dtype),
+        np.array(-1, dtype=trigger_dtype),
+    )
     _sync_public_pose(arrays)
     _finite_and_lengths(arrays)
     if not np.all(np.diff(arrays["planned_time_s"]) >= -1e-6):
