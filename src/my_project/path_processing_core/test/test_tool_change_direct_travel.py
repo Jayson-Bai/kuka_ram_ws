@@ -7,6 +7,7 @@ import pytest
 
 from path_processing_core.local_injector import inject_npz
 from path_processing_core.npz_exporter import export_npz
+from path_processing_core.rsi_validation import validate_final_npz
 from path_processing_core.types import (
     ExtrudeWait, MCommand, MoveCommand, Position, ResetECommand,
     ToolChangeCommand,
@@ -176,6 +177,49 @@ def test_local_injection_matches_direct_full_export_and_repeats(tmp_path):
             assert np.allclose(expected[key], actual[key], rtol=0.0, atol=1e-12), key
         else:
             assert np.array_equal(expected[key], actual[key]), key
+
+
+def test_local_injection_preserves_post_change_travel(tmp_path):
+    commands = _commands()
+    commands.insert(
+        -1,
+        _move("TRAVEL", _p(0, 10, 1.0), _p(40, 30, 1.0), 11, 1, "TRAVEL"),
+    )
+    commands[-1] = _move(
+        "PRINT", _p(40, 30, 1.0), _p(50, 30, 1.0), 12, 1, "RESIN_PRINT",
+    )
+    base, injected = tmp_path / "base.npz", tmp_path / "injected.npz"
+    export_npz(
+        commands, str(base), tool_change_safe_lift_mm=10.0,
+        enable_extrude_wait=True,
+    )
+    inject_npz(
+        base, injected, tool_offset=(3.0, 4.0, 2.0),
+        tool_change_safe_lift_mm=10.0,
+    )
+
+    data = _read(injected)
+    roles = _vocab(data, "core_injection_role")
+    events = _vocab(data, "event_type")
+    resin_event = next(
+        int(index) for index in np.flatnonzero(data["event_flag"])
+        if events[int(data["event_type"][index])] == "tool_change_resin"
+    )
+    block = int(data["core_injection_block_id"][resin_event])
+    post = np.flatnonzero(
+        (data["core_injection_block_id"] == block)
+        & (data["event_flag"] == 0)
+        & (data["core_injection_role"] == next(
+            code for code, name in roles.items() if name == "tool_change_post"
+        ))
+    )
+    assert len(post) > 1
+    post_xyz = _xyz(data)[post]
+    assert np.max(np.linalg.norm(post_xyz - post_xyz[0], axis=1)) > 10.0
+    assert np.allclose(post_xyz[-1], (40.0, 30.0, 1.0), atol=1e-6)
+    report = validate_final_npz(injected)
+    assert report["ok"]
+    assert report["max_rsi_step_mm"] <= 0.10002
 
 
 def test_local_injection_rebuilds_both_cut_holds_from_settle_parameter(tmp_path):

@@ -884,11 +884,9 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
         if b"-" in source_line:
             merge_end = scan_from
     bridge_rows = []
-    bridge_end = target
     if scan_from < len(arrays["seq"]):
         end_index = merge_end - 1 if merge_end > scan_from else scan_from
         end = _pose_from_arrays(arrays, end_index)
-        bridge_end = end
         e_start = float(arrays["e64"][event_index] if "e64" in arrays else arrays["e"][event_index])
         samples = _sample_segment(target, end, e_start, 0.0, raw="tool_change_post_bridge", feed_mm_s=feed, dt=dt)
         template = scan_from if merge_end > scan_from or not len(bridge) else int(bridge[0])
@@ -914,23 +912,8 @@ def _rebuild_tool(arrays, manifest, roles, move_types, block, new_offset, safe_l
 
     mask = arrays["core_injection_block_id"] == bid
     event_index = int(np.flatnonzero(mask & (arrays["core_injection_role"] == event_code))[0])
-    # The event row stays at the lifted pose, but the post-event hold rows
-    # must follow the rebuilt bridge endpoint; otherwise they sit back at the
-    # high pose and create a full bridge-length jump into the next path.
-    post_code = _code(roles, "tool_change_post")
-    post_rows = np.flatnonzero(
-        mask
-        & (arrays["core_injection_role"] == post_code)
-        & (arrays["event_flag"] == 0)
-    )
-    bridge_now = np.flatnonzero(mask & (arrays["core_injection_role"] == bridge_code))
-    bridge_last = int(bridge_now[-1]) if len(bridge_now) else event_index
-    for post_index in post_rows[post_rows > event_index]:
-        _set_array_pose(
-            arrays,
-            int(post_index),
-            bridge_end if int(post_index) > bridge_last else target,
-        )
+    # The bridge joins the first retained post-change travel sample. Keep the
+    # remaining tool_change_post samples at their original travel positions.
     _set_pose(_row(arrays, event_index), target)
     _set_array_pose(arrays, event_index, target)
 
