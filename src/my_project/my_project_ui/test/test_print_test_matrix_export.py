@@ -113,7 +113,7 @@ def test_ui_recognizes_v2_core_and_validates_explicit_conformal_job_contract():
     assert "_read_npz_print_job_metadata(npz_launch_path)" in check
     assert "_is_supported_print_job_metadata(print_job_metadata)" in check
     assert '"job_kind": _CONFORMAL_JOB_KIND' in src
-    assert '"cut_lift_frame": "surface_normal"' in src
+    assert '"cut_lift_frame": "world_z"' in src
     assert '"primeline_pose_mode": "flat_reference_abc_zero"' in src
     assert "曲面蜂窝（逐点曲面 XYZABC）" in src
 

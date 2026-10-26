@@ -133,7 +133,7 @@ def test_injection_rotates_each_fiber_row_and_preserves_e(tmp_path):
         np.testing.assert_allclose(actual_delta, expected_offset, atol=1e-12)
 
 
-def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
+def test_rebuilt_curved_cut_lifts_in_world_z_while_rotating_to_flat(tmp_path):
     from test_minimal_dual_material_equivalence import _commands, _decode
 
     source = tmp_path / "curved_cut_base.npz"
@@ -160,6 +160,29 @@ def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
         cut_travel_delay_s=15.0,
         external_npz_cut_absolute_e=True,
     )
+    with np.load(source, allow_pickle=False) as data:
+        roles = _decode(data, "core_injection_role")
+        role_by_name = {name: code for code, name in roles.items()}
+        event_index = int(np.flatnonzero(
+            data["core_injection_role"] == role_by_name["cut_event"]
+        )[0])
+        block_id = int(data["core_injection_block_id"][event_index])
+        action_rows = np.flatnonzero(
+            (data["core_injection_block_id"] == block_id)
+            & (data["core_injection_role"] == role_by_name["cut_action"])
+            & (data["event_flag"] == 0)
+            & (np.arange(len(data["seq"])) > event_index)
+        )
+        high_index = int(action_rows[np.argmax(data["z"][action_rows])])
+        np.testing.assert_allclose(
+            [data[name][high_index] - data[name][event_index]
+             for name in ("x", "y", "z")],
+            (0.0, 0.0, 20.0), atol=2e-5,
+        )
+        np.testing.assert_allclose(
+            [data[name][high_index] for name in ("a", "b", "c")],
+            (0.0, 0.0, 0.0), atol=2e-5,
+        )
     inject_npz(source, ready, cut_lift_mm=10.0)
 
     with np.load(ready, allow_pickle=False) as data:
@@ -177,8 +200,7 @@ def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
             & (data["event_flag"] == 0)
         )
         assert len(action_rows) > 0
-        # The CUT row is now after the lift and its fixed hold.  Use the first
-        # stationary CUT-action row, anchored at the fiber path endpoint.
+        # The first stationary CUT-action row anchors the fiber path endpoint.
         low = np.asarray(
             [data[name][action_rows[0]] for name in ("x", "y", "z", "a", "b", "c")],
             dtype=np.float64,
@@ -189,12 +211,19 @@ def test_rebuilt_curved_cut_lift_follows_endpoint_surface_normal(tmp_path):
         high = action_xyz[
             int(np.argmax(np.linalg.norm(action_xyz - low[:3], axis=1)))
         ]
-        expected = _rotated_reference_offsets(
-            np.asarray([low[3]]),
-            np.asarray([low[4]]),
-            np.asarray([low[5]]),
-            np.asarray((0.0, 0.0, 10.0)),
-        )[0]
-        np.testing.assert_allclose(high - low[:3], expected, atol=2e-5)
-        assert abs(float(high[0] - low[0])) > 0.1
-        assert abs(float(high[1] - low[1])) > 0.1
+        np.testing.assert_allclose(high - low[:3], (0.0, 0.0, 10.0), atol=2e-5)
+        high_action_index = int(action_rows[np.argmax(action_xyz[:, 2])])
+        lift_rows = np.arange(event_index + 1, high_action_index + 1)
+        lift_rows = lift_rows[data["event_flag"][lift_rows] == 0]
+        np.testing.assert_allclose(data["x"][lift_rows], low[0], atol=2e-5)
+        np.testing.assert_allclose(data["y"][lift_rows], low[1], atol=2e-5)
+        assert np.any(
+            (data["z"][lift_rows] > low[2] + 1e-5)
+            & (data["z"][lift_rows] < low[2] + 10.0 - 1e-5)
+            & (np.abs(data["b"][lift_rows]) < abs(low[4]) - 1e-5)
+            & (np.abs(data["b"][lift_rows]) > 1e-5)
+        )
+        np.testing.assert_allclose(
+            [data[name][action_rows[-1]] for name in ("a", "b", "c")],
+            (0.0, 0.0, 0.0), atol=2e-5,
+        )

@@ -1506,7 +1506,7 @@ def export_npz(
                 )
                 end_p = Position(
                     hold_row.x, hold_row.y, hold_row.z + lift_mm,
-                    hold_row.a, hold_row.b, hold_row.c,
+                    0.0, 0.0, 0.0,
                 )
                 lift_gc = GlobalCurveCommand(
                     type="TRAVEL",
@@ -1644,7 +1644,12 @@ def export_npz(
             path_id=_path_id_for(layer, subtype, occ),
         )
         start_p = Position(hold_row.x, hold_row.y, hold_row.z, hold_row.a, hold_row.b, hold_row.c)
-        end_p = Position(hold_row.x, hold_row.y, hold_row.z + lift_mm, hold_row.a, hold_row.b, hold_row.c)
+        end_p = Position(
+            hold_row.x, hold_row.y, hold_row.z + lift_mm,
+            0.0 if current_tool == 1 else hold_row.a,
+            0.0 if current_tool == 1 else hold_row.b,
+            0.0 if current_tool == 1 else hold_row.c,
+        )
         lift_feedrate = max(float(default_feed_mm_s), 1e-9) * 60.0
         lift_gc = GlobalCurveCommand(
             type="TRAVEL",

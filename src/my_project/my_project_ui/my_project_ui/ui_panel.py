@@ -677,7 +677,7 @@ def _is_supported_print_job_metadata(manifest):
         "abc_semantics": "relative_to_calibrated_flat_printing_pose",
         "default_abc_policy": "fallback_only_never_override_xyzabc",
         "primeline_pose_mode": "flat_reference_abc_zero",
-        "cut_lift_frame": "surface_normal",
+        "cut_lift_frame": "world_z",
         "global_z_compensation_frame": "world_z",
         "pause_lift_frame": "world_z",
         "tool_change_safe_lift_frame": "world_z",

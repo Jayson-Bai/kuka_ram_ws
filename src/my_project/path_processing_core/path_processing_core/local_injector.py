@@ -1011,15 +1011,18 @@ def _rebuild_cut(
     low_e = 0.0 if anchor_reset is not None else float(
         arrays["e64"][block_start] if "e64" in arrays else arrays["e"][block_start])
     high = low.copy()
-    # CUT is the one lift whose frame belongs to the curved print path.  Its
-    # flat-reference +Z vector follows the row's KUKA A(Z)-B(Y)-C(X) pose,
-    # matching the slicer exporter's endpoint surface-normal construction.
-    high[:3] += _rotated_reference_offsets(
-        np.asarray([low[3]], dtype=np.float64),
-        np.asarray([low[4]], dtype=np.float64),
-        np.asarray([low[5]], dtype=np.float64),
-        np.asarray((0.0, 0.0, float(new_lift)), dtype=np.float64),
-    )[0]
+    if int(arrays["tool_id"][event_index]) == 1:
+        # Fiber CUT rises at fixed X/Y while its pose returns to the calibrated
+        # flat-print reference. _sample_segment couples both changes in time.
+        high[2] += float(new_lift)
+        high[3:] = 0.0
+    else:
+        high[:3] += _rotated_reference_offsets(
+            np.asarray([low[3]], dtype=np.float64),
+            np.asarray([low[4]], dtype=np.float64),
+            np.asarray([low[5]], dtype=np.float64),
+            np.asarray((0.0, 0.0, float(new_lift)), dtype=np.float64),
+        )[0]
     template = event_index
     print_code = _code(move_types, "PRINT")
     travel_code = _code(move_types, "TRAVEL")
