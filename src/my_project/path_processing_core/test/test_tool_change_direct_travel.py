@@ -178,7 +178,6 @@ def test_local_injection_matches_direct_full_export_and_repeats(tmp_path):
         else:
             assert np.array_equal(expected[key], actual[key]), key
 
-
 def test_local_injection_preserves_post_change_travel(tmp_path):
     commands = _commands()
     commands.insert(
@@ -261,6 +260,27 @@ def test_local_injection_rebuilds_both_cut_holds_from_settle_parameter(tmp_path)
             assert np.allclose(expected[key], actual[key], rtol=0.0, atol=1e-12), key
         else:
             assert np.array_equal(expected[key], actual[key]), key
+
+
+    direct_timing = json.loads(direct.with_suffix(".timing.json").read_text())
+    injected_timing = json.loads(injected.with_suffix(".timing.json").read_text())
+    events = _vocab(expected, "event_type")
+    names = [
+        events[int(code)] if flag else ""
+        for code, flag in zip(expected["event_type"], expected["event_flag"])
+    ]
+    cut_index = names.index("cut")
+    sync_index = names.index("extrude_sync", cut_index)
+    overlap = float(expected["planned_time_s"][sync_index]) - float(
+        expected["planned_time_s"][cut_index])
+    expected_blocking = max(0.0, 11.3 - overlap)
+    for timing in (direct_timing, injected_timing):
+        assert timing["cut_sync_trigger_seqs"] == [int(expected["seq"][sync_index])]
+        assert timing["cut_sync_waits_s"] == pytest.approx([expected_blocking], abs=0.004)
+        assert timing["planned_cut_blocking_wait_time_s"] == pytest.approx(
+            expected_blocking, abs=0.004)
+        assert timing["planned_cut_blocking_wait_time_s"] < (
+            timing["planned_cut_firmware_time_s"])
 
 
 def test_cut_emits_two_blocking_absolute_e_release_barriers(tmp_path):

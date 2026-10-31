@@ -18,12 +18,14 @@
 #include <std_msgs/msg/string.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <deque>
 #include <limits>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 
 using my_project_interfaces::msg::UiStatus;
 using my_project_interfaces::msg::TrajectoryPoint;
@@ -35,6 +37,14 @@ using my_project_interfaces::msg::KukaStatus;
 
 class SystemManagerNode : public rclcpp::Node
 {
+  struct TimedEvent
+  {
+    uint32_t seq;
+    std::string type;
+    std::chrono::steady_clock::time_point started;
+    float budget_s;
+  };
+
 public:
   SystemManagerNode()
   : Node("system_manager_node")
@@ -90,6 +100,24 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         last_printhead_status_ = *msg;
         last_printhead_stamp_ = now();
+        const auto pending = std::find_if(
+          pending_timed_events_.begin(), pending_timed_events_.end(),
+          [&msg](const TimedEvent & event) {
+            return msg->ready_for_motion && msg->ready_event_seq == event.seq &&
+                   msg->ready_event_type == event.type;
+          });
+        if (pending != pending_timed_events_.end())
+        {
+          const double seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - pending->started).count();
+          if (pending->type == "extrude_sync") {
+            completed_cut_wait_s_ += seconds;
+            consumed_cut_budget_s_ += pending->budget_s;
+          } else {
+            completed_protocol_wait_s_ += seconds;
+          }
+          pending_timed_events_.erase(pending);
+        }
       });
 
     planned_event_sub_ = create_subscription<PlannedEvent>(
@@ -106,6 +134,24 @@ public:
         std::lock_guard<std::mutex> lk(mutex_);
         last_triggered_event_ = *msg;
         last_triggered_stamp_ = now();
+        if (msg->event_type == "extrude_sync" ||
+          msg->event_type == "extrude_reset" ||
+          msg->event_type == "fan_cf" || msg->event_type == "fan_resin")
+        {
+          const auto budget = cut_sync_budgets_.find(msg->trigger_seq);
+          const auto duplicate = std::find_if(
+            pending_timed_events_.begin(), pending_timed_events_.end(),
+            [&msg](const TimedEvent & event) {
+              return event.seq == msg->trigger_seq && event.type == msg->event_type;
+            });
+          if (duplicate == pending_timed_events_.end()) {
+            pending_timed_events_.push_back(TimedEvent{
+              msg->trigger_seq, msg->event_type,
+              std::chrono::steady_clock::now(),
+              msg->event_type == "extrude_sync" && budget != cut_sync_budgets_.end() ?
+              budget->second : 0.0F});
+          }
+        }
         if (msg->event_type == "tool_change_cf" ||
         msg->event_type == "tool_change_resin")
         {
@@ -151,6 +197,12 @@ public:
         triggered_tool_change_count_ = 0;
         last_tool_change_start_ = rclcpp::Time();
         last_counted_tool_change_key_.clear();
+        reset_quantified_event_clock();
+        const auto count = std::min(
+          msg->cut_sync_trigger_seqs.size(), msg->cut_sync_waits_s.size());
+        for (size_t i = 0; i < count; ++i) {
+          cut_sync_budgets_[msg->cut_sync_trigger_seqs[i]] = msg->cut_sync_waits_s[i];
+        }
       });
 
     timer_ = create_wall_timer(
@@ -161,6 +213,15 @@ public:
   }
 
 private:
+  void reset_quantified_event_clock()
+  {
+    pending_timed_events_.clear();
+    completed_cut_wait_s_ = 0.0;
+    completed_protocol_wait_s_ = 0.0;
+    consumed_cut_budget_s_ = 0.0;
+    cut_sync_budgets_.clear();
+  }
+
   template<typename T>
   void trim_queue(std::deque<T> & q, size_t limit)
   {
@@ -302,6 +363,9 @@ private:
     out.planned_cut_injected_wait_time_s = 0.0F;
     out.cut_firmware_time_s = 0.0F;
     out.planned_cut_firmware_time_s = 0.0F;
+    out.planned_cut_blocking_wait_time_s = 0.0F;
+    out.planned_cut_blocking_elapsed_time_s = 0.0F;
+    out.planned_protocol_elapsed_time_s = 0.0F;
     out.planned_tool_change_time_s = 0.0F;
     out.planned_tool_change_elapsed_time_s = 0.0F;
     out.tool_change_fixed_time_s = static_cast<float>(tool_change_fixed_time_s_);
@@ -310,6 +374,7 @@ private:
     out.planned_unquantified_event_count = 0;
     out.print_time_breakdown_valid = false;
     out.print_time_valid = false;
+    out.print_time_waiting_for_event = !pending_timed_events_.empty();
 
     if (out.current_traj_valid && out.current_traj.planned_time_valid &&
       timing_plan_ && timing_plan_->valid)
@@ -322,11 +387,12 @@ private:
       const float cut_firmware_total =
         static_cast<float>(timing_plan_->planned_cut_count) *
         static_cast<float>(timing_plan_->cut_firmware_time_s);
-      const float total =
-        trajectory_total + tool_change_total + cut_firmware_total;
+      const float cut_blocking_total = std::max(
+        0.0F, timing_plan_->planned_cut_blocking_wait_time_s);
+      const float plan_total =
+        trajectory_total + tool_change_total + cut_blocking_total;
       const bool new_run = print_time_cache_valid_ &&
-        (out.current_traj.seq<print_time_last_seq_ ||
-        std::abs(total - print_time_total_s_)>1e-3F ||
+        (std::abs(plan_total - print_time_plan_total_s_)>1e-3F ||
         timing_plan_->planned_tool_change_count !=
         print_time_tool_change_count_);
       if (new_run) {
@@ -334,6 +400,10 @@ private:
         triggered_tool_change_count_ = 0;
         last_tool_change_start_ = rclcpp::Time();
         last_counted_tool_change_key_.clear();
+        pending_timed_events_.clear();
+        completed_cut_wait_s_ = 0.0;
+        completed_protocol_wait_s_ = 0.0;
+        consumed_cut_budget_s_ = 0.0;
       }
 
       const double elapsed_since_update = print_time_last_update_.nanoseconds() == 0 ?
@@ -362,11 +432,36 @@ private:
           tool_change_elapsed, 0.0F, tool_change_total);
         const float trajectory_elapsed = std::clamp(
           out.current_traj.planned_time_s, 0.0F, trajectory_total);
-        const float elapsed = std::clamp(
-          trajectory_elapsed + tool_change_elapsed, 0.0F, total);
-        print_time_total_s_ = total;
+        float current_cut_elapsed = 0.0F;
+        float current_protocol_elapsed = 0.0F;
+        float current_cut_budget_used = 0.0F;
+        const auto steady_now = std::chrono::steady_clock::now();
+        for (const auto & event : pending_timed_events_) {
+          const float seconds = static_cast<float>(std::max(
+            0.0, std::chrono::duration<double>(steady_now - event.started).count()));
+          if (event.type == "extrude_sync") {
+            current_cut_elapsed += seconds;
+            current_cut_budget_used += std::min(seconds, event.budget_s);
+          } else {
+            current_protocol_elapsed += seconds;
+          }
+        }
+        const float cut_remaining = std::max(
+          0.0F, cut_blocking_total - static_cast<float>(consumed_cut_budget_s_) -
+          current_cut_budget_used);
+        const float cut_elapsed = static_cast<float>(completed_cut_wait_s_) +
+          current_cut_elapsed;
+        const float protocol_elapsed =
+          static_cast<float>(completed_protocol_wait_s_) + current_protocol_elapsed;
+        const float elapsed = trajectory_elapsed + tool_change_elapsed +
+          cut_elapsed + protocol_elapsed;
+        const float remaining =
+          (trajectory_total - trajectory_elapsed) +
+          (tool_change_total - tool_change_elapsed) + cut_remaining;
+        print_time_plan_total_s_ = plan_total;
+        print_time_total_s_ = elapsed + remaining;
         print_time_elapsed_s_ = elapsed;
-        print_time_remaining_s_ = std::clamp(total - elapsed, 0.0F, total);
+        print_time_remaining_s_ = remaining;
         print_time_trajectory_total_s_ = trajectory_total;
         print_time_print_motion_s_ =
           timing_plan_->planned_print_motion_time_s;
@@ -382,13 +477,15 @@ private:
         print_time_cut_firmware_s_ =
         static_cast<float>(timing_plan_->cut_firmware_time_s);
       print_time_cut_firmware_total_s_ = cut_firmware_total;
+      print_time_cut_blocking_total_s_ = cut_blocking_total;
+      print_time_cut_blocking_elapsed_s_ = cut_elapsed;
+      print_time_protocol_elapsed_s_ = protocol_elapsed;
       print_time_cut_count_ = timing_plan_->planned_cut_count;
         print_time_tool_change_count_ = planned_tool_changes;
         print_time_unquantified_event_count_ =
           timing_plan_->planned_unquantified_event_count;
         print_time_breakdown_valid_ =
           timing_plan_->breakdown_valid;
-        print_time_last_seq_ = out.current_traj.seq;
         print_time_last_update_ = now_t;
         print_time_cache_valid_ = true;
       }
@@ -408,6 +505,10 @@ private:
         print_time_cut_injected_wait_total_s_;
       out.cut_firmware_time_s = print_time_cut_firmware_s_;
       out.planned_cut_firmware_time_s = print_time_cut_firmware_total_s_;
+      out.planned_cut_blocking_wait_time_s = print_time_cut_blocking_total_s_;
+      out.planned_cut_blocking_elapsed_time_s =
+        print_time_cut_blocking_elapsed_s_;
+      out.planned_protocol_elapsed_time_s = print_time_protocol_elapsed_s_;
       out.planned_tool_change_time_s = print_time_tool_change_s_;
       out.planned_tool_change_elapsed_time_s =
         print_time_tool_change_elapsed_s_;
@@ -456,8 +557,8 @@ private:
   int print_time_update_period_ms_{500};
   double tool_change_fixed_time_s_{15.0};
   bool print_time_cache_valid_{false};
-  uint32_t print_time_last_seq_{0};
   float print_time_total_s_{0.0F};
+  float print_time_plan_total_s_{0.0F};
   float print_time_elapsed_s_{0.0F};
   float print_time_remaining_s_{0.0F};
   float print_time_trajectory_total_s_{0.0F};
@@ -468,6 +569,9 @@ private:
   float print_time_cut_injected_wait_s_{0.0F};
   float print_time_cut_firmware_s_{0.0F};
   float print_time_cut_firmware_total_s_{0.0F};
+  float print_time_cut_blocking_total_s_{0.0F};
+  float print_time_cut_blocking_elapsed_s_{0.0F};
+  float print_time_protocol_elapsed_s_{0.0F};
   float print_time_cut_injected_wait_total_s_{0.0F};
   float print_time_tool_change_s_{0.0F};
   float print_time_tool_change_elapsed_s_{0.0F};
@@ -478,6 +582,11 @@ private:
   uint32_t triggered_tool_change_count_{0};
   rclcpp::Time last_tool_change_start_;
   std::string last_counted_tool_change_key_;
+  std::unordered_map<uint32_t, float> cut_sync_budgets_;
+  std::deque<TimedEvent> pending_timed_events_;
+  double completed_cut_wait_s_{0.0};
+  double completed_protocol_wait_s_{0.0};
+  double consumed_cut_budget_s_{0.0};
   rclcpp::Time print_time_last_update_;
   std::string system_command_;   // 当前系统命令状态: "PAUSED" / "ABORTING" / "ABORTED" / ""
 };

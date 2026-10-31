@@ -45,8 +45,12 @@ float32 planned_tool_change_elapsed_time_s
 float32 tool_change_fixed_time_s
 float32 cut_firmware_time_s
 float32 planned_cut_firmware_time_s
+float32 planned_cut_blocking_wait_time_s
+float32 planned_cut_blocking_elapsed_time_s
+float32 planned_protocol_elapsed_time_s
 uint32 planned_cut_count
 uint32 planned_tool_change_count
 uint32 planned_unquantified_event_count
 bool print_time_breakdown_valid
 bool print_time_valid
+bool print_time_waiting_for_event

@@ -20,6 +20,7 @@ class RsiTimingAccumulator:
         self.trajectory_rows = 0
         self.event_rows_ignored = 0
         self.event_counts = {}
+        self.event_records = []
         self._category_time_s = {name: 0.0 for name in self._CATEGORIES}
         self.segments = []
         self._open_segment = None
@@ -36,12 +37,38 @@ class RsiTimingAccumulator:
         self.trajectory_rows += 1
         return value
 
-    def append_event_time(self, event_type: str = "") -> float:
+    def append_event_time(
+        self, event_type: str = "", payload: str = "", trigger_seq: int = -1,
+    ) -> float:
         """Return the current timestamp for a non-time-consuming event row."""
         self.event_rows_ignored += 1
         if event_type:
             self.event_counts[event_type] = self.event_counts.get(event_type, 0) + 1
+            self.event_records.append(
+                (event_type, str(payload), int(trigger_seq), self._time_s)
+            )
         return self._time_s
+
+    def cut_sync_waits(self, firmware_time_s: float) -> list[dict]:
+        """Budget only the CUT time remaining at its first blocking sync."""
+        pending_cut = None
+        waits = []
+        for event_type, payload, trigger_seq, event_time_s in self.event_records:
+            if event_type == "cut" and "sync_v1:2" in payload.split():
+                if pending_cut is not None:
+                    raise ValueError("CUT is missing its first extrude_sync")
+                pending_cut = event_time_s
+            elif event_type == "extrude_sync" and pending_cut is not None:
+                overlap_s = max(0.0, event_time_s - pending_cut)
+                waits.append({
+                    "trigger_seq": trigger_seq,
+                    "overlap_s": overlap_s,
+                    "planned_wait_s": max(0.0, float(firmware_time_s) - overlap_s),
+                })
+                pending_cut = None
+        if pending_cut is not None:
+            raise ValueError("CUT is missing its first extrude_sync")
+        return waits
 
     def trajectory_time(self) -> float:
         return self._time_s
@@ -89,8 +116,7 @@ class RsiTimingAccumulator:
         unquantified = sum(
             self.event_counts.get(name, 0)
             for name in (
-                "heat_cf", "heat_resin", "fan_cf", "fan_resin",
-                "extrude_reset",
+                "heat_cf", "heat_resin",
             )
         )
         return {

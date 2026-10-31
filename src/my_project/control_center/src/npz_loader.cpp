@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 
@@ -115,6 +116,36 @@ bool read_json_number(
   return end != begin && std::isfinite(value);
 }
 
+bool read_json_number_array(
+  const std::string & content, const std::string & key,
+  std::vector<double> & values)
+{
+  const auto key_pos = content.find("\"" + key + "\"");
+  if (key_pos == std::string::npos) {return false;}
+  const auto colon_pos = content.find(':', key_pos + key.size() + 2);
+  if (colon_pos == std::string::npos) {return false;}
+  auto pos = content.find_first_not_of(" \t\r\n", colon_pos + 1);
+  if (pos == std::string::npos || content[pos] != '[') {return false;}
+  ++pos;
+  values.clear();
+  while (pos < content.size()) {
+    pos = content.find_first_not_of(" \t\r\n", pos);
+    if (pos == std::string::npos) {return false;}
+    if (content[pos] == ']') {return true;}
+    char * end = nullptr;
+    const double value = std::strtod(content.c_str() + pos, &end);
+    if (end == content.c_str() + pos || !std::isfinite(value)) {return false;}
+    values.push_back(value);
+    pos = static_cast<size_t>(end - content.c_str());
+    pos = content.find_first_not_of(" \t\r\n", pos);
+    if (pos == std::string::npos) {return false;}
+    if (content[pos] == ']') {return true;}
+    if (content[pos] != ',') {return false;}
+    ++pos;
+  }
+  return false;
+}
+
 }  // namespace
 
 NpzLoader::NpzLoader(const std::string & path, size_t preload_chunks)
@@ -141,11 +172,15 @@ void NpzLoader::load_timing_metadata(const std::string & path)
   timing_metadata_valid_ = false;
   timing_breakdown_valid_ = false;
   timing_valid_ = false;
+  cut_timing_valid_ = true;
   total_planned_time_s_ = 0.0;
   planned_print_motion_time_s_ = 0.0;
   planned_travel_time_s_ = 0.0;
   planned_wait_time_s_ = 0.0;
   planned_cut_time_s_ = 0.0;
+  planned_cut_blocking_wait_time_s_ = 0.0;
+  cut_sync_trigger_seqs_.clear();
+  cut_sync_waits_s_.clear();
   cut_injected_wait_s_ = 0.0;
   planned_cut_injected_wait_time_s_ = 0.0;
   planned_cut_count_ = 0;
@@ -175,6 +210,9 @@ void NpzLoader::load_timing_metadata(const std::string & path)
   double cut_injected_wait_total = 0.0;
   double cut_firmware_time = 0.0;
   double cut_firmware_total = 0.0;
+  double cut_blocking_total = 0.0;
+  std::vector<double> cut_sync_seqs;
+  std::vector<double> cut_sync_waits;
   double cut_count = 0.0;
   double tool_change_count = 0.0;
   double unquantified_count = 0.0;
@@ -194,6 +232,27 @@ void NpzLoader::load_timing_metadata(const std::string & path)
     read_json_number(
     content, "planned_unquantified_event_count", unquantified_count);
   const double category_sum = print_motion + travel + wait + cut;
+  const bool has_cut_schedule =
+    read_json_number(content, "planned_cut_blocking_wait_time_s", cut_blocking_total) &&
+    read_json_number_array(content, "cut_sync_trigger_seqs", cut_sync_seqs) &&
+    read_json_number_array(content, "cut_sync_waits_s", cut_sync_waits);
+  double cut_wait_sum = 0.0;
+  bool valid_cut_schedule = has_cut_schedule &&
+    cut_blocking_total >= 0.0 && cut_sync_seqs.size() == cut_sync_waits.size() &&
+    cut_sync_seqs.size() == static_cast<size_t>(cut_count) &&
+    std::floor(cut_count) == cut_count;
+  for (size_t i = 0; valid_cut_schedule && i < cut_sync_seqs.size(); ++i) {
+    const double seq = cut_sync_seqs[i];
+    const double wait_s = cut_sync_waits[i];
+    valid_cut_schedule = seq >= 0.0 &&
+      seq <= std::numeric_limits<uint32_t>::max() && std::floor(seq) == seq &&
+      wait_s >= 0.0 && wait_s <= cut_firmware_time + 1e-5 &&
+      (i == 0 || seq > cut_sync_seqs[i - 1]);
+    cut_wait_sum += wait_s;
+  }
+  valid_cut_schedule = valid_cut_schedule &&
+    std::abs(cut_wait_sum - cut_blocking_total) <=
+    std::max(0.02, cut_blocking_total * 1e-5);
   if (has_breakdown &&
     print_motion >= 0.0 && travel >= 0.0 && wait >= 0.0 && cut >= 0.0 &&
     cut_injected_wait >= 0.0 && cut_injected_wait_total >= 0.0 &&
@@ -211,6 +270,14 @@ void NpzLoader::load_timing_metadata(const std::string & path)
     planned_cut_injected_wait_time_s_ = cut_injected_wait_total;
     cut_firmware_time_s_ = cut_firmware_time;
     planned_cut_firmware_time_s_ = cut_firmware_total;
+    cut_timing_valid_ = valid_cut_schedule || cut_count == 0.0;
+    if (valid_cut_schedule) {
+      planned_cut_blocking_wait_time_s_ = cut_blocking_total;
+      for (size_t i = 0; i < cut_sync_seqs.size(); ++i) {
+        cut_sync_trigger_seqs_.push_back(static_cast<uint32_t>(cut_sync_seqs[i]));
+        cut_sync_waits_s_.push_back(static_cast<float>(cut_sync_waits[i]));
+      }
+    }
     planned_cut_count_ = static_cast<uint32_t>(std::llround(cut_count));
     planned_tool_change_count_ =
       static_cast<uint32_t>(std::llround(tool_change_count));
@@ -218,6 +285,8 @@ void NpzLoader::load_timing_metadata(const std::string & path)
       static_cast<uint32_t>(std::llround(unquantified_count));
     timing_breakdown_valid_ = true;
   }
+  timing_valid_ = timing_rows_valid_ && timing_metadata_valid_ &&
+    timing_breakdown_valid_ && cut_timing_valid_;
 }
 
 bool NpzLoader::has_next() const
@@ -506,7 +575,8 @@ NpzChunk NpzLoader::load_chunk(const std::string & file)
     c.planned_time_s.assign(c.size, 0.0F);
     timing_rows_valid_ = false;
   }
-  timing_valid_ = timing_rows_valid_ && timing_metadata_valid_;
+  timing_valid_ = timing_rows_valid_ && timing_metadata_valid_ &&
+    timing_breakdown_valid_ && cut_timing_valid_;
   if (npz.count("layer_index")) {
     c.layer_index = to_vec<uint32_t>(npz.at("layer_index"));
   } else {

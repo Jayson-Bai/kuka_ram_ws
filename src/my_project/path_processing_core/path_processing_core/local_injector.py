@@ -1314,6 +1314,34 @@ def _write_offset_metadata(path: Path, manifest: dict[str, Any]) -> Path:
     return target
 
 
+def _cut_sync_waits(arrays, static, firmware_time_s):
+    vocab = _decode_vocab(
+        static["event_type_vocab_keys"], static["event_type_vocab_vals"]
+    )
+    pending_cut_time = None
+    waits = []
+    for index in np.flatnonzero(arrays["event_flag"] != 0):
+        event_type = vocab.get(int(arrays["event_type"][index]), "")
+        event_time = float(arrays["planned_time_s"][index])
+        if event_type == "cut":
+            payload = bytes(arrays["payload"][index]).split(b"\x00", 1)[0]
+            if b"sync_v1:2" in payload.split():
+                if pending_cut_time is not None:
+                    raise ValueError("CUT is missing its first extrude_sync")
+                pending_cut_time = event_time
+        elif event_type == "extrude_sync" and pending_cut_time is not None:
+            overlap = max(0.0, event_time - pending_cut_time)
+            waits.append({
+                "trigger_seq": int(arrays["trigger_seq"][index]),
+                "overlap_s": overlap,
+                "planned_wait_s": max(0.0, firmware_time_s - overlap),
+            })
+            pending_cut_time = None
+    if pending_cut_time is not None:
+        raise ValueError("CUT is missing its first extrude_sync")
+    return waits
+
+
 def _write_timing(
     path: Path, arrays: dict[str, np.ndarray],
     static: dict[str, np.ndarray], dt: float,
@@ -1339,8 +1367,9 @@ def _write_timing(
         injected_travel_delay_s = max(
             0.0, float(cut_params.get("cut_travel_delay_s", 1.0)))
         cut_count = int(event_counts.get("cut", 0))
+        cut_sync_waits = _cut_sync_waits(arrays, static, _CUT_FIRMWARE_TIME_S)
         payload.update({
-            "version": 2,
+            "version": 3,
             "trajectory_time_breakdown_s": {
                 "print": float(durations[_TIMING_PRINT]),
                 "travel": float(durations[_TIMING_TRAVEL]),
@@ -1352,14 +1381,26 @@ def _write_timing(
             "planned_travel_time_s": float(durations[_TIMING_TRAVEL]),
             "planned_wait_time_s": float(durations[_TIMING_WAIT]),
             "planned_cut_time_s": float(durations[_TIMING_CUT]),
+            "cut_sync_trigger_seqs": [
+                item["trigger_seq"] for item in cut_sync_waits
+            ],
+            "cut_sync_waits_s": [
+                item["planned_wait_s"] for item in cut_sync_waits
+            ],
+            "planned_cut_blocking_wait_time_s": sum(
+                item["planned_wait_s"] for item in cut_sync_waits
+            ),
+            "planned_cut_overlap_time_s": sum(
+                min(_CUT_FIRMWARE_TIME_S, item["overlap_s"])
+                for item in cut_sync_waits
+            ),
             "cut_retract_delay_s": injected_retract_delay_s,
             "cut_travel_delay_s": injected_travel_delay_s,
             "planned_cut_delay_time_s": (
                 (injected_retract_delay_s + injected_travel_delay_s) * cut_count
             ),
             # Firmware physical CUT duration per event (K1 7s + dual MOS
-            # 2.3s + K2 ~2s).  extrude_sync barriers cover it; additive
-            # to trajectory rows in the total estimate.
+            # 2.3s + K2 ~2s). Only the residual after the lift is blocking.
             "cut_firmware_time_s": _CUT_FIRMWARE_TIME_S,
             "planned_cut_firmware_time_s": (
                 _CUT_FIRMWARE_TIME_S * cut_count
@@ -1378,8 +1419,7 @@ def _write_timing(
             "planned_unquantified_event_count": int(sum(
                 event_counts.get(name, 0)
                 for name in (
-                    "heat_cf", "heat_resin", "fan_cf", "fan_resin",
-                    "extrude_reset",
+                    "heat_cf", "heat_resin",
                 )
             )),
         })

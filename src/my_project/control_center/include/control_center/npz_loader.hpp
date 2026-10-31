@@ -85,6 +85,18 @@ public:
   {
     return planned_cut_firmware_time_s_;
   }
+  double planned_cut_blocking_wait_time_s() const
+  {
+    return planned_cut_blocking_wait_time_s_;
+  }
+  const std::vector<uint32_t> & cut_sync_trigger_seqs() const
+  {
+    return cut_sync_trigger_seqs_;
+  }
+  const std::vector<float> & cut_sync_waits_s() const
+  {
+    return cut_sync_waits_s_;
+  }
   uint32_t planned_cut_count() const {return planned_cut_count_;}
   uint32_t planned_tool_change_count() const {return planned_tool_change_count_;}
   uint32_t planned_unquantified_event_count() const
@@ -128,6 +140,7 @@ private:
   bool timing_breakdown_valid_{false};
   bool timing_rows_valid_{true};
   bool timing_metadata_valid_{false};
+  bool cut_timing_valid_{true};
   double total_planned_time_s_{0.0};
   double planned_print_motion_time_s_{0.0};
   double planned_travel_time_s_{0.0};
@@ -137,6 +150,9 @@ private:
   double planned_cut_injected_wait_time_s_{0.0};
   double cut_firmware_time_s_{0.0};
   double planned_cut_firmware_time_s_{0.0};
+  double planned_cut_blocking_wait_time_s_{0.0};
+  std::vector<uint32_t> cut_sync_trigger_seqs_;
+  std::vector<float> cut_sync_waits_s_;
   uint32_t planned_cut_count_{0};
   uint32_t planned_tool_change_count_{0};
   uint32_t planned_unquantified_event_count_{0};

@@ -1715,7 +1715,7 @@ def export_npz(
             trigger_seq=None,
             path_id=_path_id_for(layer, subtype, occ),
         )
-        planned_time_s = timing.append_event_time(ev.event_type)
+        planned_time_s = timing.append_event_time(ev.event_type, ev.payload, seq)
         event_marker_id = active_injection_block_id
         if marker_role:
             event_marker_role = marker_role
@@ -2242,6 +2242,21 @@ def export_npz(
         if timing_parent:
             os.makedirs(timing_parent, exist_ok=True)
         timing_summary = timing.summary()
+        timing_summary["version"] = 3
+        cut_sync_waits = timing.cut_sync_waits(_CUT_FIRMWARE_TIME_S)
+        timing_summary["cut_sync_trigger_seqs"] = [
+            item["trigger_seq"] for item in cut_sync_waits
+        ]
+        timing_summary["cut_sync_waits_s"] = [
+            item["planned_wait_s"] for item in cut_sync_waits
+        ]
+        timing_summary["planned_cut_blocking_wait_time_s"] = sum(
+            timing_summary["cut_sync_waits_s"]
+        )
+        timing_summary["planned_cut_overlap_time_s"] = sum(
+            min(_CUT_FIRMWARE_TIME_S, item["overlap_s"])
+            for item in cut_sync_waits
+        )
         timing_summary["cut_retract_delay_s"] = cut_retract_delay_s
         timing_summary["cut_travel_delay_s"] = cut_travel_delay_s
         timing_summary["planned_cut_delay_time_s"] = (
@@ -2249,8 +2264,8 @@ def export_npz(
             * int(timing_summary["planned_cut_count"])
         )
         # Firmware physical CUT duration per event (K1 7s + dual MOS
-        # 2.3s + K2 ~2s).  The extrude_sync barriers cover this; it is
-        # additive to the trajectory rows and counted in the total.
+        # 2.3s + K2 ~2s). Only the part after the concurrent lift is
+        # blocking; the full firmware duration remains diagnostic metadata.
         timing_summary["cut_firmware_time_s"] = _CUT_FIRMWARE_TIME_S
         timing_summary["planned_cut_firmware_time_s"] = (
             _CUT_FIRMWARE_TIME_S
