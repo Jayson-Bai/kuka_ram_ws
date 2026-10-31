@@ -2,6 +2,13 @@
 
 该包用于集中管理启动流程，包含核心节点的启动顺序与参数透传。
 
+## 实验诊断日志
+
+沿用 rqt 的“导出诊断日志”按钮，导出至原有数据根目录的 `diagnostic_logs`。
+不再使用独立 experiment_logger。日志在 UI 内存中压缩缓存，仅点击按钮时生成
+`diagnostic_log_<时间>.jsonl.gz`；打印结束不会自动导出。详见 UI 包的
+`DIAGNOSTIC_LOG.md`。
+
 ## 默认启动顺序
 
 - 先启动 `rsi_node` 和 `uart_node`

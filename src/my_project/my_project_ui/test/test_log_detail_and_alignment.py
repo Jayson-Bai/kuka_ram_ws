@@ -81,13 +81,14 @@ def test_uart_log_export_button_is_standalone_at_right_column_bottom():
 def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
     src = _source()
 
-    assert "self._diagnostic_log_history = []" in src
-    assert "_DIAGNOSTIC_LOG_LIMIT = 200000" in src
+    assert "self._diagnostic_log_history = DiagnosticLog()" in src
+    assert "_DIAGNOSTIC_LOG_LIMIT" not in src
     assert "def _append_diagnostic(self, source, kind, detail):" in src
     assert '"time_epoch": epoch' in src
     assert '"source": str(source)' in src
     assert '"kind": str(kind)' in src
-    assert "json.dumps(record, ensure_ascii=False, sort_keys=True)" in src
+    assert "self._diagnostic_log_history.export(path)" in src
+    assert '"host_monotonic_ns": time.monotonic_ns()' in src
 
     assert 'out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")' in src
     assert (

@@ -11,6 +11,8 @@ import json
 import threading
 import time
 import math
+from collections import deque
+from .diagnostic_log import DiagnosticLog
 
 from my_project_interfaces.msg import UiStatus, ExtruderLatencyStatus, TrajectoryPoint
 
@@ -1178,7 +1180,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
     rsi_xml_received = QtCore.pyqtSignal(str)  # RSI 发出 XML 日志
     uart_log_received = QtCore.pyqtSignal(str)  # UART 原始日志
 
-    _DIAGNOSTIC_LOG_LIMIT = 200000
 
     def __init__(self):
         super().__init__()
@@ -1203,8 +1204,8 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_pending_after_tool_change = None
         self._print_test_requested_target_tool = None
         self._print_test_resin_z_floor = None
-        self._uart_log_history = []
-        self._diagnostic_log_history = []
+        self._uart_log_history = deque(maxlen=2000)
+        self._diagnostic_log_history = DiagnosticLog()
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         _ensure_default_data_dirs()
@@ -2851,6 +2852,9 @@ class _UiStatusWidget(QtWidgets.QWidget):
                         external_defaults["external_cut_lift_mm"],
                         maximum=1000.0,
                     ),
+                    None,
+                    "",
+                    QtWidgets.QLabel(""),
                 ),
             ],
         )
@@ -3889,15 +3893,12 @@ class _UiStatusWidget(QtWidgets.QWidget):
         epoch = time.time()
         record = {
             "time_epoch": epoch,
-            "time": self._format_diagnostic_time(epoch),
+            "host_monotonic_ns": time.monotonic_ns(),
             "source": str(source),
             "kind": str(kind),
             "detail": detail,
         }
         self._diagnostic_log_history.append(record)
-        overflow = len(self._diagnostic_log_history) - self._DIAGNOSTIC_LOG_LIMIT
-        if overflow > 0:
-            del self._diagnostic_log_history[:overflow]
 
     def _trajectory_diagnostic(self, traj):
         return {
@@ -4092,7 +4093,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
 
     def _update_print_time(self, msg: UiStatus):
         if not msg.print_time_valid:
-            self._print_time_label.setText("时间估计 --")
+            self._print_time_label.setText("时间估计 --（需完整计时元数据）")
             self._print_time_breakdown_label.setText("可量化构成 --")
             self._print_time_event_label.setText("固定事件 --")
             return
@@ -4100,6 +4101,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f"总 {_format_print_duration(msg.planned_total_time_s)}"
             f" | 已用 {_format_print_duration(msg.planned_elapsed_time_s)}"
             f" | 剩余约 {_format_print_duration(msg.planned_remaining_time_s)}"
+            + (" | 等待事件完成" if msg.print_time_waiting_for_event else "")
         )
         if not msg.print_time_breakdown_valid:
             self._print_time_breakdown_label.setText(
@@ -4115,15 +4117,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
             f" | 剪切流程 {_format_print_duration(msg.planned_cut_time_s)}"
         )
         self._print_time_event_label.setText(
-            f"注入参数  剪切固件执行 {msg.cut_firmware_time_s:g}s × "
+            f"剪切固件全程 {msg.cut_firmware_time_s:g}s × "
             f"{int(msg.planned_cut_count)} = "
             f"{_format_print_duration(msg.planned_cut_firmware_time_s)}"
+            " | 扣除同期抬升后计划阻塞 "
+            f"{_format_print_duration(msg.planned_cut_blocking_wait_time_s)}"
+            f"（实际已用 {_format_print_duration(msg.planned_cut_blocking_elapsed_time_s)}）"
             f" | 换头 {msg.tool_change_fixed_time_s:g}s × "
             f"{int(msg.planned_tool_change_count)} = "
             f"{_format_print_duration(msg.planned_tool_change_time_s)}"
             f"（已用 "
             f"{_format_print_duration(msg.planned_tool_change_elapsed_time_s)}）"
-            " | 按约定忽略 加热/风扇/挤出复位 "
+            " | 风扇/挤出复位实际等待 "
+            f"{_format_print_duration(msg.planned_protocol_elapsed_time_s)}"
+            " | 加热另估 "
             f"{int(msg.planned_unquantified_event_count)} 次"
         )
 
@@ -4698,8 +4705,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_requested_target_tool = None
         self._print_test_resin_z_floor = None
         self._uart_log_history.clear()
-        self._diagnostic_log_history.clear()
-        self._append_diagnostic("ui", "diagnostic_reset", {"reason": "print_test_prepare"})
+        self._append_diagnostic("ui", "session_boundary", {"reason": "print_test_prepare"})
         self._uart_log_text.clear()
         self._uart_log_latest_display = ""
         self._uart_log_summary.setText("测试日志已清空")
@@ -6157,24 +6163,25 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._uart_log_text.appendPlainText(entry)
 
     def _on_export_diagnostic_log(self):
-        stamp = time.strftime("%Y%m%d_%H%M%S")
+        stamp = time.strftime("%Y%m%d_%H%M%S") + f"_{time.time_ns() % 1000000000:09d}"
         # Keep diagnostic exports separate from temporary NPZ/GCode runs.
         out_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")
         os.makedirs(out_dir, exist_ok=True)
-        path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl")
-        records = self._diagnostic_log_history or [
-            {
-                "time_epoch": time.time(),
-                "time": self._format_diagnostic_time(time.time()),
-                "source": "ui",
-                "kind": "empty",
-                "detail": {"message": "当前测试没有诊断日志"},
-            }
-        ]
-        with open(path, "w", encoding="utf-8") as f:
-            for record in records:
-                f.write(json.dumps(record, ensure_ascii=False, sort_keys=True))
-                f.write("\n")
+        path = os.path.join(out_dir, f"diagnostic_log_{stamp}.jsonl.gz")
+        if not self._diagnostic_log_history:
+            self._append_diagnostic("ui", "empty", {"message": "当前没有诊断日志"})
+        self._append_diagnostic("ui", "export_metadata", {
+            "schema_version": 2,
+            "timestamp_semantics": "UI callback observation, not device execution",
+            "retention": "full UI session; no sampling or capacity cutoff",
+            "encoding": "gzip JSONL; time derived from time_epoch; UART fields derived from line",
+            "records_before_export": self._diagnostic_log_history.record_count,
+        })
+        try:
+            self._diagnostic_log_history.export(path)
+        except OSError as exc:
+            self._set_print_test_status(f"诊断日志导出失败: {exc}", "#b71c1c")
+            return
         self._set_print_test_status(f"诊断日志已导出: {path}", "#1b6e3c")
 
     def _show_uart_log_detail(self):
