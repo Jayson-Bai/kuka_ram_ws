@@ -104,6 +104,10 @@ LAUNCH_PARAMS = [
     ("port", "/dev/ttyUSB0", "UART 串口设备路径", "UART 节点"),
     ("baudrate", "115200", "UART 波特率", "UART 节点"),
     ("extrude_scale", "1.0", "UART 挤出倍率因子", "UART 节点"),
+    ("dispatch_policy", "seq_bound",
+     "挤出派发策略 (seq_bound/uniform_feedforward)", "UART 节点"),
+    ("uniform_rate_mm_per_s", "10.0",
+     "uniform_feedforward 基线挤出速率 mm/s", "UART 节点"),
     ("ui_publish_period_ms", "100", "UI 状态发布周期（ms）", "系统管理器"),
     ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
@@ -3414,6 +3418,20 @@ class _UiStatusWidget(QtWidgets.QWidget):
         launch_status_row.addWidget(self._launch_status, 1)
         launch_inner.addLayout(launch_status_row)
 
+        baseline_row = QtWidgets.QHBoxLayout()
+        baseline_row.setSpacing(8)
+        self._uniform_baseline_check = QtWidgets.QCheckBox(
+            "基线模式：uniform_feedforward 均匀前馈派发（下次启动生效）")
+        self._uniform_baseline_check.setObjectName("chkUniformBaseline")
+        self._uniform_baseline_check.setToolTip(
+            "勾选后启动时以 uniform_feedforward 策略派发挤出："
+            "E 按心跳时间匀速累积、不再绑定 seq_used；"
+            "仅用于 §4.3 ablation 对照打印。"
+            "此参数为节点只读启动参数，打印途中不可切换。")
+        baseline_row.addWidget(self._uniform_baseline_check)
+        baseline_row.addStretch(1)
+        launch_inner.addLayout(baseline_row)
+
         self._export_box = export_box
         self._launch_box = launch_box
         self._print_test_box = print_test_box
@@ -6245,6 +6263,8 @@ class MyProjectUiPlugin(Plugin):
         )
         self._widget._btn_launch.clicked.connect(self._on_launch)
         self._widget._btn_stop_launch.clicked.connect(self._on_stop_launch)
+        self._widget._uniform_baseline_check.toggled.connect(
+            self._on_uniform_baseline_toggled)
 
         self._node.create_subscription(
             UiStatus, "/ui/status", self._on_status, 10
@@ -6575,6 +6595,17 @@ class MyProjectUiPlugin(Plugin):
 
     def _test_mode_bootstrap_npz_path(self):
         return self._launch_params.get("npz_path") or _DEFAULT_NPZ_PATH
+
+    def _on_uniform_baseline_toggled(self, checked):
+        policy = "uniform_feedforward" if checked else "seq_bound"
+        self._launch_params["dispatch_policy"] = policy
+        if checked:
+            self._launch_params.setdefault("uniform_rate_mm_per_s", "10.0")
+            self._widget._launch_status.setText(
+                "已选择基线模式 (uniform_feedforward)，下次启动生效。")
+        else:
+            self._widget._launch_status.setText(
+                "已恢复正常 seq_bound 派发。")
 
     def _on_launch(self):
         if (
