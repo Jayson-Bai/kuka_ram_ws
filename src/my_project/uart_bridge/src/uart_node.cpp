@@ -92,6 +92,20 @@ private:
   std::atomic<double> extrude_scale_{1.0};
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
+
+  // Uniform-feedforward baseline state (per extrusion tool).
+  // Active only when dispatch_policy == "uniform_feedforward"; the
+  // channel accumulates E strictly by elapsed heartbeat time so that
+  // residual-vs-seq_bound ablation can run on the same pipeline.
+  struct UniformChannel
+  {
+    bool initialised{false};
+    double e_abs{0.0};
+    rclcpp::Time last_stamp{0, 0, RCL_ROS_TIME};
+  };
+  std::array<UniformChannel, 3> uniform_channels_{};  // index by tool_id
+  std::string dispatch_policy_{"seq_bound"};
+  double uniform_rate_mm_per_s_{10.0};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
 
 public:
@@ -109,6 +123,30 @@ public:
     const auto extrusion_mode =
       uart_bridge::parse_extrusion_wire_mode(extrusion_wire_mode);
     extrusion_forwarder_ = std::make_unique<uart_bridge::ExtrusionForwarder>(extrusion_mode);
+    rcl_interfaces::msg::ParameterDescriptor dispatch_policy_descriptor;
+    dispatch_policy_descriptor.read_only = true;
+    dispatch_policy_ = declare_parameter<std::string>(
+      "dispatch_policy", "seq_bound", dispatch_policy_descriptor);
+    rcl_interfaces::msg::ParameterDescriptor uniform_rate_descriptor;
+    uniform_rate_descriptor.read_only = true;
+    uniform_rate_mm_per_s_ = declare_parameter<double>(
+      "uniform_rate_mm_per_s", 10.0, uniform_rate_descriptor);
+    if (dispatch_policy_ != "seq_bound" &&
+      dispatch_policy_ != "uniform_feedforward")
+    {
+      throw std::runtime_error(
+              "unsupported dispatch_policy: " + dispatch_policy_);
+    }
+    if (dispatch_policy_ == "uniform_feedforward" &&
+      !(uniform_rate_mm_per_s_ > 0.0))
+    {
+      throw std::runtime_error(
+              "uniform_rate_mm_per_s must be > 0 when "
+              "dispatch_policy=uniform_feedforward");
+    }
+    RCLCPP_INFO(
+      get_logger(), "UART dispatch policy: %s (rate %.3f mm/s)",
+      dispatch_policy_.c_str(), uniform_rate_mm_per_s_);
     RCLCPP_INFO(
       get_logger(), "UART extrusion wire mode: %s",
       uart_bridge::extrusion_wire_mode_name(extrusion_mode));
@@ -346,6 +384,9 @@ private:
   {
     std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
     extrusion_forwarder_->reset();
+    for (auto & ch : uniform_channels_) {
+      ch = UniformChannel{};
+    }
   }
 
   void on_heartbeat(const RsiHeartBeat & hb) //心跳触发挤出
@@ -356,7 +397,25 @@ private:
       return;
     }
     const double scale = extrude_scale_.load();
-    const double scaled = hb.extrude_abs * scale;
+    double e_for_line = hb.extrude_abs;
+    if (dispatch_policy_ == "uniform_feedforward") {
+      auto & ch = uniform_channels_[
+        (hb.tool_id >= 0 && hb.tool_id <= 2) ? hb.tool_id : 0];
+      if (!ch.initialised) {
+        ch.e_abs = hb.extrude_abs;
+        ch.last_stamp = rclcpp::Time(hb.stamp);
+        ch.initialised = true;
+      } else {
+        const double dt =
+          (rclcpp::Time(hb.stamp) - ch.last_stamp).seconds();
+        if (dt > 0.0) {
+          ch.e_abs += uniform_rate_mm_per_s_ * dt;
+          ch.last_stamp = rclcpp::Time(hb.stamp);
+        }
+      }
+      e_for_line = ch.e_abs;
+    }
+    const double scaled = e_for_line * scale;
     std::lock_guard<std::mutex> lk(extrude_forward_mutex_);
     const auto prepared = extrusion_forwarder_->prepare(hb.seq_used, hb.tool_id, scaled);
     if (

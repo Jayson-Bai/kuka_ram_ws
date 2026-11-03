@@ -34,7 +34,10 @@ def test_heartbeat_keeps_guards_and_commits_only_after_write_success():
     )
 
     assert "paused_.load() || aborted_.load() || has_pending_event()" in heartbeat
-    assert "hb.extrude_abs * scale" in heartbeat
+    assert (
+        "hb.extrude_abs * scale" in heartbeat
+        or "e_for_line * scale" in heartbeat
+    )
     assert "std::lock_guard<std::mutex> lk(extrude_forward_mutex_)" in heartbeat
     assert "extrusion_forwarder_->prepare" in heartbeat
     assert "write_line(candidate.line)" in heartbeat
@@ -130,12 +133,16 @@ def test_startup_launch_passes_extrusion_wire_mode_only_to_uart_node():
     assert "extrusion_wire_mode" not in rsi_node
     assert uart_node.count(uart_parameter) == 1
 
+    assert '"dispatch_policy": dispatch_policy,' in uart_node
+    assert '"uniform_rate_mm_per_s": uniform_rate_mm_per_s,' in uart_node
+
     extrude_to_abort_arguments = _between(
         source,
         '        DeclareLaunchArgument(\n            "extrude_scale",',
         '        DeclareLaunchArgument(\n            "abort_lift_mm",',
     )
-    assert extrude_to_abort_arguments.count("DeclareLaunchArgument(") == 1
+    # extrusion_wire_mode plus the two baseline-dispatch args
+    assert extrude_to_abort_arguments.count("DeclareLaunchArgument(") == 3
     assert re.search(
         r'DeclareLaunchArgument\(\s*"extrusion_wire_mode",\s*'
         r'default_value="canonical_v1",\s*'
@@ -159,3 +166,52 @@ def test_reset_path_delegates_to_pure_forwarder():
 
     assert "std::lock_guard<std::mutex> lk(extrude_forward_mutex_)" in reset
     assert "extrusion_forwarder_->reset()" in reset
+
+
+def test_reset_clears_uniform_channels_alongside_forwarder():
+    reset = _between(
+        _source(),
+        "void reset_extrude_forward_state()",
+        "void on_heartbeat",
+    )
+
+    assert "uniform_channels_" in reset
+    assert "UniformChannel{}" in reset
+
+
+def test_dispatch_policy_parameters_are_read_only_startups():
+    source = _source()
+
+    assert "dispatch_policy_descriptor.read_only = true" in source
+    assert "uniform_rate_descriptor.read_only = true" in source
+    assert re.search(
+        r'declare_parameter<std::string>\(\s*"dispatch_policy"'
+        r'\s*,\s*"seq_bound"',
+        source,
+    )
+    assert re.search(
+        r'declare_parameter<double>\(\s*"uniform_rate_mm_per_s"'
+        r'\s*,\s*10\.0',
+        source,
+    )
+    callback = _between(source, "add_on_set_parameters_callback(", "//订阅心跳包")
+    assert 'p.get_name() == "dispatch_policy"' not in callback
+    assert 'p.get_name() == "uniform_rate_mm_per_s"' not in callback
+
+
+def test_uniform_feedforward_branch_in_on_heartbeat():
+    heartbeat = _between(
+        _source(),
+        "void on_heartbeat(const RsiHeartBeat & hb)",
+        "void read_loop",
+    )
+
+    assert 'dispatch_policy_ == "uniform_feedforward"' in heartbeat
+    assert "uniform_channels_[" in heartbeat
+    assert "ch.e_abs += uniform_rate_mm_per_s_ * dt" in heartbeat
+    assert "ch.last_stamp = rclcpp::Time(hb.stamp)" in heartbeat
+    assert "e_for_line = ch.e_abs" in heartbeat
+
+    # seq_bound still passes hb.extrude_abs unchanged through e_for_line
+    assert "double e_for_line = hb.extrude_abs" in heartbeat
+    assert "e_for_line * scale" in heartbeat
