@@ -59,6 +59,8 @@ def generate_launch_description():
     baudrate = LaunchConfiguration("baudrate")
     extrude_scale = LaunchConfiguration("extrude_scale")
     extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")
+    dispatch_policy = LaunchConfiguration("dispatch_policy")
+    uniform_rate_mm_per_s = LaunchConfiguration("uniform_rate_mm_per_s")
 
     rsi_node = Node(
         package="rsi_server",
@@ -90,6 +92,8 @@ def generate_launch_description():
             "baudrate": baudrate,
             "extrude_scale": extrude_scale,
             "extrusion_wire_mode": extrusion_wire_mode,
+            "dispatch_policy": dispatch_policy,
+            "uniform_rate_mm_per_s": uniform_rate_mm_per_s,
         }],
     )
 
@@ -357,6 +361,16 @@ def generate_launch_description():
             "extrusion_wire_mode",
             default_value="canonical_v1",
             description="UART 挤出协议模式（canonical_v1/legacy_v1）。",
+        ),
+        DeclareLaunchArgument(
+            "dispatch_policy",
+            default_value="seq_bound",
+            description="挤出派发策略: seq_bound/uniform_feedforward，默认 seq_bound。",
+        ),
+        DeclareLaunchArgument(
+            "uniform_rate_mm_per_s",
+            default_value="10.0",
+            description="uniform_feedforward 基线的名义挤出速率 mm/s。",
         ),
         DeclareLaunchArgument(
             "abort_lift_mm",
