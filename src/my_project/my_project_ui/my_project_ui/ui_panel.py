@@ -40,6 +40,16 @@ _PRINT_TEST_FIBER_TOOL_ID = 1
 _PRINT_TEST_RESIN_TOOL_ID = 2
 _PRINT_JOB_FORMAT = "kuka_print_job_v1"
 _CONFORMAL_JOB_KIND = "conformal_honeycomb"
+_SOLID_EXPERIMENT_JOB_KIND = "solid_double_sine"
+# Task contracts the launcher may start: the production honeycomb job and the
+# rectangular solid double-sine experiment.  Both share the same surface-normal
+# XYZABC + calibrated-flat-reference compensation contract, so the launch gate
+# accepts either explicit job_kind.
+_SUPPORTED_JOB_KINDS = frozenset({_CONFORMAL_JOB_KIND, _SOLID_EXPERIMENT_JOB_KIND})
+_JOB_KIND_LABELS = {
+    _CONFORMAL_JOB_KIND: "曲面蜂窝（逐点曲面 XYZABC）",
+    _SOLID_EXPERIMENT_JOB_KIND: "双正弦实体实验（逐点曲面 XYZABC）",
+}
 
 
 def _ensure_default_data_dirs():
@@ -677,7 +687,6 @@ def _is_supported_print_job_metadata(manifest):
         return True
     expected = {
         "format": _PRINT_JOB_FORMAT,
-        "job_kind": _CONFORMAL_JOB_KIND,
         "pose_mode": "surface_normal_xyzabc",
         "abc_convention": "KUKA_AZ_BY_CX",
         "abc_semantics": "relative_to_calibrated_flat_printing_pose",
@@ -689,6 +698,8 @@ def _is_supported_print_job_metadata(manifest):
         "tool_change_safe_lift_frame": "world_z",
     }
     if any(manifest.get(name) != value for name, value in expected.items()):
+        return False
+    if manifest.get("job_kind") not in _SUPPORTED_JOB_KINDS:
         return False
     source_sha256 = manifest.get("source_surface_sha256")
     return bool(
@@ -6542,8 +6553,9 @@ class MyProjectUiPlugin(Plugin):
         except Exception:
             print_job_metadata = None
         if print_job_metadata is not None:
-            if print_job_metadata.get("job_kind") == _CONFORMAL_JOB_KIND:
-                lines.append("任务类型: 曲面蜂窝（逐点曲面 XYZABC）")
+            job_kind_label = _JOB_KIND_LABELS.get(print_job_metadata.get("job_kind"))
+            if job_kind_label is not None:
+                lines.append(f"任务类型: {job_kind_label}")
             else:
                 lines.append("任务类型: 未受支持的显式任务契约")
         if saved_offset is not None:
