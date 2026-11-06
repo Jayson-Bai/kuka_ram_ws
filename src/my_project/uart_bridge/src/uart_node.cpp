@@ -612,11 +612,10 @@ private:
         done = true;         // Fallback
       }
     } else if (ev.event_type == "extrude_reset") {
-      const bool stat_cleared =
-        snapshot.last_e_seq == -1 &&
-        std::abs(snapshot.last_e_abs) < 1e-9 &&
-        snapshot.last_e_us == 0;
-      done = stat_cleared;
+      // 固件用 EVDONE 握手表示复位完成。去重缓存跨会话保留,
+      // 重复打印同一 wire 序号时会跳过清零 last_e_seq,使其残留旧值;
+      // 因此以 EVDONE 判定完成,不再死等 last_e_seq==-1。
+      done = current_event_done_received_;
     } else if (ev.event_type == "extrude_sync") {
       // 剪切屏障：固件完成两次剪切后才允许回抽/travel。
       done = current_event_ack_received_ && current_event_done_received_ &&
