@@ -958,6 +958,40 @@ def _rebuild_cut(
     last_reset = resets[1]
     region_start = int(indices[0])
     region_end = int(indices[-1])
+    # Core emits a bare ``block_id == -1`` hold-dwell tail after the CUT block:
+    # the fiber head stays parked at the CUT high pose while the retract/travel
+    # delays finish, before the next tool change.  Those rows carry no block
+    # marker, so the global fiber compensation treats them as ordinary print
+    # moves and lands them back on the uncompensated surface.  Base files keep
+    # them level with ``cut_action``; the rebuild must do the same or a full
+    # lift-sized discontinuity appears at the block boundary.  Extend the
+    # rebuild region across that contiguous same-path, same-tool, non-event
+    # dwell so its rows are re-posed to ``high`` like the in-block tail.
+    cut_tool = int(arrays["tool_id"][event_index])
+    cut_path = int(arrays["path_id"][event_index])
+    extension_end = region_end + 1
+    while extension_end < len(arrays["seq"]):
+        i = extension_end
+        if (
+            int(arrays["core_injection_block_id"][i]) == -1
+            and int(arrays["event_flag"][i]) == 0
+            and int(arrays["tool_id"][i]) == cut_tool
+            and int(arrays["path_id"][i]) == cut_path
+        ):
+            extension_end += 1
+            continue
+        # Keep a contiguous reset/event anchor (still same path) inside the
+        # dwell, but stop at the first real row that leaves it.
+        if (
+            int(arrays["core_injection_block_id"][i]) == -1
+            and int(arrays["event_flag"][i]) != 0
+            and int(arrays["tool_id"][i]) == cut_tool
+            and int(arrays["path_id"][i]) == cut_path
+        ):
+            extension_end += 1
+            continue
+        break
+    region_end = extension_end - 1
     tail = [int(i) for i in old_indices if int(i) > last_reset]
     tail.extend(
         int(i) for i in range(region_start, region_end + 1)
@@ -1143,11 +1177,20 @@ def _rebuild_cut(
                 connector_inserted = True
             continue
         row = _row(arrays, index)
-        if int(row["event_flag"]) == 0 and int(row["core_injection_role"]) != anchor_code:
+        # The extended block_id == -1 dwell tail includes interleaved event
+        # anchors (extrude_reset).  They bypass the global fiber/resin
+        # compensation, so without an explicit re-pose they keep the base
+        # print-plane Z and reopen the discontinuity the dwell extension was
+        # meant to close.  Re-pose their XYZ to ``high`` while leaving the
+        # event semantics (flag/type/payload) untouched.
+        is_extended_dwell = int(row["core_injection_block_id"]) == -1
+        if int(row["core_injection_role"]) != anchor_code and (
+            int(row["event_flag"]) == 0 or is_extended_dwell
+        ):
             _set_pose(row, high)
         rows.append(row)
 
-    _replace(arrays, int(indices[0]), int(indices[-1]) + 1, rows)
+    _replace(arrays, int(indices[0]), region_end + 1, rows)
 
 
 
