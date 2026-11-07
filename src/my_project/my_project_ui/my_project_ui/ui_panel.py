@@ -1220,7 +1220,14 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_test_requested_target_tool = None
         self._print_test_resin_z_floor = None
         self._uart_log_history = deque(maxlen=2000)
-        self._diagnostic_log_history = DiagnosticLog()
+        # 实时落盘：每条诊断记录立即写入磁盘，不再依赖 export 按钮。
+        # 即使 GUI 中途崩溃，已有数据也已落盘。
+        import time as _t
+        _stamp = _t.strftime("%Y%m%d_%H%M%S") + "_%09d" % (_t.time_ns() % 1000000000,)
+        _live_dir = str(_DEFAULT_DATA_ROOT / "diagnostic_logs")
+        os.makedirs(_live_dir, exist_ok=True)
+        self._diagnostic_live_path = os.path.join(_live_dir, "live_%s.jsonl.gz" % _stamp)
+        self._diagnostic_log_history = DiagnosticLog(live_path=self._diagnostic_live_path)
         self._selected_npz_dir = None
         self._selected_npz_launch_path = None
         _ensure_default_data_dirs()
@@ -6157,13 +6164,10 @@ class _UiStatusWidget(QtWidgets.QWidget):
             return
         self._rsi_log_last_xml = xml_stripped
         display_text = _format_rsi_xml_for_display(xml_text)
+        # 仍保留 latest_display 与 detail 按钮，但不再每条 appendPlainText。
+        # RSI XML 日志 250Hz 重绘是 GUI 卡顿主因之一。
         self._rsi_log_latest_display = display_text
         self._btn_rsi_log_detail.setEnabled(True)
-        t = time.localtime()
-        ts = f"{t.tm_hour:02d}:{t.tm_min:02d}:{t.tm_sec:02d}"
-        self._rsi_log_summary.setText(f"最近 XML: {ts}")
-        self._rsi_log_text.appendPlainText(f"[{ts}] RSI sent XML")
-        self._rsi_log_text.appendPlainText(display_text)
 
     def _show_rsi_log_detail(self):
         dialog = _LogDetailDialog("RSI XML 放大查看", self._rsi_log_latest_display, self)
@@ -6185,11 +6189,13 @@ class _UiStatusWidget(QtWidgets.QWidget):
         if payload.startswith("EWARN"):
             return
         entry = f"[{ts}] {display_text}"
+        # 仍保留历史 deque（"放大查看" 弹窗数据源）和 latest_display，
+        # 但不再触发 400Hz 的 QPlainTextEdit append/repaint。
         self._uart_log_history.append(entry)
         self._uart_log_latest_display = display_text
         self._btn_uart_log_detail.setEnabled(True)
-        self._uart_log_summary.setText(f"最近日志: {ts}")
-        self._uart_log_text.appendPlainText(entry)
+        # 关闭实时刷屏：summary 与 text 控件不再每条更新。
+        # 用户仍可点击"放大查看"看完整历史。
 
     def _on_export_diagnostic_log(self):
         stamp = time.strftime("%Y%m%d_%H%M%S") + f"_{time.time_ns() % 1000000000:09d}"
