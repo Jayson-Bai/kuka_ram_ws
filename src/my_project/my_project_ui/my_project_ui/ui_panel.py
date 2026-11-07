@@ -6286,8 +6286,10 @@ class MyProjectUiPlugin(Plugin):
         self._node.create_subscription(
             StringMsg, "/rsi/sent_xml", self._on_rsi_xml, 10
         )
+        # /uart/raw 单条 50ms 内可达 ~16 条（STAT+ESTAT+USTAT 15Hz + TX E 250Hz + EACK 50Hz），
+        # 原深度 10 会把 ESTAT 等关键帧挤掉；放大到 2000 保证一个 drain tick 内的所有突发都能入队。
         self._node.create_subscription(
-            StringMsg, "/uart/raw", self._on_uart_log_msg, 10
+            StringMsg, "/uart/raw", self._on_uart_log_msg, 2000
         )
         self._node.create_subscription(
             TrajectoryPoint, "/rsi/current_correction", self._on_current_correction, 10
@@ -6388,8 +6390,14 @@ class MyProjectUiPlugin(Plugin):
             if self._spin_timer.isActive():
                 self._spin_timer.stop()
             return
+        # 原实现每 50ms 只处理 1 个回调，多订阅情况下 UART/RSI 高频流会被压掉 99%+。
+        # 改成带预算的 drain：最多 256 次或 5ms（占 50ms tick 的 10%），不影响 Qt 事件循环。
+        deadline = time.perf_counter() + 0.005
         try:
-            rclpy.spin_once(self._node, timeout_sec=0.0)
+            for _ in range(256):
+                rclpy.spin_once(self._node, timeout_sec=0.0)
+                if time.perf_counter() >= deadline:
+                    break
         except Exception:
             if self._spin_timer.isActive():
                 self._spin_timer.stop()
