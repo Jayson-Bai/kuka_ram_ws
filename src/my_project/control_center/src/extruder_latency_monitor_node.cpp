@@ -24,6 +24,7 @@
 #include <optional>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -409,10 +410,15 @@ private:
 
   void on_uart_raw(const std::string & line)
   {
-    if (line.rfind("EACK ", 0) == 0) {
-      handle_eack(line);
-    } else if (line.rfind("EWARN ", 0) == 0) {
-      handle_ewarn(line);
+    // /uart/raw 载荷带 "RX "/"TX " 方向前缀，先剥掉再匹配标签
+    std::string_view sv(line);
+    if (sv.size() > 3 && (sv.substr(0, 3) == "RX " || sv.substr(0, 3) == "TX ")) {
+      sv.remove_prefix(3);
+    }
+    if (sv.rfind("EACK ", 0) == 0) {
+      handle_eack(std::string(sv));
+    } else if (sv.rfind("EWARN ", 0) == 0) {
+      handle_ewarn(std::string(sv));
     }
   }
 
