@@ -12,6 +12,7 @@ add_library(runtime_logging_core STATIC
   src/bounded_ring.cpp
   src/whitelist.cpp
   src/ipc_client.cpp
+  src/rsi_parser.cpp
 )
 target_include_directories(runtime_logging_core PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -36,6 +37,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_whitelist runtime_logging_core)
   ament_add_gtest(test_record_codec test/test_record_codec.cpp)
   target_link_libraries(test_record_codec runtime_logging_core)
+  ament_add_gtest(test_rsi_parser test/test_rsi_parser.cpp)
+  target_link_libraries(test_rsi_parser runtime_logging_core)
 endif()
 
 ament_package()

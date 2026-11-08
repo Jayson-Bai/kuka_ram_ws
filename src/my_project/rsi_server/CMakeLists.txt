@@ -10,8 +10,11 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(my_project_interfaces REQUIRED)
+find_package(runtime_logging_core REQUIRED)
 
-add_executable(rsi_node src/rsi_node.cpp)
+add_executable(rsi_node
+  src/rsi_node.cpp
+)
 target_compile_features(rsi_node PUBLIC cxx_std_17)
 target_include_directories(rsi_node PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -22,6 +25,7 @@ ament_target_dependencies(
   rclcpp
   std_msgs
   my_project_interfaces
+  runtime_logging_core
 )
 
 install(TARGETS rsi_node

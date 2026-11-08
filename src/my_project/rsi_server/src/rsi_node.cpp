@@ -21,18 +21,32 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <errno.h>
+#include <poll.h>
+#include <sys/uio.h>
+#include <time.h>
 //并发/容器
 #include <atomic>
 #include <cmath>
 #include <cctype>
+#include <cstring>
 #include <limits>
 #include <mutex>
+#include <random>
 #include <regex>
 #include <string>
 #include <thread>
 #include <optional>
 #include <deque>
+#include <sstream>
 #include <unordered_set>
+
+//runtime logging 旁路（UART 同管线）
+#include <runtime_logging_core/bounded_ring.hpp>
+#include <runtime_logging_core/capture_record.hpp>
+#include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/rsi_telemetry.hpp>
+#include <runtime_logging_core/whitelist.hpp>
 
 
 //自定义消息接口
@@ -41,6 +55,19 @@ using my_project_interfaces::msg::PlannedEvent; //打印事件
 using my_project_interfaces::msg::PrintHeadStatus; //打印头状态
 using my_project_interfaces::msg::RsiHeartBeat; //RSI心跳
 using my_project_interfaces::msg::KukaStatus; //KUKA状态
+
+namespace
+{
+
+std::string make_producer_epoch()
+{
+  std::random_device rd;
+  std::ostringstream os;
+  os << std::hex << rd() << rd();
+  return os.str();
+}
+
+}  // namespace
 
 
 class RSINode : public rclcpp::Node
@@ -126,6 +153,22 @@ private:
   bool fast_first_reply_{true};
   bool first_udp_reply_sent_{false};
 
+  // ---- RSI telemetry (side-channel logging, mirrors uart_node) ----
+  bool runtime_log_enabled_{false};
+  std::string runtime_log_socket_;
+  std::string run_id_;
+  std::string producer_id_{"rsi_node"};
+  std::string producer_epoch_;
+  uint64_t rsi_rx_index_{0};
+  std::atomic<uint64_t> rsi_record_seq_{0};
+  std::atomic<bool> rsi_relay_running_{false};
+  std::thread rsi_relay_thread_;
+  std::unique_ptr<runtime_logging::RsiTelemetryRing> rsi_ring_;
+  std::atomic<uint64_t> rsi_dropped_{0};
+  runtime_logging::IpcClient rsi_ipc_;
+  std::mutex rsi_ipc_mutex_;
+  std::atomic<uint64_t> rsi_records_sent_{0};
+
 public:
   RSINode()
   : Node("rsi_node")
@@ -141,6 +184,29 @@ public:
     pause_retract_mm_ = declare_parameter<double>("pause_retract_mm", 2.0);
     pause_retract_speed_mm_s_ = declare_parameter<double>("pause_retract_speed_mm_s", 2.0);
     fast_first_reply_ = declare_parameter<bool>("fast_first_reply", true);  //仅首个KUKA包快速回包，不推进挤出链路
+
+    // ---- RSI telemetry parameters ----
+    runtime_log_enabled_ = declare_parameter<bool>("runtime_log_enabled", true);
+    run_id_ = declare_parameter<std::string>("run_id", "");
+    producer_epoch_ = make_producer_epoch();
+    runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    const auto ring_capacity = declare_parameter<int>(
+      "runtime_log_ring_capacity", 8192);
+    rsi_ring_ = std::make_unique<runtime_logging::RsiTelemetryRing>(
+      static_cast<size_t>(ring_capacity));
+    if (run_id_.empty()) {
+      run_id_ = "rsi_" + producer_epoch_;
+    }
+    if (runtime_log_socket_.empty()) {
+      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+    }
+    if (runtime_log_enabled_) {
+      rsi_relay_running_.store(true);
+      rsi_relay_thread_ = std::thread(&RSINode::rsi_relay_loop, this);
+      RCLCPP_INFO(
+        get_logger(), "RSI telemetry logging enabled, socket=%s",
+        runtime_log_socket_.c_str());
+    }
 
     // 计算每帧(4ms)的Z轴抬升步长
     constexpr double RSI_PERIOD_S = 0.004; // 4ms
@@ -255,6 +321,12 @@ public:
     run_udp_.store(false);
     if (sockfd_ >= 0) {close(sockfd_);}
     if (udp_thread_.joinable()) {udp_thread_.join();}
+    if (rsi_relay_running_.load()) {
+      rsi_relay_running_.store(false);
+      if (rsi_relay_thread_.joinable()) {rsi_relay_thread_.join();}
+      std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+      rsi_ipc_.close();
+    }
   }
 
 private:
@@ -266,22 +338,48 @@ private:
     socklen_t remote_len = sizeof(remote);
 
     while (rclcpp::ok() && run_udp_.load()) { //循环条件：ROS运行且run_udp_ = true
-      // 阻塞接收UDP
-      ssize_t n = recvfrom(
-        sockfd_, buf, BUF_SIZE - 1, 0, reinterpret_cast<sockaddr *>(&remote),
-        &remote_len);
+      // 阻塞接收UDP；用 recvmsg 显式识别 MSG_TRUNC
+      iovec iov{};
+      iov.iov_base = buf;
+      iov.iov_len = BUF_SIZE - 1;
+      msghdr mh{};
+      mh.msg_name = &remote;
+      mh.msg_namelen = remote_len;
+      mh.msg_iov = &iov;
+      mh.msg_iovlen = 1;
 
+      const ssize_t n = recvmsg(sockfd_, &mh, 0);
       if (n <= 0) {continue;}
+      remote_len = mh.msg_namelen;
       buf[n] = '\0';
       std::string recv_str(buf); //数据转字符串
+
+      runtime_logging::RsiTelemetryFrame frame;
+      const bool have_frame = runtime_log_enabled_;
+      if (have_frame) {
+        frame.rx_index = ++rsi_rx_index_;
+        frame.rx_mono_ns = runtime_logging::clock_monotonic_ns();
+        frame.rx_len = static_cast<uint32_t>(n);
+        frame.rx_truncated = (mh.msg_flags & MSG_TRUNC) != 0;
+        std::memcpy(
+          frame.rx.data(), buf,
+          std::min<size_t>(n, frame.rx.size()));
+      }
 
       if (fast_first_reply_ && !first_udp_reply_sent_) {
         std::string ipoc = extract_ipoc(recv_str);
         TrajectoryPoint to_send = *last_sent_;
         std::string reply = build_reply(ipoc, to_send);
-        sendto(
-          sockfd_, reply.c_str(),
-          reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
+        if (have_frame) {
+          frame.startup_fast_reply = true;
+          frame.state = static_cast<uint8_t>(state_.load());
+          fill_frame_cmd(frame, to_send, false);
+          std::strncpy(
+            frame.ipoc_raw, ipoc.c_str(),
+            runtime_logging::RsiTelemetryFrame::kMaxIpocLen);
+          frame.ipoc_valid = !ipoc.empty() && ipoc != "0";
+        }
+        send_rsi(reply, remote, remote_len, have_frame ? &frame : nullptr);
         first_udp_reply_sent_ = true;
         continue;
       }
@@ -311,6 +409,9 @@ private:
 
       //********默认发送上一帧********
       TrajectoryPoint to_send = *last_sent_;
+
+      // Record whether trajectory advances this cycle for seq_valid.
+      const uint32_t next_seq_before = next_seq_;
 
       // 读取当前状态（atomic）
       State current_state = state_.load();
@@ -461,9 +562,15 @@ private:
           heartbeat_pub_->publish(hb);
 
           std::string reply = build_reply(ipoc, to_send);
-          sendto(
-            sockfd_, reply.c_str(),
-            reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
+          if (have_frame) {
+            frame.state = static_cast<uint8_t>(State::ABORT);
+            fill_frame_cmd(frame, to_send, false);
+            std::strncpy(
+              frame.ipoc_raw, ipoc.c_str(),
+              runtime_logging::RsiTelemetryFrame::kMaxIpocLen);
+            frame.ipoc_valid = !ipoc.empty() && ipoc != "0";
+          }
+          send_rsi(reply, remote, remote_len, have_frame ? &frame : nullptr);
 
           run_udp_.store(false); // 退出UDP循环 → KUKA通信中断 → 安全制动
           continue;
@@ -487,11 +594,111 @@ private:
         sent_msg.data = reply;
         sent_xml_pub_->publish(sent_msg);
       }
-      sendto(
-        sockfd_, reply.c_str(),
-        reply.size(), 0, reinterpret_cast<sockaddr *>(&remote), remote_len);
+      if (have_frame) {
+        frame.state = static_cast<uint8_t>(state_.load());
+        fill_frame_cmd(frame, to_send, next_seq_ != next_seq_before);
+        std::strncpy(
+          frame.ipoc_raw, ipoc.c_str(),
+          runtime_logging::RsiTelemetryFrame::kMaxIpocLen);
+        frame.ipoc_valid = !ipoc.empty() && ipoc != "0";
+      }
+      send_rsi(reply, remote, remote_len, have_frame ? &frame : nullptr);
 
     }
+  }
+
+  // sendto + telemetry capture: never blocks on the logging ring.
+  void send_rsi(
+    const std::string & reply,
+    const sockaddr_in & remote, socklen_t remote_len,
+    runtime_logging::RsiTelemetryFrame * frame)
+  {
+    errno = 0;
+    const ssize_t sent = sendto(
+      sockfd_, reply.c_str(), reply.size(), 0,
+      reinterpret_cast<const sockaddr *>(&remote), remote_len);
+    if (!frame) {
+      return;
+    }
+    frame->tx_mono_ns = runtime_logging::clock_monotonic_ns();
+    frame->send_errno = sent < 0 ? errno : 0;
+    frame->send_ok = sent == static_cast<ssize_t>(reply.size());
+    frame->tx_len = sent > 0 ? static_cast<uint32_t>(sent) : 0;
+    std::memcpy(
+      frame->tx.data(), reply.c_str(),
+      std::min(reply.size(), frame->tx.size()));
+    if (!rsi_ring_->try_push(std::move(*frame))) {
+      rsi_dropped_.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+
+  void fill_frame_cmd(
+    runtime_logging::RsiTelemetryFrame & f,
+    const TrajectoryPoint & tp,
+    bool seq_valid)
+  {
+    f.seq_used = tp.seq;
+    f.seq_valid = seq_valid;
+    f.path_id = tp.path_id;
+    f.tool_id = tp.tool_id;
+    f.cmd_x = tp.x;
+    f.cmd_y = tp.y;
+    f.cmd_z = tp.z;
+    f.cmd_a = tp.a;
+    f.cmd_b = tp.b;
+    f.cmd_c = tp.c;
+    f.cmd_e = tp.e;
+  }
+
+  // Relay thread: pop frames -> parse -> encode -> IPC. Never touches UDP.
+  void rsi_relay_loop()
+  {
+    auto next_connect = std::chrono::steady_clock::now();
+    while (rsi_relay_running_.load()) {
+      bool did_work = false;
+      while (auto item = rsi_ring_->try_pop()) {
+        did_work = true;
+        process_rsi_frame(*item);
+      }
+      {
+        std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+        if (!rsi_ipc_.connected()) {
+          if (std::chrono::steady_clock::now() >= next_connect) {
+            if (rsi_ipc_.connect_to(runtime_log_socket_)) {
+              RCLCPP_INFO(
+                get_logger(), "RSI telemetry IPC connected: %s",
+                runtime_log_socket_.c_str());
+            }
+            next_connect = std::chrono::steady_clock::now() +
+              std::chrono::milliseconds(500);
+          }
+        }
+        if (rsi_ipc_.connected()) {
+          rsi_ipc_.drain();
+        }
+      }
+      if (!did_work) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+    }
+    // Drain remaining frames on shutdown.
+    while (auto item = rsi_ring_->try_pop()) {
+      process_rsi_frame(*item);
+    }
+    std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+    rsi_ipc_.drain();
+  }
+
+  void process_rsi_frame(const runtime_logging::RsiTelemetryFrame & frame)
+  {
+    const auto rec = runtime_logging::project_rsi_frame(
+      frame, rsi_record_seq_.load());
+    ++rsi_record_seq_;
+    const std::string json = runtime_logging::encode_record_json(
+      rec, run_id_, producer_id_, 1);
+    std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+    rsi_ipc_.queue_message(json);
+    ++rsi_records_sent_;
   }
 
   std::optional<TrajectoryPoint> pop_next_traj()

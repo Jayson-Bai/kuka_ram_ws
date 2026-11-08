@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "capture_record.hpp"
+#include "rsi_telemetry.hpp"
 
 namespace runtime_logging
 {
@@ -20,6 +21,7 @@ enum class RecordKind : uint8_t
   kLatency = 3,
   kEvent = 4,
   kETx = 5,
+  kRsi = 6,
 };
 
 const char * record_kind_name(RecordKind kind);
@@ -67,6 +69,15 @@ public:
 private:
   static const std::map<std::string, bool> & allowed(RecordKind kind);
 };
+
+/*
+ * Project one captured RSI cycle into a single whitelisted record.
+ * XML parsing happens here, on the consumer side; the UDP thread
+ * only copies the fixed-size frame.
+ */
+WhitelistedRecord project_rsi_frame(
+  const RsiTelemetryFrame & frame,
+  uint64_t record_seq);
 
 /* Encode one record as a single JSON line (no trailing newline). */
 std::string encode_record_json(

@@ -2,7 +2,10 @@
 
 #include <cctype>
 #include <cstdio>
+#include <cstring>
 #include <sstream>
+
+#include "runtime_logging_core/rsi_parser.hpp"
 
 namespace runtime_logging
 {
@@ -71,6 +74,62 @@ const std::map<std::string, bool> & etx_keys()
 {
   static const std::map<std::string, bool> keys = {
     {"last_extrude_abs", true},
+  };
+  return keys;
+}
+
+const std::map<std::string, bool> & rsi_keys()
+{
+  static const std::map<std::string, bool> keys = {
+    {"rx_index", true},
+    {"rx_mono_ns", true},
+    {"tx_mono_ns", true},
+    {"rx_bytes", true},
+    {"tx_bytes", true},
+    {"rx_truncated", true},
+    {"send_ok", true},
+    {"send_errno", true},
+    {"startup_fast_reply", true},
+    {"state", true},
+    {"seq_used", true},
+    {"seq_valid", true},
+    {"path_id", true},
+    {"tool_id", true},
+    {"cmd_x", true},
+    {"cmd_y", true},
+    {"cmd_z", true},
+    {"cmd_a", true},
+    {"cmd_b", true},
+    {"cmd_c", true},
+    {"cmd_e", true},
+    {"ipoc_raw", true},
+    {"ipoc_valid", true},
+    {"pos_valid", true},
+    {"pos_x", true},
+    {"pos_y", true},
+    {"pos_z", true},
+    {"pos_a", true},
+    {"pos_b", true},
+    {"pos_c", true},
+    {"pos_s", true},
+    {"pos_t", true},
+    {"aipos_valid", true},
+    {"a1_deg", true},
+    {"a2_deg", true},
+    {"a3_deg", true},
+    {"a4_deg", true},
+    {"a5_deg", true},
+    {"a6_deg", true},
+    {"aspos_valid", true},
+    {"s1_deg", true},
+    {"s2_deg", true},
+    {"s3_deg", true},
+    {"s4_deg", true},
+    {"s5_deg", true},
+    {"s6_deg", true},
+    {"delay_valid", true},
+    {"delay_count", true},
+    {"parse_flags", true},
   };
   return keys;
 }
@@ -215,6 +274,7 @@ const char * record_kind_name(RecordKind kind)
     case RecordKind::kLatency: return "latency";
     case RecordKind::kEvent: return "event";
     case RecordKind::kETx: return "e_tx";
+    case RecordKind::kRsi: return "rsi";
   }
   return "unknown";
 }
@@ -228,6 +288,7 @@ const std::map<std::string, bool> & Whitelist::allowed(RecordKind kind)
     case RecordKind::kLatency: return latency_keys();
     case RecordKind::kEvent: return event_keys();
     case RecordKind::kETx: return etx_keys();
+    case RecordKind::kRsi: return rsi_keys();
   }
   return hot_keys();
 }
@@ -361,6 +422,135 @@ std::vector<WhitelistedRecord> Whitelist::project(
       break;
   }
   return out;
+}
+
+namespace
+{
+
+void f_u64(WhitelistedRecord & r, const char * k, uint64_t v)
+{
+  r.fields.emplace_back(k, std::to_string(v));
+}
+
+void f_i64(WhitelistedRecord & r, const char * k, int64_t v)
+{
+  r.fields.emplace_back(k, std::to_string(v));
+}
+
+void f_bool(WhitelistedRecord & r, const char * k, bool v)
+{
+  r.fields.emplace_back(k, v ? "1" : "0");
+}
+
+void f_str(WhitelistedRecord & r, const char * k, const std::string & v)
+{
+  r.fields.emplace_back(k, v);
+}
+
+void f_dbl(WhitelistedRecord & r, const char * k, double v)
+{
+  char buf[32];
+  std::snprintf(buf, sizeof(buf), "%.17g", v);
+  r.fields.emplace_back(k, buf);
+}
+
+void f_dbl_opt(WhitelistedRecord & r, const char * k, bool valid, double v)
+{
+  if (!valid) {
+    r.fields.emplace_back(k, "");
+    return;
+  }
+  f_dbl(r, k, v);
+}
+
+}  // namespace
+
+WhitelistedRecord project_rsi_frame(
+  const RsiTelemetryFrame & frame,
+  uint64_t record_seq)
+{
+  WhitelistedRecord rec;
+  rec.kind = RecordKind::kRsi;
+  rec.record_seq = record_seq;
+  rec.capture_seq = frame.rx_index;
+  rec.host_mono_ns = frame.rx_mono_ns;
+  rec.tx_ok = frame.send_ok;
+  rec.bytes_written = frame.tx_len;
+
+  const RsiFeedbackView fb =
+    parse_rsi_feedback(frame.rx.data(), frame.rx_len);
+
+  f_u64(rec, "rx_index", frame.rx_index);
+  f_i64(rec, "rx_mono_ns", frame.rx_mono_ns);
+  f_i64(rec, "tx_mono_ns", frame.tx_mono_ns);
+  f_u64(rec, "rx_bytes", frame.rx_len);
+  f_u64(rec, "tx_bytes", frame.tx_len);
+  f_bool(rec, "rx_truncated", frame.rx_truncated);
+  f_bool(rec, "send_ok", frame.send_ok);
+  f_i64(rec, "send_errno", frame.send_errno);
+  f_bool(rec, "startup_fast_reply", frame.startup_fast_reply);
+  f_u64(rec, "state", frame.state);
+
+  f_u64(rec, "seq_used", frame.seq_used);
+  f_bool(rec, "seq_valid", frame.seq_valid);
+  f_u64(rec, "path_id", frame.path_id);
+  f_i64(rec, "tool_id", frame.tool_id);
+  f_dbl(rec, "cmd_x", frame.cmd_x);
+  f_dbl(rec, "cmd_y", frame.cmd_y);
+  f_dbl(rec, "cmd_z", frame.cmd_z);
+  f_dbl(rec, "cmd_a", frame.cmd_a);
+  f_dbl(rec, "cmd_b", frame.cmd_b);
+  f_dbl(rec, "cmd_c", frame.cmd_c);
+  f_dbl(rec, "cmd_e", frame.cmd_e);
+
+  f_str(rec, "ipoc_raw", fb.ipoc_raw);
+  f_bool(rec, "ipoc_valid", fb.ipoc_valid);
+
+  f_bool(rec, "pos_valid", fb.pos_valid);
+  f_dbl_opt(rec, "pos_x", fb.pos_valid, fb.pos[0]);
+  f_dbl_opt(rec, "pos_y", fb.pos_valid, fb.pos[1]);
+  f_dbl_opt(rec, "pos_z", fb.pos_valid, fb.pos[2]);
+  f_dbl_opt(rec, "pos_a", fb.pos_valid, fb.pos[3]);
+  f_dbl_opt(rec, "pos_b", fb.pos_valid, fb.pos[4]);
+  f_dbl_opt(rec, "pos_c", fb.pos_valid, fb.pos[5]);
+  f_i64(rec, "pos_s", fb.pos_s);
+  f_i64(rec, "pos_t", fb.pos_t);
+
+  f_bool(rec, "aipos_valid", fb.aipos_valid);
+  f_dbl_opt(rec, "a1_deg", fb.aipos_valid, fb.aipos[0]);
+  f_dbl_opt(rec, "a2_deg", fb.aipos_valid, fb.aipos[1]);
+  f_dbl_opt(rec, "a3_deg", fb.aipos_valid, fb.aipos[2]);
+  f_dbl_opt(rec, "a4_deg", fb.aipos_valid, fb.aipos[3]);
+  f_dbl_opt(rec, "a5_deg", fb.aipos_valid, fb.aipos[4]);
+  f_dbl_opt(rec, "a6_deg", fb.aipos_valid, fb.aipos[5]);
+
+  f_bool(rec, "aspos_valid", fb.aspos_valid);
+  f_dbl_opt(rec, "s1_deg", fb.aspos_valid, fb.aspos[0]);
+  f_dbl_opt(rec, "s2_deg", fb.aspos_valid, fb.aspos[1]);
+  f_dbl_opt(rec, "s3_deg", fb.aspos_valid, fb.aspos[2]);
+  f_dbl_opt(rec, "s4_deg", fb.aspos_valid, fb.aspos[3]);
+  f_dbl_opt(rec, "s5_deg", fb.aspos_valid, fb.aspos[4]);
+  f_dbl_opt(rec, "s6_deg", fb.aspos_valid, fb.aspos[5]);
+
+  f_bool(rec, "delay_valid", fb.delay_valid);
+  if (fb.delay_valid) {
+    f_i64(rec, "delay_count", fb.delay_count);
+  } else {
+    rec.fields.emplace_back("delay_count", "");
+  }
+
+  uint32_t flags = fb.parse_flags;
+  if (frame.rx_truncated) {
+    flags |= kFlagTruncatedRx;
+  }
+  f_u64(rec, "parse_flags", flags);
+
+  if (rec.fields.size() != rsi_keys().size()) {
+    rec.valid = false;
+    rec.invalid_reason = "incomplete rsi fields";
+  }
+
+  return rec;
 }
 
 std::string encode_record_json(

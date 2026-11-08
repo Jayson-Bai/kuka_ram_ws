@@ -90,6 +90,9 @@ def generate_launch_description():
             "pause_retract_mm": pause_retract_mm,
             "pause_retract_speed_mm_s": pause_retract_speed_mm_s,
             "fast_first_reply": fast_first_reply,
+            "run_id": run_id,
+            "runtime_log_enabled": runtime_log_enabled,
+            "runtime_log_socket": runtime_log_socket,
         }],
     )
 

@@ -13,6 +13,7 @@
   <depend>std_msgs</depend>
   <!-- <depend>kuka_external_control_sdk</depend> -->
   <depend>my_project_interfaces</depend>
+  <depend>runtime_logging_core</depend>
   
 
   <test_depend>ament_lint_auto</test_depend>
