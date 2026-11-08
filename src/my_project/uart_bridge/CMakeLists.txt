@@ -11,6 +11,7 @@ find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(my_project_interfaces REQUIRED)
 find_package(Boost REQUIRED COMPONENTS system)
+find_package(runtime_logging_core REQUIRED)
 
 add_library(uart_extrusion_wire STATIC src/extrusion_wire.cpp)
 target_include_directories(uart_extrusion_wire PUBLIC include)
@@ -23,6 +24,7 @@ ament_target_dependencies(
   rclcpp
   std_msgs
   my_project_interfaces
+  runtime_logging_core
 )
 target_link_libraries(uart_node uart_extrusion_wire Boost::system)
 

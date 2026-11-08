@@ -11,6 +11,7 @@
 
   <depend>launch</depend>
   <depend>launch_ros</depend>
+  <exec_depend>runtime_logger</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

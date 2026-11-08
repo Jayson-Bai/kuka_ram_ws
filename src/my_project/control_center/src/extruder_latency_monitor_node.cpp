@@ -2,6 +2,9 @@
 // 描述：
 // 监控机械臂 RSI 心跳与固件挤出 EACK/STAT 的相对延迟。
 // 该节点只订阅和发布监控信息，不参与控制闭环。
+//
+// 正式运行日志输出：白名单 latency 记录经 AF_UNIX IPC 发送给
+// runtime_logger；ROS 端的 300ms 快照只服务 UI 聚合。
 // =============================================================
 
 #include <rclcpp/rclcpp.hpp>
@@ -11,6 +14,11 @@
 #include <my_project_interfaces/msg/print_head_status.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/trajectory_point.hpp>
+#include <my_project_interfaces/msg/uart_observation.hpp>
+
+#include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/whitelist.hpp>
+#include <runtime_logging_core/capture_record.hpp>
 
 #include <std_msgs/msg/string.hpp>
 
@@ -22,6 +30,7 @@
 #include <limits>
 #include <mutex>
 #include <optional>
+#include <random>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -33,6 +42,7 @@ using my_project_interfaces::msg::KukaStatus;
 using my_project_interfaces::msg::PrintHeadStatus;
 using my_project_interfaces::msg::RsiHeartBeat;
 using my_project_interfaces::msg::TrajectoryPoint;
+using my_project_interfaces::msg::UartObservation;
 
 class ExtruderLatencyMonitorNode : public rclcpp::Node
 {
@@ -41,7 +51,7 @@ public:
   : Node("extruder_latency_monitor_node")
   {
     rsi_period_ms_ = declare_parameter<double>("rsi_period_ms", 4.0);
-    publish_period_ms_ = declare_parameter<int>("latency_publish_period_ms", 200);
+    publish_period_ms_ = declare_parameter<int>("latency_publish_period_ms", 300);
     history_limit_ = declare_parameter<int>("latency_history_limit", 5000);
     robot_cache_back_ = declare_parameter<int>("robot_match_cache_back", 8000);
     robot_cache_forward_ = declare_parameter<int>("robot_match_cache_forward", 1000);
@@ -55,6 +65,19 @@ public:
     nozzle_lever_mm_ = declare_parameter<double>("robot_match_nozzle_lever_mm", 100.0);
     stats_window_limit_ = declare_parameter<int>("latency_stats_window_limit", 5000);
 
+    // ---- runtime logging ----
+    runtime_log_enabled_ = declare_parameter<bool>("runtime_log_enabled", true);
+    run_id_ = declare_parameter<std::string>("run_id", "");
+    runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    producer_id_ = "latency_node";
+    producer_epoch_ = make_epoch();
+    if (run_id_.empty()) {
+      run_id_ = "latency_" + producer_epoch_;
+    }
+    if (runtime_log_socket_.empty()) {
+      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+    }
+
     status_pub_ = create_publisher<ExtruderLatencyStatus>("/extruder/latency_status", 10);
     text_pub_ = create_publisher<std_msgs::msg::String>("/extruder/latency_text", 10);
 
@@ -65,11 +88,18 @@ public:
         on_heartbeat(*msg);
       });
 
+    // Prefer the timestamped observation topic; legacy raw stays as compat.
+    const auto obs_qos = rclcpp::QoS(512).reliable();
+    observation_sub_ = create_subscription<UartObservation>(
+      "/uart/observation", obs_qos,
+      [this](UartObservation::SharedPtr msg) {
+        on_uart_observation(*msg);
+      });
     uart_raw_sub_ = create_subscription<std_msgs::msg::String>(
       "/uart/raw",
       rclcpp::QoS(2000).reliable(),
       [this](std_msgs::msg::String::SharedPtr msg) {
-        on_uart_raw(msg->data);
+        on_uart_raw_compat(msg->data);
       });
 
     printhead_sub_ = create_subscription<PrintHeadStatus>(
@@ -110,6 +140,9 @@ private:
     double extrude_abs{0.0};
     uint64_t mcu_us{0};
     double delay_ms{std::numeric_limits<double>::quiet_NaN()};
+    int64_t host_rx_mono_ns{0};
+    bool valid{false};
+    rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
   };
 
   struct StatInfo
@@ -118,7 +151,9 @@ private:
     int32_t last_e_tool{0};
     double last_e_abs{0.0};
     uint64_t last_e_us{0};
+    int64_t host_rx_mono_ns{0};
     bool valid{false};
+    rclcpp::Time stamp{0, 0, RCL_ROS_TIME};
   };
 
   struct PlannedPose
@@ -148,69 +183,53 @@ private:
   {
     void add(double value, size_t limit)
     {
-      if (!std::isfinite(value)) {
-        return;
-      }
+      if (!std::isfinite(value)) {return;}
       samples.push_back(value);
-      while (samples.size() > limit) {
-        samples.pop_front();
-      }
+      while (samples.size() > limit) {samples.pop_front();}
     }
-
     double avg() const
     {
-      if (samples.empty()) {
-        return 0.0;
-      }
+      if (samples.empty()) {return 0.0;}
       double sum = 0.0;
-      for (double v : samples) {
-        sum += v;
-      }
+      for (double v : samples) {sum += v;}
       return sum / static_cast<double>(samples.size());
     }
-
     double percentile(double p) const
     {
-      if (samples.empty()) {
-        return 0.0;
-      }
+      if (samples.empty()) {return 0.0;}
       std::vector<double> sorted(samples.begin(), samples.end());
       std::sort(sorted.begin(), sorted.end());
       const double pos = (p / 100.0) * static_cast<double>(sorted.size() - 1);
       const size_t lo = static_cast<size_t>(std::floor(pos));
       const size_t hi = static_cast<size_t>(std::ceil(pos));
-      if (lo == hi) {
-        return sorted[lo];
-      }
+      if (lo == hi) {return sorted[lo];}
       const double t = pos - static_cast<double>(lo);
       return sorted[lo] * (1.0 - t) + sorted[hi] * t;
     }
-
     double abs_percentile(double p) const
     {
-      if (samples.empty()) {
-        return 0.0;
-      }
+      if (samples.empty()) {return 0.0;}
       std::vector<double> sorted;
       sorted.reserve(samples.size());
-      for (double v : samples) {
-        sorted.push_back(std::abs(v));
-      }
+      for (double v : samples) {sorted.push_back(std::abs(v));}
       std::sort(sorted.begin(), sorted.end());
       const double pos = (p / 100.0) * static_cast<double>(sorted.size() - 1);
       const size_t lo = static_cast<size_t>(std::floor(pos));
       const size_t hi = static_cast<size_t>(std::ceil(pos));
-      if (lo == hi) {
-        return sorted[lo];
-      }
+      if (lo == hi) {return sorted[lo];}
       const double t = pos - static_cast<double>(lo);
       return sorted[lo] * (1.0 - t) + sorted[hi] * t;
     }
-
     size_t count() const {return samples.size();}
-
     std::deque<double> samples;
   };
+
+  static std::string make_epoch()
+  {
+    std::ostringstream os;
+    os << std::hex << std::random_device{}();
+    return os.str();
+  }
 
   void on_heartbeat(const RsiHeartBeat & hb)
   {
@@ -226,9 +245,7 @@ private:
   static double angle_diff_deg(double from, double to)
   {
     double diff = std::fmod(from - to + 180.0, 360.0);
-    if (diff < 0.0) {
-      diff += 360.0;
-    }
+    if (diff < 0.0) {diff += 360.0;}
     return diff - 180.0;
   }
 
@@ -238,7 +255,6 @@ private:
     const double dy = actual.y - planned.y;
     const double dz = actual.z - planned.z;
     const double xyz = std::sqrt(dx * dx + dy * dy + dz * dz);
-
     const double da = angle_diff_deg(actual.a, planned.a);
     const double db = angle_diff_deg(actual.b, planned.b);
     const double dc = angle_diff_deg(actual.c, planned.c);
@@ -249,29 +265,21 @@ private:
 
   double local_spacing_mm(size_t best_index) const
   {
-    if (trajectory_cache_.size() < 2) {
-      return 0.04;
-    }
+    if (trajectory_cache_.size() < 2) {return 0.04;}
     std::vector<double> distances;
     const size_t start = best_index > 20 ? best_index - 20 : 0;
     const size_t end = std::min(trajectory_cache_.size() - 1, best_index + 20);
     for (size_t i = start; i < end; ++i) {
       const auto & a = trajectory_cache_[i];
       const auto & b = trajectory_cache_[i + 1];
-      if (b.seq != a.seq + 1) {
-        continue;
-      }
+      if (b.seq != a.seq + 1) {continue;}
       const double dx = b.x - a.x;
       const double dy = b.y - a.y;
       const double dz = b.z - a.z;
       const double d = std::sqrt(dx * dx + dy * dy + dz * dz);
-      if (d > 1e-6 && std::isfinite(d)) {
-        distances.push_back(d);
-      }
+      if (d > 1e-6 && std::isfinite(d)) {distances.push_back(d);}
     }
-    if (distances.empty()) {
-      return 0.04;
-    }
+    if (distances.empty()) {return 0.04;}
     std::sort(distances.begin(), distances.end());
     return distances[distances.size() / 2];
   }
@@ -288,7 +296,6 @@ private:
     pose.c = point.c;
     pose.e = point.e;
     pose.tool_id = point.tool_id;
-
     std::lock_guard<std::mutex> lk(mutex_);
     trajectory_cache_.push_back(pose);
     trim_trajectory_cache_locked();
@@ -298,16 +305,12 @@ private:
   {
     std::lock_guard<std::mutex> lk(mutex_);
     last_robot_match_ = match_robot_locked(status);
-    if (!last_robot_match_.valid || !have_arm_seq_) {
-      return;
-    }
-
+    if (!last_robot_match_.valid || !have_arm_seq_) {return;}
     const double linux_robot =
       (static_cast<double>(current_arm_seq_) - static_cast<double>(last_robot_match_.seq)) *
       rsi_period_ms_;
     linux_robot_stats_.add(linux_robot, stats_limit());
-
-    if (last_ack_) {
+    if (last_ack_ && last_ack_->valid) {
       const double mcu_robot =
         (static_cast<double>(last_robot_match_.seq) - static_cast<double>(last_ack_->seq)) *
         rsi_period_ms_;
@@ -318,24 +321,17 @@ private:
   RobotMatch match_robot_locked(const KukaStatus & status) const
   {
     RobotMatch result;
-    if (trajectory_cache_.empty() || !have_arm_seq_) {
-      return result;
-    }
-
+    if (trajectory_cache_.empty() || !have_arm_seq_) {return result;}
     const int64_t current = static_cast<int64_t>(current_arm_seq_);
     const int64_t min_seq = current - std::max(0, robot_search_back_);
     const int64_t max_seq = current + std::max(0, robot_search_forward_);
-
     double best_error = std::numeric_limits<double>::infinity();
     size_t best_index = 0;
     bool found = false;
-
     for (size_t i = 0; i < trajectory_cache_.size(); ++i) {
       const auto & pose = trajectory_cache_[i];
       const int64_t seq = static_cast<int64_t>(pose.seq);
-      if (seq < min_seq || seq > max_seq) {
-        continue;
-      }
+      if (seq < min_seq || seq > max_seq) {continue;}
       const double error = pose_error_mm(pose, status);
       if (error < best_error) {
         best_error = error;
@@ -343,30 +339,22 @@ private:
         found = true;
       }
     }
-
-    if (!found) {
-      return result;
-    }
-
+    if (!found) {return result;}
     const double spacing = local_spacing_mm(best_index);
     const double band = std::max(
       robot_uncertainty_min_band_mm_,
       robot_uncertainty_spacing_multiplier_ * spacing);
     uint32_t seq_min = trajectory_cache_[best_index].seq;
     uint32_t seq_max = seq_min;
-
     for (const auto & pose : trajectory_cache_) {
       const int64_t seq = static_cast<int64_t>(pose.seq);
-      if (seq < min_seq || seq > max_seq) {
-        continue;
-      }
+      if (seq < min_seq || seq > max_seq) {continue;}
       const double error = pose_error_mm(pose, status);
       if (error <= best_error + band) {
         seq_min = std::min(seq_min, pose.seq);
         seq_max = std::max(seq_max, pose.seq);
       }
     }
-
     result.seq = trajectory_cache_[best_index].seq;
     result.error_mm = best_error;
     result.seq_min = seq_min;
@@ -382,25 +370,18 @@ private:
     if (!have_arm_seq_) {
       const size_t max_size =
         static_cast<size_t>(std::max(1, robot_cache_back_ + robot_cache_forward_));
-      while (trajectory_cache_.size() > max_size) {
-        trajectory_cache_.pop_front();
-      }
+      while (trajectory_cache_.size() > max_size) {trajectory_cache_.pop_front();}
       return;
     }
-
     const int64_t min_seq = static_cast<int64_t>(current_arm_seq_) - std::max(0, robot_cache_back_);
     while (!trajectory_cache_.empty() &&
       static_cast<int64_t>(trajectory_cache_.front().seq) < min_seq)
     {
       trajectory_cache_.pop_front();
     }
-
     const size_t max_size = static_cast<size_t>(std::max(
-        1,
-        robot_cache_back_ + robot_cache_forward_));
-    while (trajectory_cache_.size() > max_size) {
-      trajectory_cache_.pop_front();
-    }
+        1, robot_cache_back_ + robot_cache_forward_));
+    while (trajectory_cache_.size() > max_size) {trajectory_cache_.pop_front();}
   }
 
   size_t stats_limit() const
@@ -408,29 +389,45 @@ private:
     return static_cast<size_t>(std::max(1, stats_window_limit_));
   }
 
-  void on_uart_raw(const std::string & line)
+  /*
+   * Timestamped observation path. host_mono_ns is stamped in uart_node's
+   * capture path, so the delay reference is the source-side receive time,
+   * not the executor callback time.
+   */
+  void on_uart_observation(const UartObservation & obs)
   {
-    // /uart/raw 载荷带 "RX "/"TX " 方向前缀，先剥掉再匹配标签
+    if (obs.direction != UartObservation::DIRECTION_RX) {
+      return;
+    }
+    std::string_view sv(obs.line);
+    if (sv.rfind("EACK ", 0) == 0) {
+      handle_eack(std::string(sv), obs.host_mono_ns);
+    } else if (sv.rfind("EWARN ", 0) == 0) {
+      handle_ewarn(std::string(sv), obs.host_mono_ns);
+    }
+  }
+
+  // Legacy compat: old /uart/raw has no source stamp; fall back to now().
+  void on_uart_raw_compat(const std::string & line)
+  {
     std::string_view sv(line);
     if (sv.size() > 3 && (sv.substr(0, 3) == "RX " || sv.substr(0, 3) == "TX ")) {
       sv.remove_prefix(3);
     }
     if (sv.rfind("EACK ", 0) == 0) {
-      handle_eack(std::string(sv));
+      handle_eack(std::string(sv), 0);
     } else if (sv.rfind("EWARN ", 0) == 0) {
-      handle_ewarn(std::string(sv));
+      handle_ewarn(std::string(sv), 0);
     }
   }
 
   void on_printhead_status(const PrintHeadStatus & status)
   {
-    if (status.raw.rfind("STAT", 0) != 0) {
-      return;
-    }
-    handle_stat(status.raw);
+    if (status.raw.rfind("STAT", 0) != 0) {return;}
+    handle_stat(status.raw, 0);
   }
 
-  void handle_eack(const std::string & line)
+  void handle_eack(const std::string & line, int64_t host_rx_mono_ns)
   {
     std::istringstream ss(line);
     std::string tag;
@@ -443,36 +440,36 @@ private:
       return;
     }
     ss >> ack.mcu_us;
-
-    const auto ack_receive_time = now();
+    ack.host_rx_mono_ns = host_rx_mono_ns;
+    ack.stamp = now();
+    ack.valid = true;
     {
       std::lock_guard<std::mutex> lk(mutex_);
       auto it = hb_times_.find(ack.seq);
       if (it != hb_times_.end()) {
-        ack.delay_ms = (ack_receive_time - it->second).seconds() * 1000.0;
+        const auto hb_time = it->second;
+        ack.delay_ms = (ack.stamp - hb_time).seconds() * 1000.0;
         update_delay_stats(ack.delay_ms);
       }
       if (have_arm_seq_) {
         const double linux_mcu =
-          (static_cast<double>(current_arm_seq_) - static_cast<double>(ack.seq)) * rsi_period_ms_;
+          (static_cast<double>(current_arm_seq_) - static_cast<double>(ack.seq)) *
+          rsi_period_ms_;
         linux_mcu_stats_.add(linux_mcu, stats_limit());
       }
       last_ack_ = ack;
       ++eack_count_;
       last_raw_ = line;
     }
-
-    publish_status();
   }
 
-  void handle_ewarn(const std::string & line)
+  void handle_ewarn(const std::string & line, int64_t host_rx_mono_ns)
   {
+    (void)host_rx_mono_ns;
     std::lock_guard<std::mutex> lk(mutex_);
     last_warn_ = line;
     last_raw_ = line;
-    if (line.find("old_seq=") != std::string::npos) {
-      ++old_seq_warn_count_;
-    }
+    if (line.find("old_seq=") != std::string::npos) {++old_seq_warn_count_;}
     if (line.find("gap ") != std::string::npos ||
       line.find("gap=") != std::string::npos)
     {
@@ -480,20 +477,19 @@ private:
     }
   }
 
-  void handle_stat(const std::string & line)
+  void handle_stat(const std::string & line, int64_t host_rx_mono_ns)
   {
-    StatInfo next = last_stat_;
+    StatInfo next;
+    next.host_rx_mono_ns = host_rx_mono_ns;
+    next.stamp = now();
     next.valid = true;
-
     std::istringstream ss(line);
     std::string tag;
     std::string kv;
     ss >> tag;
     while (ss >> kv) {
       auto eq = kv.find('=');
-      if (eq == std::string::npos) {
-        continue;
-      }
+      if (eq == std::string::npos) {continue;}
       const auto key = kv.substr(0, eq);
       const auto value = kv.substr(eq + 1);
       try {
@@ -512,7 +508,6 @@ private:
           "STAT 延迟字段解析失败：%s", kv.c_str());
       }
     }
-
     std::lock_guard<std::mutex> lk(mutex_);
     last_stat_ = next;
     last_raw_ = line;
@@ -520,9 +515,7 @@ private:
 
   void update_delay_stats(double delay_ms)
   {
-    if (!std::isfinite(delay_ms)) {
-      return;
-    }
+    if (!std::isfinite(delay_ms)) {return;}
     if (delay_count_ == 0) {
       delay_min_ms_ = delay_ms;
       delay_max_ms_ = delay_ms;
@@ -550,15 +543,15 @@ private:
     ExtruderLatencyStatus out;
     out.stamp = now();
     out.arm_seq = current_arm_seq_;
-    out.has_eack = last_ack_.has_value();
+    out.has_eack = last_ack_ && last_ack_->valid;
     out.has_stat = last_stat_.valid;
-    out.last_eack_seq = last_ack_ ? last_ack_->seq : 0;
+    out.last_eack_seq = last_ack_ && last_ack_->valid ? last_ack_->seq : 0;
     out.stat_last_e_seq = last_stat_.valid ? last_stat_.last_e_seq : 0;
 
     uint32_t compare_seq = 0;
     if (last_stat_.valid) {
       compare_seq = last_stat_.last_e_seq;
-    } else if (last_ack_) {
+    } else if (last_ack_ && last_ack_->valid) {
       compare_seq = last_ack_->seq;
     }
 
@@ -567,7 +560,7 @@ private:
       out.cycle_lag_ms = static_cast<double>(out.seq_lag) * rsi_period_ms_;
     }
 
-    if (have_arm_seq_ && last_ack_) {
+    if (have_arm_seq_ && last_ack_ && last_ack_->valid) {
       out.linux_mcu_delay_ms =
         (static_cast<double>(current_arm_seq_) - static_cast<double>(last_ack_->seq)) *
         rsi_period_ms_;
@@ -586,7 +579,7 @@ private:
         rsi_period_ms_;
       out.linux_robot_p95_ms = linux_robot_stats_.percentile(95.0);
       out.linux_robot_p99_ms = linux_robot_stats_.percentile(99.0);
-      if (last_ack_) {
+      if (last_ack_ && last_ack_->valid) {
         out.mcu_robot_delay_ms =
           (static_cast<double>(last_robot_match_.seq) - static_cast<double>(last_ack_->seq)) *
           rsi_period_ms_;
@@ -596,7 +589,7 @@ private:
     out.mcu_robot_abs_p95_ms = mcu_robot_stats_.abs_percentile(95.0);
     out.mcu_robot_abs_p99_ms = mcu_robot_stats_.abs_percentile(99.0);
 
-    if (last_ack_) {
+    if (last_ack_ && last_ack_->valid) {
       out.ack_delay_ms = last_ack_->delay_ms;
       out.last_tool_id = last_ack_->tool_id;
       out.last_extrude_abs = last_ack_->extrude_abs;
@@ -628,6 +621,10 @@ private:
     return out;
   }
 
+  /*
+   * 300ms timer only; never publishes from event callbacks so the
+   * snapshot rate is exactly the configured period.
+   */
   void publish_status()
   {
     ExtruderLatencyStatus status;
@@ -637,6 +634,7 @@ private:
     }
 
     status_pub_->publish(status);
+    emit_latency_log(status);
 
     std_msgs::msg::String text;
     std::ostringstream oss;
@@ -663,36 +661,62 @@ private:
     text_pub_->publish(text);
   }
 
+  void emit_latency_log(const ExtruderLatencyStatus & status)
+  {
+    if (!runtime_log_enabled_) {return;}
+    runtime_logging::WhitelistedRecord rec;
+    rec.kind = runtime_logging::RecordKind::kLatency;
+    rec.host_mono_ns = runtime_logging::clock_monotonic_ns();
+    rec.record_seq = record_seq_++;
+    rec.fields.emplace_back("seq_lag", std::to_string(status.seq_lag));
+    rec.fields.emplace_back(
+      "ack_delay_ms", std::isfinite(status.ack_delay_ms) ?
+        std::to_string(status.ack_delay_ms) : "null");
+    rec.fields.emplace_back(
+      "linux_mcu_delay_ms", std::isfinite(status.linux_mcu_delay_ms) ?
+        std::to_string(status.linux_mcu_delay_ms) : "null");
+    rec.fields.emplace_back(
+      "mcu_robot_delay_ms", std::isfinite(status.mcu_robot_delay_ms) ?
+        std::to_string(status.mcu_robot_delay_ms) : "null");
+    rec.fields.emplace_back(
+      "robot_match_error_mm", std::isfinite(status.robot_match_error_mm) ?
+        std::to_string(status.robot_match_error_mm) : "null");
+    const std::string json = runtime_logging::encode_record_json(
+      rec, run_id_, producer_id_, 1);
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    if (!ipc_client_.connected()) {
+      ipc_client_.connect_to(runtime_log_socket_);
+    }
+    if (ipc_client_.connected()) {
+      ipc_client_.queue_message(json);
+      ipc_client_.drain();
+    }
+  }
+
   std::mutex mutex_;
   std::unordered_map<uint32_t, rclcpp::Time> hb_times_;
   std::deque<uint32_t> hb_order_;
-
   uint32_t current_arm_seq_{0};
   bool have_arm_seq_{false};
   std::optional<AckInfo> last_ack_;
   StatInfo last_stat_;
   RobotMatch last_robot_match_;
   std::deque<PlannedPose> trajectory_cache_;
-
   uint64_t eack_count_{0};
   uint64_t old_seq_warn_count_{0};
   uint64_t gap_warn_count_{0};
-
   RollingStats linux_mcu_stats_;
   RollingStats linux_robot_stats_;
   RollingStats mcu_robot_stats_;
-
   uint64_t delay_count_{0};
   double delay_sum_ms_{0.0};
   double delay_sum_sq_ms_{0.0};
   double delay_min_ms_{0.0};
   double delay_max_ms_{0.0};
-
   std::string last_warn_;
   std::string last_raw_;
-
   double rsi_period_ms_{4.0};
-  int publish_period_ms_{200};
+  int publish_period_ms_{300};
   int history_limit_{5000};
   int robot_cache_back_{8000};
   int robot_cache_forward_{1000};
@@ -704,8 +728,19 @@ private:
   double robot_uncertainty_spacing_multiplier_{3.0};
   double nozzle_lever_mm_{100.0};
 
+  // runtime logging
+  bool runtime_log_enabled_{true};
+  std::string run_id_;
+  std::string runtime_log_socket_;
+  std::string producer_id_;
+  std::string producer_epoch_;
+  uint64_t record_seq_{0};
+  runtime_logging::IpcClient ipc_client_;
+  std::mutex ipc_mutex_;
+
   rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr uart_raw_sub_;
+  rclcpp::Subscription<UartObservation>::SharedPtr observation_sub_;
   rclcpp::Subscription<PrintHeadStatus>::SharedPtr printhead_sub_;
   rclcpp::Subscription<TrajectoryPoint>::SharedPtr trajectory_sub_;
   rclcpp::Subscription<KukaStatus>::SharedPtr kuka_status_sub_;

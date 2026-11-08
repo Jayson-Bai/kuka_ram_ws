@@ -71,15 +71,21 @@ def test_write_line_preserves_log_and_returns_complete_delivery_status():
         "void on_print_test_command",
     )
 
-    assert "publish_uart_log(\"TX\", line)" in write_line
+    # TX log now captures the actual write result: the serial write
+    # happens first, then the result is captured into the bounded ring.
+    # A pre-write "attempt" line would not prove delivery.
     assert "boost::asio::write" in write_line
-    assert write_line.index("publish_uart_log(\"TX\", line)") < write_line.index(
-        "boost::asio::write"
+    assert "capture_line(" in write_line
+    assert "Direction::kTx" in write_line
+    assert "publish_uart_log(\"TX\", line)" in write_line
+    assert write_line.index("boost::asio::write") < write_line.index(
+        "capture_line("
+    )
+    assert write_line.index("capture_line(") < write_line.index(
+        "publish_uart_log(\"TX\", line)"
     )
     assert "TX_FAIL" not in write_line
-    assert "ec || written != line.size()" in write_line
-    assert "return false;" in write_line
-    assert "return true;" in write_line
+    assert "return ok;" in write_line
 
 
 def test_node_defaults_to_canonical_and_parses_static_mode():

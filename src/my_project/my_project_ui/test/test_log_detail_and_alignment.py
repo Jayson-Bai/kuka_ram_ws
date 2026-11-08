@@ -102,23 +102,18 @@ def test_diagnostic_log_exports_time_aligned_runtime_flags_as_jsonl():
     uart_section = src.split(
         "    def _on_uart_log(self, line_text):", 1)[1].split(
         "    def _on_export_diagnostic_log", 1)[0]
-    assert 'self._append_diagnostic("uart", "raw"' in uart_section
+    # Raw UART text is still rendered but no longer fed into the
+    # in-memory diagnostic history; formal logging is whitelist-only.
     assert 'payload.startswith("EWARN")' in uart_section
-    assert uart_section.index(
-        'self._append_diagnostic("uart", "raw"'
-    ) < uart_section.index('payload.startswith("EWARN")')
 
     update_ui_section = src.split(
         "    def _update_ui(self, msg: UiStatus):", 1)[1].split(
         "    def _on_pause", 1)[0]
     for token in (
-        '"ready_for_motion": bool(msg.ready_for_motion)',
-        '"traj_backlog": int(msg.traj_backlog)',
-        '"event_pending": int(msg.event_pending)',
-        '"printhead_status_valid": bool(msg.printhead_status_valid)',
-        '"rsi_heartbeat_valid": bool(msg.rsi_heartbeat_valid)',
-        '"current_event": self._event_diagnostic(msg.current_event)',
-        '"current_traj": self._trajectory_diagnostic(msg.current_traj)',
+        'self._update_print_progress(msg)',
+        'self._update_control_buttons(msg.state or "")',
+        'msg.printhead_status_valid',
+        'self._print_test_printhead_status = ps',
     ):
         assert token in update_ui_section
 

@@ -124,7 +124,7 @@ LAUNCH_PARAMS = [
     ("event_queue_limit", "2000", "UI 事件队列上限", "系统管理器"),
     ("print_time_update_period_ms", "500", "预计时间更新周期（ms）", "系统管理器"),
     ("tool_change_fixed_time_s", "15.0", "实测换头固定耗时（s）", "系统管理器"),
-    ("latency_publish_period_ms", "200", "延迟状态发布周期（ms）", "延迟监控"),
+    ("latency_publish_period_ms", "300", "延迟状态发布周期（ms）", "延迟监控"),
     ("latency_history_limit", "5000", "RSI 心跳缓存数量", "延迟监控"),
     ("latency_stats_window_limit", "5000", "延迟统计窗口样本数", "延迟监控"),
     ("rsi_period_ms", "4.0", "RSI 控制周期（ms）", "延迟监控"),
@@ -3973,29 +3973,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._latency_diag_widget.activateWindow()
 
     def _update_latency(self, msg: ExtruderLatencyStatus):
-        self._append_diagnostic("latency", "snapshot", {
-            "arm_seq": int(msg.arm_seq),
-            "last_eack_seq": int(msg.last_eack_seq),
-            "stat_last_e_seq": int(msg.stat_last_e_seq),
-            "has_eack": bool(msg.has_eack),
-            "has_stat": bool(msg.has_stat),
-            "seq_lag": int(msg.seq_lag),
-            "cycle_lag_ms": float(msg.cycle_lag_ms),
-            "ack_delay_ms": float(msg.ack_delay_ms),
-            "linux_mcu_delay_ms": float(msg.linux_mcu_delay_ms),
-            "has_robot_match": bool(msg.has_robot_match),
-            "actual_robot_seq": int(msg.actual_robot_seq),
-            "robot_match_error_mm": float(msg.robot_match_error_mm),
-            "mcu_robot_delay_ms": float(msg.mcu_robot_delay_ms),
-            "eack_count": int(msg.eack_count),
-            "old_seq_warn_count": int(msg.old_seq_warn_count),
-            "gap_warn_count": int(msg.gap_warn_count),
-            "last_tool_id": int(msg.last_tool_id),
-            "last_extrude_abs": float(msg.last_extrude_abs),
-            "last_mcu_us": int(msg.last_mcu_us),
-            "last_warn": str(msg.last_warn or ""),
-            "last_raw": str(msg.last_raw or ""),
-        })
         link_labels = getattr(self, "_latency_link_labels", {})
         diag_labels = getattr(self, "_latency_diag_labels", {})
         if not link_labels:
@@ -4181,43 +4158,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._print_progress_label.setText(f"第 {current_layer} / {total_layers} 层")
 
     def _update_ui(self, msg: UiStatus):
-        self._append_diagnostic("ui_status", "snapshot", {
-            "state": str(msg.state or ""),
-            "last_warn": str(msg.last_warn or ""),
-            "last_error": str(msg.last_error or ""),
-            "ready_for_motion": bool(msg.ready_for_motion),
-            "kuka_status_valid": bool(msg.kuka_status_valid),
-            "kuka_status_age_s": float(msg.kuka_status_age_s),
-            "rsi_heartbeat_valid": bool(msg.rsi_heartbeat_valid),
-            "rsi_heartbeat_age_s": float(msg.rsi_heartbeat_age_s),
-            "printhead_status_valid": bool(msg.printhead_status_valid),
-            "printhead_status_age_s": float(msg.printhead_status_age_s),
-            "printhead_status": self._printhead_diagnostic(msg.printhead_status),
-            "traj_next_seq": int(msg.traj_next_seq),
-            "traj_backlog": int(msg.traj_backlog),
-            "event_next_seq": int(msg.event_next_seq),
-            "event_pending": int(msg.event_pending),
-            "current_traj_valid": bool(msg.current_traj_valid),
-            "next_traj_valid": bool(msg.next_traj_valid),
-            "current_event_valid": bool(msg.current_event_valid),
-            "next_event_valid": bool(msg.next_event_valid),
-            "current_traj": self._trajectory_diagnostic(msg.current_traj),
-            "next_traj": self._trajectory_diagnostic(msg.next_traj),
-            "current_event": self._event_diagnostic(msg.current_event),
-            "next_event": self._event_diagnostic(msg.next_event),
-            "print_test_busy": bool(self._print_test_busy),
-            "print_test_seen_correction": bool(self._print_test_seen_correction),
-            "print_test_target": (
-                list(self._print_test_target)
-                if self._print_test_target is not None
-                else None
-            ),
-            "print_test_resin_temp": (
-                list(self._print_test_resin_temp)
-                if self._print_test_resin_temp is not None
-                else None
-            ),
-        })
         self._update_print_progress(msg)
         state_str = msg.state or "-"
         state_color = self._STATE_COLORS.get(state_str, "#a0a0a0")
@@ -4794,17 +4734,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._btn_test_cut.setEnabled(fiber_ready)
 
     def _on_current_correction(self, msg):
-        self._append_diagnostic("rsi", "current_correction", {
-            "seq": int(getattr(msg, "seq", 0)),
-            "tool_id": int(getattr(msg, "tool_id", 0)),
-            "x": float(msg.x),
-            "y": float(msg.y),
-            "z": float(msg.z),
-            "a": float(msg.a),
-            "b": float(msg.b),
-            "c": float(msg.c),
-            "e": float(getattr(msg, "e", 0.0)),
-        })
         self._print_test_current_correction = (msg.x, msg.y, msg.z, msg.a, msg.b, msg.c)
         self._print_test_seen_correction = True
         self._test_correction_label.setText(
@@ -6148,10 +6077,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         import time
         import re
         ipoc_match = re.search(r"<IPOC>([^<]*)</IPOC>", xml_text or "")
-        self._append_diagnostic("rsi", "sent_xml", {
-            "ipoc": ipoc_match.group(1) if ipoc_match else "",
-            "xml": str(xml_text or ""),
-        })
         xml_stripped = re.sub(r'<IPOC>[^<]*</IPOC>', '<IPOC>...</IPOC>', xml_text)
         if xml_stripped == self._rsi_log_last_xml:
             return
@@ -6177,11 +6102,6 @@ class _UiStatusWidget(QtWidgets.QWidget):
         direction = display_text[:2] if display_text.startswith(("RX ", "TX ")) else ""
         payload = display_text[3:].lstrip() if display_text.startswith(
             ("RX ", "TX ")) else display_text
-        self._append_diagnostic("uart", "raw", {
-            "direction": direction,
-            "line": display_text,
-            "payload": payload,
-        })
         if payload.startswith("EWARN"):
             return
         entry = f"[{ts}] {display_text}"

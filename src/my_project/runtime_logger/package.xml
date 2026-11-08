@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2000/XMLSchema"?>
+<package format="3">
+  <name>runtime_logger</name>
+  <version>0.1.0</version>
+  <description>Independent JSONL runtime log collector and 1 Hz UI telemetry aggregator.</description>
+  <maintainer email="luobo796@gmail.com">jayson</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>std_msgs</depend>
+  <depend>my_project_interfaces</depend>
+  <depend>runtime_logging_core</depend>
+
+  <test_depend>ament_cmake_pytest</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

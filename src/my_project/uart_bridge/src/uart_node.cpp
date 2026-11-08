@@ -3,9 +3,16 @@
 // 单片机通信节点，UART串口协议
 // 订阅RSI心跳（包含挤出）
 // 发布接收到的打印头各模块状态消息，发布READY消息
+//
+// 运行日志架构（schema_version 1）：
+//   - UART RX/TX 关键路径只执行非阻塞捕获（bounded ring + 时间戳）
+//   - 独立 relay 线程做白名单投影、IPC 发送、ROS 观测/遥测 UI 发布
+//   - 正式运行日志由 runtime_logger 节点经 AF_UNIX/SOCK_SEQPACKET 写盘
+//   - 其他回传数据仅服务 1 Hz UartTelemetryUi 快照和 UI 显示
 // =============================================================
 
 #include "uart_bridge/extrusion_wire.hpp"
+
 #include <rclcpp/rclcpp.hpp>
 #include <rcl_interfaces/msg/parameter_descriptor.hpp>
 #include <rcl_interfaces/msg/set_parameters_result.hpp>
@@ -15,15 +22,24 @@
 #include <my_project_interfaces/msg/planned_event.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/uart_observation.hpp>
+#include <my_project_interfaces/msg/uart_telemetry_ui.hpp>
 
-#include <boost/asio.hpp>//串口
+#include <runtime_logging_core/bounded_ring.hpp>
+#include <runtime_logging_core/capture_record.hpp>
+#include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/whitelist.hpp>
+
+#include <boost/asio.hpp>
 #include <array>
 #include <thread>
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <optional>
 #include <mutex>
 #include <sstream>
+#include <random>
 #include <cmath>
 #include <cstdint>
 
@@ -34,18 +50,37 @@ using boost::asio::serial_port_base;
 using my_project_interfaces::msg::RsiHeartBeat;
 using my_project_interfaces::msg::PrintHeadStatus;
 using my_project_interfaces::msg::PlannedEvent;
+using my_project_interfaces::msg::UartObservation;
+using my_project_interfaces::msg::UartTelemetryUi;
+
+using runtime_logging::BoundedRing;
+using runtime_logging::CaptureRecord;
+using runtime_logging::CaptureType;
+using runtime_logging::Direction;
+using runtime_logging::IpcClient;
+using runtime_logging::Whitelist;
+
+namespace {
+
+std::string make_producer_epoch()
+{
+  std::random_device rd;
+  std::ostringstream os;
+  os << std::hex << rd() << rd();
+  return os.str();
+}
+
+}  // namespace
 
 class UartNode : public rclcpp::Node
 {
 private:
-  //串口
   io_context io_;
   serial_port serial_;
   std::atomic<bool> running_;
   std::thread read_thread_;
   std::string port_;
   int baudrate_;
-  //ROS
   rclcpp::Subscription<PlannedEvent>::SharedPtr event_sub_;
   rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr cmd_sub_;
@@ -53,25 +88,23 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr print_test_cmd_sub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr uart_raw_pub_;
   rclcpp::Publisher<PrintHeadStatus>::SharedPtr ready_pub_;
+  rclcpp::Publisher<UartObservation>::SharedPtr observation_pub_;
+  rclcpp::Publisher<UartTelemetryUi>::SharedPtr telemetry_ui_pub_;
 
-  // 缓存
   mutable std::mutex event_mutex_;
   std::optional<PlannedEvent> current_event_;
   bool current_event_ack_received_{false};
   bool current_event_done_received_{false};
-  // 固件事件回执使用独立线号；trigger_seq 只用于 RSI 轨迹就绪对齐。
   uint32_t current_event_wire_id_{0};
-  // 最近一次已下发的 CUT wire 序号与完成回执，extrude_sync 据此挂靠剪切序列。
   uint32_t last_cut_wire_id_{0};
   bool cut_done_received_{false};
   uint32_t cut_done_wire_id_{0};
   std::atomic<uint32_t> next_wire_request_id_{1};
-  std::mutex status_mutex_;   // 保护 ready 状态
+  std::mutex status_mutex_;
   bool ready_for_motion_{true};
   uint32_t ready_event_seq_{0};
   std::string ready_event_type_;
 
-  //打印头状态
   struct Status
   {
     float current_temp_cf{0}, target_temp_cf{0};
@@ -93,26 +126,43 @@ private:
   std::atomic<bool> paused_{false};
   std::atomic<bool> aborted_{false};
 
-  // Uniform-feedforward baseline state (per extrusion tool).
-  // Active only when dispatch_policy == "uniform_feedforward"; the
-  // channel accumulates E strictly by elapsed heartbeat time so that
-  // residual-vs-seq_bound ablation can run on the same pipeline.
   struct UniformChannel
   {
     bool initialised{false};
     double e_abs{0.0};
     rclcpp::Time last_stamp{0, 0, RCL_ROS_TIME};
   };
-  std::array<UniformChannel, 3> uniform_channels_{};  // index by tool_id
+  std::array<UniformChannel, 3> uniform_channels_{};
   std::string dispatch_policy_{"seq_bound"};
   double uniform_rate_mm_per_s_{10.0};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
+
+  // ---- runtime logging ----
+  bool runtime_log_enabled_{true};
+  std::string runtime_log_socket_;
+  std::string run_id_;
+  std::string producer_id_{"uart_node"};
+  std::string producer_epoch_;
+  uint64_t capture_seq_{0};
+  uint64_t record_seq_{0};
+  std::atomic<bool> relay_running_{false};
+  std::thread relay_thread_;
+  std::thread ui_thread_;
+  std::unique_ptr<BoundedRing<CaptureRecord>> capture_ring_;
+  std::atomic<uint64_t> capture_dropped_{0};
+  Whitelist whitelist_;
+  IpcClient ipc_client_;
+  std::mutex ipc_mutex_;
+  std::atomic<uint64_t> log_records_sent_{0};
+  std::mutex ui_cache_mutex_;
+  UartTelemetryUi ui_cache_;
+  bool ui_cache_valid_{false};
+  rclcpp::Time ui_cache_stamp_{0, 0, RCL_ROS_TIME};
 
 public:
   UartNode()
   : Node("uart_node"), io_(), serial_(io_), running_(true)
   {
-    //参数声明
     port_ = declare_parameter<std::string>("port", "/dev/ttyUSB0");
     baudrate_ = declare_parameter<int>("baudrate", 115200);
     extrude_scale_.store(declare_parameter<double>("extrude_scale", 1.0));
@@ -171,58 +221,64 @@ public:
     );
 
     //订阅心跳包
+
+    // ---- runtime logging parameters ----
+    runtime_log_enabled_ = declare_parameter<bool>("runtime_log_enabled", true);
+    run_id_ = declare_parameter<std::string>("run_id", "");
+    producer_epoch_ = make_producer_epoch();
+    runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    const auto ring_capacity = declare_parameter<int>(
+      "runtime_log_ring_capacity", 1024);
+    capture_ring_ = std::make_unique<BoundedRing<CaptureRecord>>(
+      static_cast<size_t>(ring_capacity));
+    if (run_id_.empty()) {
+      run_id_ = "uart_" + producer_epoch_;
+    }
+    if (runtime_log_socket_.empty()) {
+      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+    }
+    if (runtime_log_enabled_) {
+      relay_running_.store(true);
+      relay_thread_ = std::thread(&UartNode::relay_loop, this);
+      ui_thread_ = std::thread(&UartNode::ui_loop, this);
+      RCLCPP_INFO(
+        get_logger(), "runtime logging enabled, socket=%s",
+        runtime_log_socket_.c_str());
+    }
+
     auto hb_qos = rclcpp::QoS(2000).reliable();
     auto event_qos = rclcpp::QoS(200).reliable();
     auto pub_qos = rclcpp::QoS(200).reliable();
     auto ready_qos = rclcpp::QoS(200).reliable().transient_local();
     hb_sub_ = create_subscription<RsiHeartBeat>(
-      "/rsi/heartbeat",
-      hb_qos,
-      [this](RsiHeartBeat::SharedPtr msg) {
-        on_heartbeat(*msg);
-      }
-    );
-    //订阅事件
+      "/rsi/heartbeat", hb_qos,
+      [this](RsiHeartBeat::SharedPtr msg) { on_heartbeat(*msg); });
     event_sub_ = create_subscription<PlannedEvent>(
-      "/rsi/triggered_event",
-      event_qos,
-      [this](PlannedEvent::SharedPtr msg) {
-        on_triggered_event(*msg);
-      }
-    );
-    //订阅系统命令
+      "/rsi/triggered_event", event_qos,
+      [this](PlannedEvent::SharedPtr msg) { on_triggered_event(*msg); });
     cmd_sub_ = create_subscription<std_msgs::msg::String>(
-      "/system/command",
-      rclcpp::QoS(10).reliable(),
+      "/system/command", rclcpp::QoS(10).reliable(),
       [this](std_msgs::msg::String::SharedPtr msg) {
         on_system_command(msg->data);
-      }
-    );
-    //订阅UI手动控制命令
+      });
     manual_cmd_sub_ = create_subscription<std_msgs::msg::String>(
-      "/uart/manual_command",
-      rclcpp::QoS(10).reliable(),
+      "/uart/manual_command", rclcpp::QoS(10).reliable(),
       [this](std_msgs::msg::String::SharedPtr msg) {
         RCLCPP_INFO(get_logger(), "收到手动控制命令: %s", msg->data.c_str());
         write_line(msg->data);
-      }
-    );
-    //订阅测试模式RESET命令，清理可能遗留的事件等待状态
+      });
     print_test_cmd_sub_ = create_subscription<std_msgs::msg::String>(
-      "/print_test/rsi_command",
-      rclcpp::QoS(10).reliable(),
+      "/print_test/rsi_command", rclcpp::QoS(10).reliable(),
       [this](std_msgs::msg::String::SharedPtr msg) {
         on_print_test_command(msg->data);
-      }
-    );
-    //发布UART状态
+      });
     uart_raw_pub_ = create_publisher<std_msgs::msg::String>("/uart/raw", pub_qos);
-    //发布ready状态
+    observation_pub_ = create_publisher<UartObservation>(
+      "/uart/observation", rclcpp::QoS(512).reliable());
+    telemetry_ui_pub_ = create_publisher<UartTelemetryUi>(
+      "/uart/telemetry_ui", rclcpp::QoS(1).keep_last(1).best_effort());
     ready_pub_ = create_publisher<PrintHeadStatus>("/printhead/status", ready_qos);
-
-    //启动默认就绪(允许RSI从初始WAIT切入RUN)
     publish_ready_state("startup");
-
     open_serial();
     read_thread_ = std::thread(&UartNode::read_loop, this);
   }
@@ -235,6 +291,13 @@ public:
     serial_.close(ec);
     io_.stop();
     if (read_thread_.joinable()) {read_thread_.join();}
+    if (relay_running_.load()) {
+      relay_running_.store(false);
+      if (relay_thread_.joinable()) {relay_thread_.join();}
+      if (ui_thread_.joinable()) {ui_thread_.join();}
+    }
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    ipc_client_.close();
   }
 
 private:
@@ -246,12 +309,11 @@ private:
       RCLCPP_FATAL(get_logger(), "打开%s失败：%s", port_.c_str(), ec.message().c_str());
       throw std::runtime_error("串口打开失败");
     }
-    //Boost.Asio串口配置
     serial_.set_option(serial_port_base::baud_rate(baudrate_));
-    serial_.set_option(serial_port_base::character_size(8));     //数据长度
-    serial_.set_option(serial_port_base::parity(serial_port_base::parity::none));     //无奇偶校验
-    serial_.set_option(serial_port_base::stop_bits(serial_port_base::stop_bits::one));     //1个停止位
-    serial_.set_option(serial_port_base::flow_control(serial_port_base::flow_control::none));         //硬件流控关闭
+    serial_.set_option(serial_port_base::character_size(8));
+    serial_.set_option(serial_port_base::parity(serial_port_base::parity::none));
+    serial_.set_option(serial_port_base::stop_bits(serial_port_base::stop_bits::one));
+    serial_.set_option(serial_port_base::flow_control(serial_port_base::flow_control::none));
   }
 
   void set_ready_state(bool ready_for_motion, uint32_t event_seq, const std::string & event_type)
@@ -262,7 +324,7 @@ private:
     ready_event_type_ = event_type;
   }
 
-  void publish_ready_state(const std::string & raw)  //
+  void publish_ready_state(const std::string & raw)
   {
     PrintHeadStatus st;
     st.stamp = now();
@@ -289,22 +351,18 @@ private:
 
   void on_triggered_event(const PlannedEvent & ev)
   {
-    // 固件事件按独立线号回执；trigger_seq 只用于 RSI 轨迹就绪对齐。
     const uint32_t wire_request_id =
       next_wire_request_id_.fetch_add(1, std::memory_order_relaxed);
     const std::string arg = ev.payload.empty() ? "0" : ev.payload;
     std::ostringstream oss;
-
     {
       std::lock_guard<std::mutex> lk(event_mutex_);
       if (ev.event_type == "cut") {
-        // CUT 非阻塞：固件异步执行剪切，完成回执由 EVDONE 记录。
         oss << "EV " << wire_request_id << " cut " << arg << "\n";
         last_cut_wire_id_ = wire_request_id;
         cut_done_received_ = false;
         cut_done_wire_id_ = 0;
       } else if (ev.event_type == "extrude_sync") {
-        // payload: "tool_id target_mm timeout_ms"，上位机换算并挂上当前剪切序号。
         std::istringstream payload_stream(ev.payload);
         int tool_id = 0;
         double target_mm = 0.0;
@@ -334,11 +392,9 @@ private:
         current_event_wire_id_ = wire_request_id;
       }
     }
-
-    // heat 事件：payload 为目标温度(℃)，写入缓存，供温差判定
     if (ev.event_type == "heat_cf" || ev.event_type == "heat_resin") {
       try {
-        float target = std::stof(ev.payload);         // 摄氏度
+        float target = std::stof(ev.payload);
         std::lock_guard<std::mutex> lk(status_cache_mutex_);
         if (ev.event_type == "heat_cf") {
           status_.target_temp_cf = target;
@@ -347,31 +403,22 @@ private:
         }
       } catch (const std::exception & e) {
         RCLCPP_WARN_THROTTLE(
-          get_logger(),
-          *get_clock(),
-          2000,
-          "温控参数解析失败：%s",
-          e.what());
+          get_logger(), *get_clock(), 2000,
+          "温控参数解析失败：%s", e.what());
       }
     }
-
     write_line(oss.str());
-
     std::string ev_info = "event:" + ev.event_type;
     if (!ev.payload.empty()) {
       ev_info += " payload=" + ev.payload;
     }
-
     if (ev.event_type == "cut") {
       set_ready_state(true, ev.trigger_seq, ev.event_type);
       publish_ready_state(ev_info + " nonblocking");
       return;
     }
-
-    // 收到事件后清除ready，避免上一事件ready粘住导致RSI误退出WAIT。
     set_ready_state(false, ev.trigger_seq, ev.event_type);
     publish_ready_state(ev_info);
-    // 事件完成由 MCU 上报 STAT 后 check_event_completion 判定
   }
 
   bool has_pending_event() const
@@ -389,10 +436,8 @@ private:
     }
   }
 
-  void on_heartbeat(const RsiHeartBeat & hb) //心跳触发挤出
+  void on_heartbeat(const RsiHeartBeat & hb)
   {
-    // PAUSE、ABORT 或事件等待时不转发挤出命令。
-    // extrude_reset 未完成前继续发 E 会被固件 old_seq 拒绝，并污染时序。
     if (paused_.load() || aborted_.load() || has_pending_event()) {
       return;
     }
@@ -423,13 +468,9 @@ private:
       prepared.decision == uart_bridge::ExtrusionDecision::RejectOutOfRange)
     {
       RCLCPP_WARN_THROTTLE(
-        get_logger(),
-        *get_clock(),
-        2000,
+        get_logger(), *get_clock(), 2000,
         "拒绝挤出值：seq=%u tool=%d value=%.17g",
-        hb.seq_used,
-        hb.tool_id,
-        scaled);
+        hb.seq_used, hb.tool_id, scaled);
       return;
     }
     if (prepared.decision != uart_bridge::ExtrusionDecision::Send) {
@@ -441,7 +482,7 @@ private:
     }
   }
 
-  void read_loop()  //阻塞读取MCU状态包
+  void read_loop()
   {
     std::array<char, 256> buf{};
     while (rclcpp::ok() && running_.load()) {
@@ -449,11 +490,8 @@ private:
       std::size_t n = serial_.read_some(boost::asio::buffer(buf), ec);
       if (ec) {
         RCLCPP_WARN_THROTTLE(
-          get_logger(),
-          *get_clock(),
-          2000,
-          "读取错误：%s",
-          ec.message().c_str());
+          get_logger(), *get_clock(), 2000,
+          "读取错误：%s", ec.message().c_str());
         continue;
       }
       recv_buf_.append(buf.data(), n);
@@ -463,6 +501,9 @@ private:
         std::string line = recv_buf_.substr(0, pos);
         recv_buf_.erase(0, pos + 1);
         if (!line.empty() && line.back() == '\r') {line.pop_back();}
+        // Capture first so the source timestamp is stamped before any
+        // downstream processing; the ring push never blocks.
+        capture_line(line, Direction::kRx, true, 0);
         handle_line(line);
       }
     }
@@ -487,7 +528,6 @@ private:
     }
   }
 
-
   void publish_uart_log(const std::string & direction, const std::string & line)
   {
     std_msgs::msg::String raw;
@@ -507,7 +547,6 @@ private:
     ss >> tag >> event_seq >> event_type;
     {
       std::lock_guard<std::mutex> lk(event_mutex_);
-      // 事件回执按发送时的 wire 序号匹配；trigger_seq 仅用于 RSI 对齐。
       if (event_type == "cut" && event_seq == last_cut_wire_id_) {
         if (done_response) {
           cut_done_received_ = true;
@@ -562,17 +601,13 @@ private:
         }
       } catch (...) {
         RCLCPP_WARN_THROTTLE(
-          get_logger(),
-          *get_clock(),
-          2000,
-          "字段解析失败：%s",
-          kv.c_str());
+          get_logger(), *get_clock(), 2000,
+          "字段解析失败：%s", kv.c_str());
       }
     }
   }
 
-
-  void check_event_completion()   //判断事件完成
+  void check_event_completion()
   {
     std::lock_guard<std::mutex> lk(event_mutex_);
     if (!current_event_) {return;}
@@ -601,7 +636,7 @@ private:
         done = (snapshot.fan_ok_cf == target);
       } catch (...) {
         RCLCPP_WARN(get_logger(), "fan_cf事件payload格式错误: '%s'，跳过等待", ev.payload.c_str());
-        done = true;         // Fallback
+        done = true;
       }
     } else if (ev.event_type == "fan_resin") {
       try {
@@ -609,15 +644,11 @@ private:
         done = (snapshot.fan_ok_resin == target);
       } catch (...) {
         RCLCPP_WARN(get_logger(), "fan_resin事件payload格式错误: '%s'，跳过等待", ev.payload.c_str());
-        done = true;         // Fallback
+        done = true;
       }
     } else if (ev.event_type == "extrude_reset") {
-      // 固件用 EVDONE 握手表示复位完成。去重缓存跨会话保留,
-      // 重复打印同一 wire 序号时会跳过清零 last_e_seq,使其残留旧值;
-      // 因此以 EVDONE 判定完成,不再死等 last_e_seq==-1。
       done = current_event_done_received_;
     } else if (ev.event_type == "extrude_sync") {
-      // 剪切屏障：固件完成两次剪切后才允许回抽/travel。
       done = current_event_ack_received_ && current_event_done_received_ &&
         cut_done_received_ && cut_done_wire_id_ == last_cut_wire_id_;
     }
@@ -634,22 +665,23 @@ private:
 
   bool write_line(const std::string & line)
   {
-    publish_uart_log("TX", line);
     std::lock_guard<std::mutex> lk(serial_write_mutex_);
     boost::system::error_code ec;
     const std::size_t written = boost::asio::write(serial_, boost::asio::buffer(line), ec);
-    if (ec || written != line.size()) {
+    const bool ok = !ec && written == line.size();
+    if (!ok) {
       RCLCPP_WARN_THROTTLE(
-        get_logger(),
-        *get_clock(),
-        2000,
+        get_logger(), *get_clock(), 2000,
         "写入失败：%s (written=%zu expected=%zu)",
         ec ? ec.message().c_str() : "incomplete write",
-        written,
-        line.size());
-      return false;
+        written, line.size());
     }
-    return true;
+    // Capture the actual write result on the TX path; this is the sole
+    // source of e_tx log records (no pre-write "attempt" lines).
+    capture_line(
+      line, Direction::kTx, ok, static_cast<uint32_t>(written));
+    publish_uart_log("TX", line);
+    return ok;
   }
 
   void on_print_test_command(const std::string & cmd)
@@ -678,16 +710,233 @@ private:
     } else if (cmd == "ABORT") {
       aborted_.store(true);
       paused_.store(true);
-      // 通过现有EV串口指令将两个喷头加热温度设为0°C
       write_line("EV 0 heat_cf 0\n");
       write_line("EV 0 heat_resin 0\n");
-      // 更新本地温度缓存
       {
         std::lock_guard<std::mutex> lk(status_cache_mutex_);
         status_.target_temp_cf = 0.0f;
         status_.target_temp_resin = 0.0f;
       }
       RCLCPP_WARN(get_logger(), "uart_node收到ABORT命令，停止挤出并关闭加热");
+    }
+  }
+
+  // ---- runtime logging internals ----
+
+  void capture_line(
+    const std::string & line, Direction dir, bool tx_ok,
+    uint32_t bytes_written)
+  {
+    if (!runtime_log_enabled_) {
+      return;
+    }
+    CaptureRecord rec;
+    rec.capture_seq = ++capture_seq_;
+    rec.host_mono_ns = runtime_logging::clock_monotonic_ns();
+    rec.direction = dir;
+    rec.type = runtime_logging::classify_line(line, dir);
+    rec.tx_ok = tx_ok;
+    rec.bytes_written = bytes_written;
+    rec.line = line;
+    while (!rec.line.empty() &&
+      (rec.line.back() == '\n' || rec.line.back() == '\r'))
+    {
+      rec.line.pop_back();
+    }
+    if (!capture_ring_->try_push(std::move(rec))) {
+      capture_dropped_.fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+
+  void relay_loop()
+  {
+    auto next_connect = std::chrono::steady_clock::now();
+    while (relay_running_.load()) {
+      bool did_work = false;
+      while (auto item = capture_ring_->try_pop()) {
+        did_work = true;
+        process_capture(*item);
+      }
+      {
+        std::lock_guard<std::mutex> lk(ipc_mutex_);
+        if (!ipc_client_.connected()) {
+          if (std::chrono::steady_clock::now() >= next_connect) {
+            if (ipc_client_.connect_to(runtime_log_socket_)) {
+              RCLCPP_INFO(
+                get_logger(), "runtime log IPC connected: %s",
+                runtime_log_socket_.c_str());
+            }
+            next_connect = std::chrono::steady_clock::now() +
+              std::chrono::milliseconds(500);
+          }
+        }
+        if (ipc_client_.connected()) {
+          ipc_client_.drain();
+        }
+      }
+      if (!did_work) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+      }
+    }
+    while (auto item = capture_ring_->try_pop()) {
+      process_capture(*item);
+    }
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    ipc_client_.drain();
+  }
+
+  void process_capture(const CaptureRecord & rec)
+  {
+    auto records = whitelist_.project(rec, record_seq_);
+    for (auto & w : records) {
+      w.record_seq = record_seq_++;
+      if (w.valid) {
+        const std::string json = encode_record_json(
+          w, run_id_, producer_id_, 1);
+        std::lock_guard<std::mutex> lk(ipc_mutex_);
+        ipc_client_.queue_message(json);
+        ++log_records_sent_;
+      }
+    }
+    UartObservation obs;
+    obs.host_mono_ns = rec.host_mono_ns;
+    obs.host_ros_stamp = now();
+    obs.capture_seq = rec.capture_seq;
+    obs.producer_epoch = producer_epoch_;
+    obs.direction = rec.direction == Direction::kTx ?
+      UartObservation::DIRECTION_TX : UartObservation::DIRECTION_RX;
+    obs.line = rec.line;
+    obs.tx_ok = rec.tx_ok;
+    observation_pub_->publish(obs);
+    update_ui_cache(rec);
+  }
+
+  void update_ui_cache(const CaptureRecord & rec)
+  {
+    std::lock_guard<std::mutex> lk(ui_cache_mutex_);
+    if (rec.type == CaptureType::kStat) {
+      parse_ui_stat(rec.line);
+    } else if (rec.type == CaptureType::kEstat) {
+      parse_ui_estat(rec.line, false);
+    } else if (rec.type == CaptureType::kEstatHot) {
+      parse_ui_estat(rec.line, true);
+    } else if (rec.type == CaptureType::kUstat) {
+      parse_ui_ustat(rec.line);
+    }
+    ui_cache_stamp_ = now();
+    ui_cache_valid_ = true;
+  }
+
+  void parse_ui_stat(const std::string & line)
+  {
+    std::istringstream ss(line.substr(5));
+    std::string kv;
+    while (ss >> kv) {
+      const auto eq = kv.find('=');
+      if (eq == std::string::npos) {continue;}
+      const auto key = kv.substr(0, eq);
+      const auto val = kv.substr(eq + 1);
+      try {
+        if (key == "temp_cf") {ui_cache_.current_temp_cf = std::stof(val);}
+        else if (key == "temp_resin") {ui_cache_.current_temp_resin = std::stof(val);}
+        else if (key == "target_cf") {ui_cache_.target_temp_cf = std::stof(val);}
+        else if (key == "target_resin") {ui_cache_.target_temp_resin = std::stof(val);}
+        else if (key == "fan_ok_cf") {ui_cache_.fan_ok_cf = (val == "1");}
+        else if (key == "fan_ok_resin") {ui_cache_.fan_ok_resin = (val == "1");}
+        else if (key == "tool") {ui_cache_.current_tool = std::stoi(val);}
+        else if (key == "err") {ui_cache_.error_code = std::stoi(val);}
+        else if (key == "last_e_seq") {ui_cache_.last_e_seq = std::stoi(val);}
+        else if (key == "last_e_tool") {ui_cache_.last_e_tool = std::stoi(val);}
+        else if (key == "last_e_abs") {ui_cache_.last_e_abs = std::stod(val);}
+        else if (key == "last_e_us") {ui_cache_.last_e_us = std::stoull(val);}
+      } catch (...) {
+      }
+    }
+    ui_cache_.stat_valid = true;
+    ui_cache_.stat_age_s = 0.0;
+  }
+
+  void parse_ui_estat(const std::string & line, bool hot_only)
+  {
+    const size_t tag_len = hot_only ? 8 : 6;
+    std::istringstream ss(line.substr(tag_len));
+    std::string kv;
+    while (ss >> kv) {
+      const auto eq = kv.find('=');
+      if (eq == std::string::npos) {continue;}
+      const auto key = kv.substr(0, eq);
+      const auto val = kv.substr(eq + 1);
+      try {
+        if (key == "tool") {ui_cache_.estat_tool = std::stoi(val);}
+        else if (key == "state") {ui_cache_.estat_state = val;}
+        else if (key == "target_steps") {ui_cache_.target_steps = std::stoll(val);}
+        else if (key == "submitted_steps") {ui_cache_.submitted_steps = std::stoll(val);}
+        else if (key == "completed_steps") {ui_cache_.completed_steps = std::stoll(val);}
+        else if (key == "host_total_um") {ui_cache_.host_total_um = std::stoll(val);}
+        else if (key == "last_cmd_us") {ui_cache_.last_cmd_us = std::stoull(val);}
+        else if (key == "ff_until_us") {ui_cache_.ff_until_us = std::stoull(val);}
+        else if (key == "ff_sps") {ui_cache_.ff_sps = std::stod(val);}
+        else if (key == "v_sps") {ui_cache_.v_sps = std::stod(val);}
+        else if (key == "phase") {ui_cache_.phase = std::stod(val);}
+        else if (key == "last_seq") {ui_cache_.last_seq = std::stoul(val);}
+        else if (key == "fault") {ui_cache_.fault = std::stoul(val, nullptr, 0);}
+        else if (key == "hard_fault") {ui_cache_.hard_fault = std::stoul(val, nullptr, 0);}
+        else if (key == "rmt_submit_err") {ui_cache_.rmt_submit_err = std::stoul(val);}
+        else if (key == "rmt_done_err") {ui_cache_.rmt_done_err = std::stoul(val);}
+        else if (key == "qdepth") {ui_cache_.qdepth = std::stoul(val);}
+        else if (key == "dir") {ui_cache_.dir = std::stoi(val);}
+        else if (key == "enabled") {ui_cache_.enabled = (val == "1");}
+        else if (key == "hold_latched") {ui_cache_.hold_latched = (val == "1");}
+        else if (key == "host_valid") {ui_cache_.host_valid = (val == "1");}
+      } catch (...) {
+      }
+    }
+    ui_cache_.estat_valid = true;
+    ui_cache_.estat_age_s = 0.0;
+  }
+
+  void parse_ui_ustat(const std::string & line)
+  {
+    std::istringstream ss(line.substr(6));
+    std::string kv;
+    while (ss >> kv) {
+      const auto eq = kv.find('=');
+      if (eq == std::string::npos) {continue;}
+      const auto key = kv.substr(0, eq);
+      const auto val = kv.substr(eq + 1);
+      try {
+        if (key == "fifo_ovf") {ui_cache_.fifo_ovf = std::stoul(val);}
+        else if (key == "buffer_full") {ui_cache_.buffer_full = std::stoul(val);}
+        else if (key == "line_drop") {ui_cache_.line_drop = std::stoul(val);}
+        else if (key == "cmd_drop") {ui_cache_.cmd_drop = std::stoul(val);}
+        else if (key == "old_seq") {ui_cache_.old_seq = std::stoul(val);}
+        else if (key == "seq_gap") {ui_cache_.seq_gap = std::stoul(val);}
+        else if (key == "parse_err") {ui_cache_.parse_err = std::stoul(val);}
+      } catch (...) {
+      }
+    }
+    ui_cache_.ustat_valid = true;
+    ui_cache_.ustat_age_s = 0.0;
+  }
+
+  void ui_loop()
+  {
+    while (relay_running_.load()) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+      UartTelemetryUi out;
+      {
+        std::lock_guard<std::mutex> lk(ui_cache_mutex_);
+        if (!ui_cache_valid_) {
+          continue;
+        }
+        out = ui_cache_;
+        const auto age = (now() - ui_cache_stamp_).seconds();
+        out.stamp = now();
+        out.stat_age_s = age;
+        out.estat_age_s = age;
+        out.ustat_age_s = age;
+      }
+      telemetry_ui_pub_->publish(out);
     }
   }
 };

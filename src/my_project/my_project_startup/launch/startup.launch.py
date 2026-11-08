@@ -56,6 +56,17 @@ def generate_launch_description():
 
     # UART node params
     port = LaunchConfiguration("port")
+    run_id = LaunchConfiguration("run_id")
+    runtime_log_enabled = LaunchConfiguration("runtime_log_enabled")
+    runtime_log_root = LaunchConfiguration("runtime_log_root")
+    runtime_log_socket = LaunchConfiguration("runtime_log_socket")
+    runtime_log_buffer_bytes = LaunchConfiguration("runtime_log_buffer_bytes")
+    runtime_log_batch_bytes = LaunchConfiguration("runtime_log_batch_bytes")
+    runtime_log_flush_period_ms = LaunchConfiguration("runtime_log_flush_period_ms")
+    runtime_log_sync_period_ms = LaunchConfiguration("runtime_log_sync_period_ms")
+    runtime_log_rotate_bytes = LaunchConfiguration("runtime_log_rotate_bytes")
+    runtime_log_shutdown_timeout_ms = LaunchConfiguration("runtime_log_shutdown_timeout_ms")
+    runtime_ui_period_ms = LaunchConfiguration("runtime_ui_period_ms")
     baudrate = LaunchConfiguration("baudrate")
     extrude_scale = LaunchConfiguration("extrude_scale")
     extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")
@@ -94,6 +105,9 @@ def generate_launch_description():
             "extrusion_wire_mode": extrusion_wire_mode,
             "dispatch_policy": dispatch_policy,
             "uniform_rate_mm_per_s": uniform_rate_mm_per_s,
+            "run_id": run_id,
+            "runtime_log_enabled": runtime_log_enabled,
+            "runtime_log_socket": runtime_log_socket,
         }],
     )
 
@@ -140,6 +154,9 @@ def generate_launch_description():
         output="screen",
         parameters=[{
             "latency_publish_period_ms": latency_publish_period_ms,
+            "run_id": run_id,
+            "runtime_log_enabled": runtime_log_enabled,
+            "runtime_log_socket": runtime_log_socket,
             "latency_history_limit": latency_history_limit,
             "latency_stats_window_limit": latency_stats_window_limit,
             "rsi_period_ms": rsi_period_ms,
@@ -152,6 +169,37 @@ def generate_launch_description():
             "robot_match_uncertainty_spacing_multiplier":
                 robot_match_uncertainty_spacing_multiplier,
             "robot_match_nozzle_lever_mm": robot_match_nozzle_lever_mm,
+        }],
+    )
+
+    # Runtime logger: whitelisted JSONL recorder, owns the IPC socket.
+    runtime_logger_node = Node(
+        package="runtime_logger",
+        executable="runtime_logger_node",
+        name="runtime_logger_node",
+        output="screen",
+        parameters=[{
+            "run_id": run_id,
+            "runtime_log_enabled": runtime_log_enabled,
+            "runtime_log_root": runtime_log_root,
+            "runtime_log_socket": runtime_log_socket,
+            "runtime_log_buffer_bytes": runtime_log_buffer_bytes,
+            "runtime_log_batch_bytes": runtime_log_batch_bytes,
+            "runtime_log_flush_period_ms": runtime_log_flush_period_ms,
+            "runtime_log_sync_period_ms": runtime_log_sync_period_ms,
+            "runtime_log_rotate_bytes": runtime_log_rotate_bytes,
+            "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
+        }],
+    )
+
+    # 1 Hz UI telemetry aggregator.
+    runtime_telemetry_ui_node = Node(
+        package="runtime_logger",
+        executable="runtime_telemetry_ui_node",
+        name="runtime_telemetry_ui_node",
+        output="screen",
+        parameters=[{
+            "runtime_ui_period_ms": runtime_ui_period_ms,
         }],
     )
 
@@ -259,7 +307,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "latency_publish_period_ms",
-            default_value="200",
+            default_value="300",
             description="挤出延迟监控状态发布周期（毫秒）。",
         ),
         DeclareLaunchArgument(
@@ -402,9 +450,66 @@ def generate_launch_description():
             default_value="2.0",
             description="暂停树脂回抽速度（mm/s）。",
         ),
+        DeclareLaunchArgument(
+            "run_id",
+            default_value="",
+            description="运行日志会话 ID；空值由 runtime_logger 自动生成。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_enabled",
+            default_value="true",
+            description="启用白名单运行日志（仅记录六类业务字段）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_root",
+            default_value="/home/jayson/kuka_ram_ws/data/runtime_logs",
+            description="运行日志根目录。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_socket",
+            default_value="",
+            description="运行日志 AF_UNIX socket 路径；空值按 run_id 生成。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_buffer_bytes",
+            default_value="8388608",
+            description="运行日志总缓冲预算（字节）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_batch_bytes",
+            default_value="65536",
+            description="写盘批量阈值（字节）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_flush_period_ms",
+            default_value="100",
+            description="低流量下最长写盘等待（毫秒）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_sync_period_ms",
+            default_value="1000",
+            description="fdatasync 持久化检查点周期（毫秒）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_rotate_bytes",
+            default_value="67108864",
+            description="单个 JSONL 分卷字节上限。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_log_shutdown_timeout_ms",
+            default_value="5000",
+            description="关闭时排空日志的最长等待（毫秒）。",
+        ),
+        DeclareLaunchArgument(
+            "runtime_ui_period_ms",
+            default_value="1000",
+            description="UI 遥测聚合发布周期（毫秒）。",
+        ),
         rsi_node,
         uart_node,
         system_manager_node,
         extruder_latency_monitor_node,
+        runtime_logger_node,
+        runtime_telemetry_ui_node,
         center_delayed,
     ])

@@ -13,6 +13,7 @@
   <depend>std_msgs</depend>
   <depend>my_project_interfaces</depend>
   <depend>boost</depend>
+  <depend>runtime_logging_core</depend>
 
   <test_depend>ament_cmake_gtest</test_depend>
   <test_depend>ament_cmake_pytest</test_depend>

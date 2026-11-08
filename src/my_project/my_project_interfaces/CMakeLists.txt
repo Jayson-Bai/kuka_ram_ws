@@ -20,6 +20,10 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/RsiHeartBeat.msg"
 "msg/UiStatus.msg"
 "msg/ExtruderLatencyStatus.msg"
+"msg/UartObservation.msg"
+"msg/UartTelemetryUi.msg"
+"msg/RuntimeTelemetryUi.msg"
+"msg/RuntimeLogHealth.msg"
 DEPENDENCIES builtin_interfaces std_msgs
 )
 

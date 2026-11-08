@@ -14,6 +14,7 @@ find_package(rclcpp REQUIRED)
 find_package(my_project_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(runtime_logging_core REQUIRED)
 
 add_library(cnpy STATIC
   third_party/cnpy/cnpy.cpp
@@ -60,6 +61,7 @@ ament_target_dependencies(
   rclcpp
   my_project_interfaces
   std_msgs
+  runtime_logging_core
 )
 
 install(TARGETS center_node system_manager_node extruder_latency_monitor_node DESTINATION lib/${PROJECT_NAME})
