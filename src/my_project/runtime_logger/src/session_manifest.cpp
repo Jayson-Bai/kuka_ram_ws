@@ -62,6 +62,7 @@ bool SessionManifest::start(
   bool test_run)
 {
   run_id_ = run_id;
+  config_json_ = config_json;
   run_dir_ = root_dir + "/run_" + run_id;
   if (!mkdir_p(root_dir) || !mkdir_p(run_dir_)) {
     return false;
@@ -99,6 +100,7 @@ bool SessionManifest::finalize(
   os << "{"
      << "\"schema_version\":1"
      << ",\"run_id\":\"" << run_id_ << "\""
+     << ",\"config\":" << (config_json_.empty() ? "{}" : config_json_)
      << ",\"end_reason\":\"" << end_reason << "\""
      << ",\"complete\":" << (complete ? "true" : "false")
      << "}";

@@ -890,7 +890,7 @@ private:
     }
     send_producer_status("final");
     const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(2000);
+      std::chrono::milliseconds(12000);
     while (std::chrono::steady_clock::now() < deadline) {
       bool empty = false;
       {

@@ -35,6 +35,7 @@ public:
 private:
   std::string run_dir_;
   std::string run_id_;
+  std::string config_json_;
   bool active_{false};
   int lock_fd_{-1};
   bool write_manifest_atomic(const std::string & body);

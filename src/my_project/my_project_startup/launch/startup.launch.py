@@ -519,8 +519,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "runtime_log_shutdown_timeout_ms",
-            default_value="5000",
-            description="关闭时排空日志的最长等待（毫秒）。",
+            default_value="15000",
+            description=(
+                "关闭时排空日志的最长等待（毫秒）；uart_node 需要更多 "
+                "时间 drain UART 遥测并发送 final status。"),
         ),
         DeclareLaunchArgument(
             "runtime_ui_period_ms",
