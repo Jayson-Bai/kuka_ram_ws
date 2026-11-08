@@ -57,6 +57,14 @@ public:
       "runtime_log_shutdown_timeout_ms", 5000);
     run_id_ = declare_parameter<std::string>("run_id", "");
     test_run_ = declare_parameter<bool>("runtime_log_test_run", false);
+    // RSI experiment metadata; empty values are omitted from manifest.
+    rsi_xml_sha256_ = declare_parameter<std::string>("rsi_xml_sha256", "");
+    rsi_context_ = declare_parameter<std::string>("rsi_context", "");
+    rsi_pt1_t1_ = declare_parameter<std::string>("rsi_pt1_t1", "");
+    rsi_precision_ = declare_parameter<std::string>("rsi_precision", "");
+    rsi_tool_base_ = declare_parameter<std::string>("rsi_tool_base", "");
+    rsi_spline_config_ = declare_parameter<std::string>("rsi_spline_config", "");
+    rsi_extra_json_ = declare_parameter<std::string>("rsi_extra_json", "");
     if (run_id_.empty()) {
       run_id_ = make_run_id();
     }
@@ -89,7 +97,7 @@ private:
     if (!manifest_.start(
         root_, run_id_,
         "kuka_ram_ws@runtime_logger_v1",
-        "{}", test_run_))
+        build_config_json(), test_run_))
     {
       RCLCPP_ERROR(
         get_logger(), "无法创建运行日志会话目录 %s", manifest_.run_dir().c_str());
@@ -149,8 +157,47 @@ private:
     health_pub_->publish(msg);
   }
 
+  std::string build_config_json()
+  {
+    std::ostringstream os;
+    os << "{";
+    bool first = true;
+    auto field = [&](const char * k, const std::string & v) {
+      if (v.empty()) {
+        return;
+      }
+      if (!first) {
+        os << ",";
+      }
+      first = false;
+      os << "\"" << k << "\":\"" << v << "\"";
+    };
+    field("rsi_xml_sha256", rsi_xml_sha256_);
+    field("rsi_context", rsi_context_);
+    field("rsi_pt1_t1", rsi_pt1_t1_);
+    field("rsi_precision", rsi_precision_);
+    field("rsi_tool_base", rsi_tool_base_);
+    field("rsi_spline_config", rsi_spline_config_);
+    if (!rsi_extra_json_.empty()) {
+      if (!first) {
+        os << ",";
+      }
+      first = false;
+      os << "\"extra\":" << rsi_extra_json_;
+    }
+    os << "}";
+    return os.str();
+  }
+
   bool enabled_{true};
   bool test_run_{false};
+  std::string rsi_xml_sha256_;
+  std::string rsi_context_;
+  std::string rsi_pt1_t1_;
+  std::string rsi_precision_;
+  std::string rsi_tool_base_;
+  std::string rsi_spline_config_;
+  std::string rsi_extra_json_;
   std::string root_;
   std::string socket_path_;
   std::string run_id_;

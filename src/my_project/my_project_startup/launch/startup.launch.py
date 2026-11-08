@@ -67,6 +67,14 @@ def generate_launch_description():
     runtime_log_rotate_bytes = LaunchConfiguration("runtime_log_rotate_bytes")
     runtime_log_shutdown_timeout_ms = LaunchConfiguration("runtime_log_shutdown_timeout_ms")
     runtime_ui_period_ms = LaunchConfiguration("runtime_ui_period_ms")
+    # RSI experiment metadata written into the session manifest.
+    rsi_xml_sha256 = LaunchConfiguration("rsi_xml_sha256")
+    rsi_context = LaunchConfiguration("rsi_context")
+    rsi_pt1_t1 = LaunchConfiguration("rsi_pt1_t1")
+    rsi_precision = LaunchConfiguration("rsi_precision")
+    rsi_tool_base = LaunchConfiguration("rsi_tool_base")
+    rsi_spline_config = LaunchConfiguration("rsi_spline_config")
+    rsi_extra_json = LaunchConfiguration("rsi_extra_json")
     baudrate = LaunchConfiguration("baudrate")
     extrude_scale = LaunchConfiguration("extrude_scale")
     extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")
@@ -192,6 +200,13 @@ def generate_launch_description():
             "runtime_log_sync_period_ms": runtime_log_sync_period_ms,
             "runtime_log_rotate_bytes": runtime_log_rotate_bytes,
             "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
+            "rsi_xml_sha256": rsi_xml_sha256,
+            "rsi_context": rsi_context,
+            "rsi_pt1_t1": rsi_pt1_t1,
+            "rsi_precision": rsi_precision,
+            "rsi_tool_base": rsi_tool_base,
+            "rsi_spline_config": rsi_spline_config,
+            "rsi_extra_json": rsi_extra_json,
         }],
     )
 
@@ -507,6 +522,56 @@ def generate_launch_description():
             "runtime_ui_period_ms",
             default_value="1000",
             description="UI 遥测聚合发布周期（毫秒）。",
+        ),
+        # RSI experiment metadata written into the run manifest so a
+        # logged session can be traced back to the robot-side config.
+        DeclareLaunchArgument(
+            "rsi_xml_sha256",
+            default_value=(
+                "3dae7e83a2a96529856bebf772306ee5af598d2a4bab2f70ab7377b9b25fa695"),
+            description=(
+                "SHA256 of RSI_PythonConfig.xml inside the deployed WVS. "
+                "Update if the XML changes; the logged hash must match the "
+                "file the controller actually loads."),
+        ),
+        DeclareLaunchArgument(
+            "rsi_context",
+            default_value="PythonHomeDemo",
+            description="RSI context name from RSI_CREATE in the .src.",
+        ),
+        DeclareLaunchArgument(
+            "rsi_pt1_t1",
+            default_value="0.012",
+            description=(
+                "PT1.T1 set via RSI_SETPUBLICPAR (Filter_T1 in .src). "
+                "WorkVisual canvas shows the static default 1; the runtime "
+                "value is what the filter actually uses."),
+        ),
+        DeclareLaunchArgument(
+            "rsi_precision",
+            default_value="4",
+            description="Ethernet_1 Precision parameter.",
+        ),
+        DeclareLaunchArgument(
+            "rsi_tool_base",
+            default_value="",
+            description=(
+                "Active $TOOL/$BASE/$LOAD identification for this run "
+                "(e.g. tool_data index + base frame). Fill before logging."),
+        ),
+        DeclareLaunchArgument(
+            "rsi_spline_config",
+            default_value="",
+            description=(
+                "Identifier for the offline spline/path config used in this "
+                "run (e.g. npz filename or spline smoothing profile)."),
+        ),
+        DeclareLaunchArgument(
+            "rsi_extra_json",
+            default_value="",
+            description=(
+                "Free-form JSON object merged into manifest config.extra; "
+                "use for one-off fields not covered by named parameters."),
         ),
         rsi_node,
         uart_node,
