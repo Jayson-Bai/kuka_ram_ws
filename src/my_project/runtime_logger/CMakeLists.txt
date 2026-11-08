@@ -39,6 +39,13 @@ install(PROGRAMS scripts/check_runtime_log.py
 if(BUILD_TESTING)
   find_package(ament_cmake_pytest REQUIRED)
   ament_add_pytest_test(test_check_runtime_log test/test_check_runtime_log.py)
+
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_integrity
+    test/test_integrity.cpp
+    src/integrity.cpp)
+  target_include_directories(test_integrity PRIVATE include)
+  target_compile_features(test_integrity PUBLIC cxx_std_17)
 endif()
 
 ament_package()

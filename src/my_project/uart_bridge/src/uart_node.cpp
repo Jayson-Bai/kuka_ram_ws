@@ -20,6 +20,7 @@
 #include <std_msgs/msg/string.hpp>
 
 #include <my_project_interfaces/msg/planned_event.hpp>
+#include <my_project_interfaces/msg/runtime_log_config.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
 #include <my_project_interfaces/msg/uart_observation.hpp>
@@ -28,6 +29,7 @@
 #include <runtime_logging_core/bounded_ring.hpp>
 #include <runtime_logging_core/capture_record.hpp>
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/whitelist.hpp>
 
 #include <boost/asio.hpp>
@@ -50,6 +52,7 @@ using boost::asio::serial_port_base;
 using my_project_interfaces::msg::RsiHeartBeat;
 using my_project_interfaces::msg::PrintHeadStatus;
 using my_project_interfaces::msg::PlannedEvent;
+using my_project_interfaces::msg::RuntimeLogConfig;
 using my_project_interfaces::msg::UartObservation;
 using my_project_interfaces::msg::UartTelemetryUi;
 
@@ -153,7 +156,10 @@ private:
   Whitelist whitelist_;
   IpcClient ipc_client_;
   std::mutex ipc_mutex_;
+  std::atomic<bool> runtime_log_ready_{false};
+  rclcpp::Subscription<RuntimeLogConfig>::SharedPtr runtime_log_config_sub_;
   std::atomic<uint64_t> log_records_sent_{0};
+  uint64_t first_log_record_seq_{0};
   std::mutex ui_cache_mutex_;
   UartTelemetryUi ui_cache_;
   bool ui_cache_valid_{false};
@@ -231,11 +237,30 @@ public:
       "runtime_log_ring_capacity", 1024);
     capture_ring_ = std::make_unique<BoundedRing<CaptureRecord>>(
       static_cast<size_t>(ring_capacity));
-    if (run_id_.empty()) {
-      run_id_ = "uart_" + producer_epoch_;
-    }
     if (runtime_log_socket_.empty()) {
-      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+      if (runtime_log_enabled_) {
+        runtime_log_config_sub_ = create_subscription<RuntimeLogConfig>(
+          "/runtime/log_config",
+          rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local(),
+          [this](RuntimeLogConfig::SharedPtr msg) {
+            if (runtime_log_ready_.load(std::memory_order_acquire) ||
+            !msg->enabled || msg->socket_path.empty())
+            {
+              return;
+            }
+            run_id_ = msg->run_id;
+            runtime_log_socket_ = msg->socket_path;
+            runtime_log_ready_.store(true, std::memory_order_release);
+            RCLCPP_INFO(
+              get_logger(), "runtime log config received: run_id=%s socket=%s",
+              run_id_.c_str(), runtime_log_socket_.c_str());
+          });
+      }
+    } else {
+      if (run_id_.empty()) {
+        run_id_ = "uart_" + producer_epoch_;
+      }
+      runtime_log_ready_.store(true, std::memory_order_release);
     }
     if (runtime_log_enabled_) {
       relay_running_.store(true);
@@ -243,6 +268,7 @@ public:
       ui_thread_ = std::thread(&UartNode::ui_loop, this);
       RCLCPP_INFO(
         get_logger(), "runtime logging enabled, socket=%s",
+        runtime_log_socket_.empty() ? "<waiting for logger broadcast>" :
         runtime_log_socket_.c_str());
     }
 
@@ -751,7 +777,13 @@ private:
   void relay_loop()
   {
     auto next_connect = std::chrono::steady_clock::now();
+    auto next_status = std::chrono::steady_clock::now();
+    bool status_hello_sent = false;
     while (relay_running_.load()) {
+      if (!runtime_log_ready_.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        continue;
+      }
       bool did_work = false;
       while (auto item = capture_ring_->try_pop()) {
         did_work = true;
@@ -760,6 +792,7 @@ private:
       {
         std::lock_guard<std::mutex> lk(ipc_mutex_);
         if (!ipc_client_.connected()) {
+          status_hello_sent = false;
           if (std::chrono::steady_clock::now() >= next_connect) {
             if (ipc_client_.connect_to(runtime_log_socket_)) {
               RCLCPP_INFO(
@@ -774,15 +807,24 @@ private:
           ipc_client_.drain();
         }
       }
+      if (ipc_client_.connected() &&
+        std::chrono::steady_clock::now() >= next_status)
+      {
+        send_producer_status(status_hello_sent ? "periodic" : "hello");
+        status_hello_sent = true;
+        next_status = std::chrono::steady_clock::now() +
+          std::chrono::seconds(1);
+      }
       if (!did_work) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
     }
-    while (auto item = capture_ring_->try_pop()) {
-      process_capture(*item);
+    if (runtime_log_ready_.load(std::memory_order_acquire)) {
+      while (auto item = capture_ring_->try_pop()) {
+        process_capture(*item);
+      }
+      send_final_producer_status();
     }
-    std::lock_guard<std::mutex> lk(ipc_mutex_);
-    ipc_client_.drain();
   }
 
   void process_capture(const CaptureRecord & rec)
@@ -794,8 +836,12 @@ private:
         const std::string json = encode_record_json(
           w, run_id_, producer_id_, 1);
         std::lock_guard<std::mutex> lk(ipc_mutex_);
-        ipc_client_.queue_message(json);
-        ++log_records_sent_;
+        if (ipc_client_.queue_message(json)) {
+          if (log_records_sent_.load() == 0) {
+            first_log_record_seq_ = w.record_seq;
+          }
+          ++log_records_sent_;
+        }
       }
     }
     UartObservation obs;
@@ -809,6 +855,53 @@ private:
     obs.tx_ok = rec.tx_ok;
     observation_pub_->publish(obs);
     update_ui_cache(rec);
+  }
+
+  void send_producer_status(const char * phase)
+  {
+    runtime_logging::ProducerStatus st;
+    st.producer_id = producer_id_;
+    st.run_id = run_id_;
+    st.producer_epoch = 1;
+    st.phase = phase;
+    st.first_record_seq = first_log_record_seq_;
+    st.last_record_seq =
+      log_records_sent_.load() == 0 ? 0 : record_seq_ - 1;
+    st.sent_records = log_records_sent_.load();
+    st.ring_dropped = capture_dropped_.load();
+    st.ipc_dropped = ipc_client_.dropped();
+    st.send_errors = ipc_client_.send_errors();
+    st.pending_messages = ipc_client_.pending();
+    st.pending_bytes = ipc_client_.pending_bytes();
+    st.connected = ipc_client_.connected();
+    const std::string json = runtime_logging::encode_producer_status_json(st);
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    ipc_client_.queue_message(json);
+    if (ipc_client_.connected()) {
+      ipc_client_.drain();
+    }
+  }
+
+  void send_final_producer_status()
+  {
+    if (!ipc_client_.connected()) {
+      std::lock_guard<std::mutex> lk(ipc_mutex_);
+      ipc_client_.connect_to(runtime_log_socket_);
+    }
+    send_producer_status("final");
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(2000);
+    while (std::chrono::steady_clock::now() < deadline) {
+      bool empty = false;
+      {
+        std::lock_guard<std::mutex> lk(ipc_mutex_);
+        if (!ipc_client_.connected()) {break;}
+        ipc_client_.drain();
+        empty = ipc_client_.pending() == 0;
+      }
+      if (empty) {break;}
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   }
 
   void update_ui_cache(const CaptureRecord & rec)

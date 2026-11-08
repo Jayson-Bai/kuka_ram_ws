@@ -24,6 +24,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 "msg/UartTelemetryUi.msg"
 "msg/RuntimeTelemetryUi.msg"
 "msg/RuntimeLogHealth.msg"
+"msg/RuntimeLogConfig.msg"
 DEPENDENCIES builtin_interfaces std_msgs
 )
 

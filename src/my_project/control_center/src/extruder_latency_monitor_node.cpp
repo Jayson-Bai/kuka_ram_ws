@@ -12,17 +12,20 @@
 #include <my_project_interfaces/msg/extruder_latency_status.hpp>
 #include <my_project_interfaces/msg/kuka_status.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/runtime_log_config.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/trajectory_point.hpp>
 #include <my_project_interfaces/msg/uart_observation.hpp>
 
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/whitelist.hpp>
 #include <runtime_logging_core/capture_record.hpp>
 
 #include <std_msgs/msg/string.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -40,6 +43,7 @@
 using my_project_interfaces::msg::ExtruderLatencyStatus;
 using my_project_interfaces::msg::KukaStatus;
 using my_project_interfaces::msg::PrintHeadStatus;
+using my_project_interfaces::msg::RuntimeLogConfig;
 using my_project_interfaces::msg::RsiHeartBeat;
 using my_project_interfaces::msg::TrajectoryPoint;
 using my_project_interfaces::msg::UartObservation;
@@ -71,11 +75,30 @@ public:
     runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
     producer_id_ = "latency_node";
     producer_epoch_ = make_epoch();
-    if (run_id_.empty()) {
-      run_id_ = "latency_" + producer_epoch_;
-    }
     if (runtime_log_socket_.empty()) {
-      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+      if (runtime_log_enabled_) {
+        runtime_log_config_sub_ = create_subscription<RuntimeLogConfig>(
+          "/runtime/log_config",
+          rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local(),
+          [this](RuntimeLogConfig::SharedPtr msg) {
+            if (runtime_log_ready_.load(std::memory_order_acquire) ||
+            !msg->enabled || msg->socket_path.empty())
+            {
+              return;
+            }
+            run_id_ = msg->run_id;
+            runtime_log_socket_ = msg->socket_path;
+            runtime_log_ready_.store(true, std::memory_order_release);
+            RCLCPP_INFO(
+              get_logger(), "runtime log config received: run_id=%s socket=%s",
+              run_id_.c_str(), runtime_log_socket_.c_str());
+          });
+      }
+    } else {
+      if (run_id_.empty()) {
+        run_id_ = "latency_" + producer_epoch_;
+      }
+      runtime_log_ready_.store(true, std::memory_order_release);
     }
 
     status_pub_ = create_publisher<ExtruderLatencyStatus>("/extruder/latency_status", 10);
@@ -129,7 +152,26 @@ public:
         publish_status();
       });
 
+    status_timer_ = create_wall_timer(
+      std::chrono::seconds(1),
+      [this]() {
+        if (runtime_log_enabled_ &&
+        runtime_log_ready_.load(std::memory_order_acquire))
+        {
+          send_producer_status("periodic");
+        }
+      });
+
     RCLCPP_INFO(get_logger(), "extruder_latency_monitor_node 已启动");
+  }
+
+  ~ExtruderLatencyMonitorNode() override
+  {
+    if (runtime_log_enabled_ &&
+      runtime_log_ready_.load(std::memory_order_acquire))
+    {
+      send_final_producer_status();
+    }
   }
 
 private:
@@ -663,7 +705,8 @@ private:
 
   void emit_latency_log(const ExtruderLatencyStatus & status)
   {
-    if (!runtime_log_enabled_) {return;}
+    if (!runtime_log_enabled_ ||
+      !runtime_log_ready_.load(std::memory_order_acquire)) {return;}
     runtime_logging::WhitelistedRecord rec;
     rec.kind = runtime_logging::RecordKind::kLatency;
     rec.host_mono_ns = runtime_logging::clock_monotonic_ns();
@@ -687,9 +730,60 @@ private:
     if (!ipc_client_.connected()) {
       ipc_client_.connect_to(runtime_log_socket_);
     }
+    if (ipc_client_.queue_message(json)) {
+      if (latency_records_sent_ == 0) {
+        first_latency_record_seq_ = rec.record_seq;
+      }
+      ++latency_records_sent_;
+    }
     if (ipc_client_.connected()) {
-      ipc_client_.queue_message(json);
       ipc_client_.drain();
+    }
+  }
+
+  void send_producer_status(const char * phase)
+  {
+    runtime_logging::ProducerStatus st;
+    st.producer_id = producer_id_;
+    st.run_id = run_id_;
+    st.producer_epoch = 1;
+    st.phase = phase;
+    st.first_record_seq = first_latency_record_seq_;
+    st.last_record_seq =
+      latency_records_sent_ == 0 ? 0 : record_seq_ - 1;
+    st.sent_records = latency_records_sent_;
+    st.ring_dropped = 0;
+    st.ipc_dropped = ipc_client_.dropped();
+    st.send_errors = ipc_client_.send_errors();
+    st.pending_messages = ipc_client_.pending();
+    st.pending_bytes = ipc_client_.pending_bytes();
+    st.connected = ipc_client_.connected();
+    const std::string json = runtime_logging::encode_producer_status_json(st);
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    if (!ipc_client_.connected()) {
+      ipc_client_.connect_to(runtime_log_socket_);
+    }
+    ipc_client_.queue_message(json);
+    if (ipc_client_.connected()) {
+      ipc_client_.drain();
+    }
+  }
+
+  void send_final_producer_status()
+  {
+    send_producer_status("final");
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(2000);
+    while (std::chrono::steady_clock::now() < deadline) {
+      bool empty = false;
+      {
+        std::lock_guard<std::mutex> lk(ipc_mutex_);
+        if (!ipc_client_.connected()) {break;}
+        ipc_client_.drain();
+        empty = ipc_client_.pending() == 0;
+      }
+      if (empty) {break;}
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
   }
 
@@ -735,8 +829,12 @@ private:
   std::string producer_id_;
   std::string producer_epoch_;
   uint64_t record_seq_{0};
+  uint64_t first_latency_record_seq_{0};
+  uint64_t latency_records_sent_{0};
   runtime_logging::IpcClient ipc_client_;
   std::mutex ipc_mutex_;
+  std::atomic<bool> runtime_log_ready_{false};
+  rclcpp::Subscription<RuntimeLogConfig>::SharedPtr runtime_log_config_sub_;
 
   rclcpp::Subscription<RsiHeartBeat>::SharedPtr hb_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr uart_raw_sub_;
@@ -747,6 +845,7 @@ private:
   rclcpp::Publisher<ExtruderLatencyStatus>::SharedPtr status_pub_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr text_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr status_timer_;
 };
 
 int main(int argc, char ** argv)

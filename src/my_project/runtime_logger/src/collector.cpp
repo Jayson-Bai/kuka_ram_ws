@@ -3,15 +3,19 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/epoll.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
 #include <unistd.h>
 
 #include <chrono>
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <sstream>
+#include <unordered_set>
+#include <vector>
 
 namespace runtime_logger
 {
@@ -56,6 +60,26 @@ bool json_u64_field(
   } catch (...) {
     return false;
   }
+}
+
+bool json_bool_field(
+  const std::string & body, const char * key, bool & out)
+{
+  const std::string pat = std::string("\"") + key + "\":";
+  auto pos = body.find(pat);
+  if (pos == std::string::npos) {
+    return false;
+  }
+  pos += pat.size();
+  if (body.compare(pos, 4, "true") == 0) {
+    out = true;
+    return true;
+  }
+  if (body.compare(pos, 5, "false") == 0) {
+    out = false;
+    return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -152,6 +176,12 @@ Collector::Stats Collector::stats() const
 bool Collector::handle_frame(const uint8_t * data, size_t n)
 {
   std::string body(reinterpret_cast<const char *>(data), n);
+  std::string control;
+  if (json_string_field(body, "control", control) &&
+    control == "producer_status")
+  {
+    return handle_producer_status(body);
+  }
   std::string producer_id;
   uint64_t record_seq = 0, capture_seq = 0;
   const bool ok =
@@ -179,44 +209,108 @@ bool Collector::handle_frame(const uint8_t * data, size_t n)
   return true;
 }
 
+bool Collector::handle_producer_status(const std::string & body)
+{
+  ProducerStatusUpdate update;
+  if (!json_string_field(body, "producer_id", update.producer_id) ||
+    !json_string_field(body, "phase", update.phase))
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    ++stats_.rejected;
+    integrity_.note_parse_error("unknown");
+    return false;
+  }
+  json_u64_field(body, "producer_epoch", update.producer_epoch);
+  json_u64_field(body, "first_record_seq", update.first_record_seq);
+  json_u64_field(body, "last_record_seq", update.last_record_seq);
+  json_u64_field(body, "sent_records", update.sent_records);
+  json_u64_field(body, "ring_dropped", update.ring_dropped);
+  json_u64_field(body, "ipc_dropped", update.ipc_dropped);
+  json_u64_field(body, "send_errors", update.send_errors);
+  json_u64_field(body, "pending_messages", update.pending_messages);
+  json_u64_field(body, "pending_bytes", update.pending_bytes);
+  json_bool_field(body, "connected", update.connected);
+  std::lock_guard<std::mutex> lk(mu_);
+  integrity_.note_producer_status(update);
+  return true;
+}
+
 void Collector::accept_loop()
 {
+  const int epfd = ::epoll_create1(EPOLL_CLOEXEC);
+  if (epfd < 0) {
+    return;
+  }
+  epoll_event listen_ev{};
+  listen_ev.events = EPOLLIN;
+  listen_ev.data.fd = listen_fd_;
+  if (::epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd_, &listen_ev) != 0) {
+    ::close(epfd);
+    return;
+  }
+
+  std::unordered_set<int> clients;
+  uint8_t buf[kMaxFrame];
+  constexpr int kMaxEvents = 64;
+  constexpr int kMaxFramesPerEvent = 64;
+  epoll_event events[kMaxEvents];
+
   while (running_.load()) {
-    sockaddr_un peer{};
-    socklen_t len = sizeof(peer);
-    const int fd = ::accept4(
-      listen_fd_, reinterpret_cast<sockaddr *>(&peer), &len,
-      SOCK_NONBLOCK | SOCK_CLOEXEC);
-    if (fd < 0) {
-      if (errno == EAGAIN || errno == EWOULDBLOCK) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        continue;
-      }
-      if (errno == EINTR) {
-        continue;
-      }
+    const int ready = ::epoll_wait(epfd, events, kMaxEvents, 100);
+    if (ready < 0) {
+      if (errno == EINTR) {continue;}
       break;
     }
-    uint8_t buf[kMaxFrame];
-    while (running_.load()) {
-      const ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
-      if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(5));
-          continue;
+    for (int i = 0; i < ready && running_.load(); ++i) {
+      const int fd = events[i].data.fd;
+      if (fd == listen_fd_) {
+        while (running_.load()) {
+          const int client = ::accept4(
+            listen_fd_, nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+          if (client < 0) {
+            break;
+          }
+          epoll_event client_ev{};
+          client_ev.events = EPOLLIN;
+          client_ev.data.fd = client;
+          if (::epoll_ctl(epfd, EPOLL_CTL_ADD, client, &client_ev) != 0) {
+            ::close(client);
+            continue;
+          }
+          clients.insert(client);
         }
-        if (errno == EINTR) {
-          continue;
+        continue;
+      }
+
+      bool close_client = false;
+      for (int k = 0; k < kMaxFramesPerEvent && running_.load(); ++k) {
+        const ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
+        if (n < 0) {
+          if (errno == EINTR) {continue;}
+          if (errno != EAGAIN && errno != EWOULDBLOCK) {
+            close_client = true;
+          }
+          break;
         }
-        break;
+        if (n == 0) {
+          close_client = true;
+          break;
+        }
+        handle_frame(buf, static_cast<size_t>(n));
       }
-      if (n == 0) {
-        break;
+      if (close_client) {
+        ::epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
+        ::close(fd);
+        clients.erase(fd);
       }
-      handle_frame(buf, static_cast<size_t>(n));
     }
+  }
+
+  for (const int fd : clients) {
+    ::epoll_ctl(epfd, EPOLL_CTL_DEL, fd, nullptr);
     ::close(fd);
   }
+  ::close(epfd);
 }
 
 void Collector::writer_loop()
@@ -247,8 +341,9 @@ void Collector::writer_loop()
     size_t moved = 0;
     (void)moved;
     while (!writer_queue_.empty()) {
+      const size_t line_bytes = writer_queue_.front().size();
       writer_.queue_line(std::move(writer_queue_.front()));
-      queued_bytes_ -= writer_queue_.front().size();
+      queued_bytes_ -= std::min(queued_bytes_, line_bytes);
       writer_queue_.pop_front();
       ++moved;
     }

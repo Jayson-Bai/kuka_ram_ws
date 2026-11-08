@@ -6,6 +6,7 @@
 #include "runtime_logger/collector.hpp"
 
 #include <rclcpp/rclcpp.hpp>
+#include <my_project_interfaces/msg/runtime_log_config.hpp>
 #include <my_project_interfaces/msg/runtime_log_health.hpp>
 
 #include <atomic>
@@ -15,7 +16,9 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <thread>
 
+using my_project_interfaces::msg::RuntimeLogConfig;
 using my_project_interfaces::msg::RuntimeLogHealth;
 
 namespace
@@ -82,6 +85,9 @@ public:
     }
 
     health_pub_ = create_publisher<RuntimeLogHealth>("/runtime/log_health", 10);
+    config_pub_ = create_publisher<RuntimeLogConfig>(
+      "/runtime/log_config",
+      rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local());
 
     if (enabled_) {
       start_session();
@@ -126,6 +132,7 @@ private:
     RCLCPP_INFO(
       get_logger(), "runtime log session %s at %s",
       run_id_.c_str(), manifest_.run_dir().c_str());
+    publish_config();
   }
 
   void stop_session()
@@ -133,17 +140,33 @@ private:
     if (!session_ok_) {
       return;
     }
+    // Give producers a bounded window to flush their final status frame
+    // so the integrity report can distinguish clean end from a crash.
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(shutdown_timeout_ms_);
+    while (!collector_.all_producers_ended() &&
+      std::chrono::steady_clock::now() < deadline)
+    {
+      std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
     collector_.stop();
-    const auto & integ = collector_.integrity();
     const bool complete =
-      integ.total_gaps() == 0 && collector_.writer().health().write_errors == 0;
+      collector_.total_gaps() == 0 &&
+      collector_.all_producers_ended() &&
+      collector_.writer().health().write_errors == 0 &&
+      collector_.writer().health().sync_errors == 0;
     manifest_.finalize(
-      complete, integ.to_json(complete), "shutdown");
+      complete, collector_.integrity_json(complete), "shutdown");
     session_ok_ = false;
   }
 
   void publish_health()
   {
+    if (session_ok_) {
+      // Republish so producers that join late or restart still converge
+      // on the same run_id and socket path.
+      publish_config();
+    }
     RuntimeLogHealth msg;
     msg.stamp = now();
     msg.run_id = run_id_;
@@ -153,17 +176,24 @@ private:
     msg.records_received = s.accepted;
     msg.records_written = s.written;
     msg.records_durable = s.durable;
-    msg.dropped_records = s.rejected;
-    msg.gaps_detected = collector_.integrity().total_gaps();
+    msg.dropped_records =
+      s.rejected + collector_.total_producer_drops();
+    msg.gaps_detected = collector_.total_gaps();
     msg.write_errors = s.write_errors;
-    msg.parse_errors = 0;
-    for (const auto & kv : collector_.integrity().accounts()) {
-      msg.parse_errors += kv.second.parse_errors;
-    }
+    msg.parse_errors = collector_.total_parse_errors();
     msg.last_write_age_s = 0.0;
     msg.last_error = collector_.writer().health().last_error;
     msg.complete = !session_ok_;
     health_pub_->publish(msg);
+  }
+
+  void publish_config()
+  {
+    RuntimeLogConfig msg;
+    msg.enabled = enabled_;
+    msg.run_id = run_id_;
+    msg.socket_path = socket_path_;
+    config_pub_->publish(msg);
   }
 
   std::string build_config_json()
@@ -221,6 +251,7 @@ private:
   runtime_logger::SessionManifest manifest_;
   runtime_logger::Collector collector_;
   rclcpp::Publisher<RuntimeLogHealth>::SharedPtr health_pub_;
+  rclcpp::Publisher<RuntimeLogConfig>::SharedPtr config_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
 

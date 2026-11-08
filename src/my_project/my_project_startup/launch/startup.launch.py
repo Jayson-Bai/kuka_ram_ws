@@ -2,6 +2,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
 from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -200,13 +201,13 @@ def generate_launch_description():
             "runtime_log_sync_period_ms": runtime_log_sync_period_ms,
             "runtime_log_rotate_bytes": runtime_log_rotate_bytes,
             "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
-            "rsi_xml_sha256": rsi_xml_sha256,
-            "rsi_context": rsi_context,
-            "rsi_pt1_t1": rsi_pt1_t1,
-            "rsi_precision": rsi_precision,
-            "rsi_tool_base": rsi_tool_base,
-            "rsi_spline_config": rsi_spline_config,
-            "rsi_extra_json": rsi_extra_json,
+            "rsi_xml_sha256": ParameterValue(rsi_xml_sha256, value_type=str),
+            "rsi_context": ParameterValue(rsi_context, value_type=str),
+            "rsi_pt1_t1": ParameterValue(rsi_pt1_t1, value_type=str),
+            "rsi_precision": ParameterValue(rsi_precision, value_type=str),
+            "rsi_tool_base": ParameterValue(rsi_tool_base, value_type=str),
+            "rsi_spline_config": ParameterValue(rsi_spline_config, value_type=str),
+            "rsi_extra_json": ParameterValue(rsi_extra_json, value_type=str),
         }],
     )
 

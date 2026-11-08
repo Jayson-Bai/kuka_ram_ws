@@ -43,6 +43,7 @@ bool IpcClient::connect_to(const std::string & path)
     fd_ = -1;
     return false;
   }
+  last_errno_ = 0;
   return true;
 }
 
@@ -60,10 +61,13 @@ bool IpcClient::queue_message(std::string payload)
     ++dropped_;
     return false;
   }
-  if (pending_.size() >= max_pending_) {
+  if (pending_.size() >= max_pending_ ||
+    pending_bytes_ + payload.size() > max_pending_bytes_)
+  {
     ++dropped_;
     return false;
   }
+  pending_bytes_ += payload.size();
   pending_.push_back(std::move(payload));
   return true;
 }
@@ -83,13 +87,24 @@ size_t IpcClient::drain()
       if (errno == EINTR) {
         continue;
       }
+      // Fatal: drop the fd but keep pending so a reconnect can retry.
+      ++send_errors_;
+      last_errno_ = errno;
+      close();
       break;
     }
     if (static_cast<size_t>(n) != msg.size()) {
+      // SEQPACKET sends are all-or-nothing; a short send means the
+      // connection state is no longer trustworthy.
+      ++send_errors_;
+      last_errno_ = EMSGSIZE;
+      close();
       break;
     }
+    pending_bytes_ -= msg.size();
     pending_.erase(pending_.begin());
     ++sent_;
+    sent_bytes_ += static_cast<uint64_t>(n);
   }
   return pending_.size();
 }

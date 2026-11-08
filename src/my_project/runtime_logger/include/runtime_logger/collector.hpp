@@ -11,6 +11,7 @@
 #include <mutex>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 namespace runtime_logger
@@ -46,12 +47,42 @@ public:
   };
   Stats stats() const;
   Integrity & integrity() {return integrity_;}
+  bool all_producers_ended() const
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    return integrity_.all_producers_ended();
+  }
+  uint64_t total_gaps() const
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    return integrity_.total_gaps();
+  }
+  uint64_t total_producer_drops() const
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    return integrity_.total_producer_drops();
+  }
+  uint64_t total_parse_errors() const
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    uint64_t n = 0;
+    for (const auto & kv : integrity_.accounts()) {
+      n += kv.second.parse_errors;
+    }
+    return n;
+  }
+  std::string integrity_json(bool complete) const
+  {
+    std::lock_guard<std::mutex> lk(mu_);
+    return integrity_.to_json(complete);
+  }
   JsonlWriter & writer() {return writer_;}
 
 private:
   void accept_loop();
   void writer_loop();
   bool handle_frame(const uint8_t * data, size_t n);
+  bool handle_producer_status(const std::string & body);
 
   int listen_fd_{-1};
   std::atomic<bool> running_{false};

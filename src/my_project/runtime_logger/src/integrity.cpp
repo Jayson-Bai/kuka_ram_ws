@@ -1,10 +1,25 @@
 #include "runtime_logger/integrity.hpp"
 
+#include <algorithm>
 #include <cstdio>
 #include <sstream>
 
 namespace runtime_logger
 {
+
+namespace
+{
+
+uint64_t producer_loss(const ProducerAccount & acc)
+{
+  uint64_t loss = acc.ring_dropped + acc.ipc_dropped;
+  if (acc.sent_records > acc.received_records) {
+    loss += acc.sent_records - acc.received_records;
+  }
+  return loss;
+}
+
+}  // namespace
 
 ProducerAccount & Integrity::producer(
   const std::string & id, uint64_t epoch, bool started)
@@ -26,6 +41,7 @@ void Integrity::note_record(
   if (acc.producer_id.empty()) {
     acc.producer_id = producer_id;
   }
+  acc.started = true;
   if (!parsed_ok) {
     ++acc.parse_errors;
     return;
@@ -50,6 +66,29 @@ void Integrity::note_record(
     acc.last_record_seq = record_seq;
   }
   ++acc.received_records;
+}
+
+void Integrity::note_producer_status(const ProducerStatusUpdate & update)
+{
+  auto & acc = accounts_[update.producer_id];
+  if (acc.producer_id.empty()) {
+    acc.producer_id = update.producer_id;
+  }
+  acc.started = true;
+  acc.producer_epoch = update.producer_epoch;
+  acc.status_phase = update.phase;
+  acc.producer_first_seq = update.first_record_seq;
+  acc.producer_last_seq = update.last_record_seq;
+  acc.sent_records = update.sent_records;
+  acc.ring_dropped = update.ring_dropped;
+  acc.ipc_dropped = update.ipc_dropped;
+  acc.send_errors = update.send_errors;
+  acc.pending_messages = update.pending_messages;
+  acc.pending_bytes = update.pending_bytes;
+  acc.connected = update.connected;
+  if (update.phase == "final") {
+    acc.ended = true;
+  }
 }
 
 void Integrity::note_end(const std::string & producer_id)
@@ -79,16 +118,32 @@ void Integrity::note_parse_error(const std::string & producer_id)
   ++acc.parse_errors;
 }
 
-uint64_t Integrity::total_gaps() const
+uint64_t Integrity::total_producer_drops() const
 {
-  uint64_t n = overflow_;
+  uint64_t n = 0;
   for (const auto & kv : accounts_) {
-    n += kv.second.gap_count;
-    if (kv.second.started && !kv.second.ended) {
-      // Un-ended producer counts as incomplete rather than a numeric gap.
-    }
+    n += producer_loss(kv.second);
   }
   return n;
+}
+
+uint64_t Integrity::total_gaps() const
+{
+  uint64_t n = overflow_ + total_producer_drops();
+  for (const auto & kv : accounts_) {
+    n += kv.second.gap_count;
+  }
+  return n;
+}
+
+bool Integrity::all_producers_ended() const
+{
+  for (const auto & kv : accounts_) {
+    if (kv.second.started && !kv.second.ended) {
+      return false;
+    }
+  }
+  return true;
 }
 
 uint64_t Integrity::total_received() const
@@ -122,6 +177,17 @@ std::string Integrity::to_json(bool session_complete) const
        << ",\"parse_errors\":" << a.parse_errors
        << ",\"gaps\":" << a.gap_count
        << ",\"gap_ranges\":\"" << a.gap_ranges << "\""
+       << ",\"status_phase\":\"" << a.status_phase << "\""
+       << ",\"producer_first_seq\":" << a.producer_first_seq
+       << ",\"producer_last_seq\":" << a.producer_last_seq
+       << ",\"sent_records\":" << a.sent_records
+       << ",\"ring_dropped\":" << a.ring_dropped
+       << ",\"ipc_dropped\":" << a.ipc_dropped
+       << ",\"send_errors\":" << a.send_errors
+       << ",\"pending_messages\":" << a.pending_messages
+       << ",\"pending_bytes\":" << a.pending_bytes
+       << ",\"connected\":" << (a.connected ? "true" : "false")
+       << ",\"estimated_loss\":" << producer_loss(a)
        << "}";
   }
   os << "}}";

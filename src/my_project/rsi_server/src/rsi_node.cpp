@@ -11,6 +11,7 @@
 #include <my_project_interfaces/msg/trajectory_point.hpp>
 #include <my_project_interfaces/msg/planned_event.hpp>
 #include <my_project_interfaces/msg/print_head_status.hpp>
+#include <my_project_interfaces/msg/runtime_log_config.hpp>
 #include <my_project_interfaces/msg/rsi_heart_beat.hpp>
 #include <my_project_interfaces/msg/kuka_status.hpp>
 //标准消息头
@@ -45,6 +46,7 @@
 #include <runtime_logging_core/bounded_ring.hpp>
 #include <runtime_logging_core/capture_record.hpp>
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/rsi_telemetry.hpp>
 #include <runtime_logging_core/whitelist.hpp>
 
@@ -53,6 +55,7 @@
 using my_project_interfaces::msg::TrajectoryPoint; //TCP轨迹点
 using my_project_interfaces::msg::PlannedEvent; //打印事件
 using my_project_interfaces::msg::PrintHeadStatus; //打印头状态
+using my_project_interfaces::msg::RuntimeLogConfig;
 using my_project_interfaces::msg::RsiHeartBeat; //RSI心跳
 using my_project_interfaces::msg::KukaStatus; //KUKA状态
 
@@ -168,6 +171,9 @@ private:
   runtime_logging::IpcClient rsi_ipc_;
   std::mutex rsi_ipc_mutex_;
   std::atomic<uint64_t> rsi_records_sent_{0};
+  uint64_t first_rsi_record_seq_{0};
+  std::atomic<bool> runtime_log_ready_{false};
+  rclcpp::Subscription<RuntimeLogConfig>::SharedPtr runtime_log_config_sub_;
 
 public:
   RSINode()
@@ -194,17 +200,37 @@ public:
       "runtime_log_ring_capacity", 8192);
     rsi_ring_ = std::make_unique<runtime_logging::RsiTelemetryRing>(
       static_cast<size_t>(ring_capacity));
-    if (run_id_.empty()) {
-      run_id_ = "rsi_" + producer_epoch_;
-    }
     if (runtime_log_socket_.empty()) {
-      runtime_log_socket_ = "/tmp/kuka_runtime_log_" + run_id_ + ".sock";
+      if (runtime_log_enabled_) {
+        runtime_log_config_sub_ = create_subscription<RuntimeLogConfig>(
+          "/runtime/log_config",
+          rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local(),
+          [this](RuntimeLogConfig::SharedPtr msg) {
+            if (runtime_log_ready_.load(std::memory_order_acquire) ||
+            !msg->enabled || msg->socket_path.empty())
+            {
+              return;
+            }
+            run_id_ = msg->run_id;
+            runtime_log_socket_ = msg->socket_path;
+            runtime_log_ready_.store(true, std::memory_order_release);
+            RCLCPP_INFO(
+              get_logger(), "runtime log config received: run_id=%s socket=%s",
+              run_id_.c_str(), runtime_log_socket_.c_str());
+          });
+      }
+    } else {
+      if (run_id_.empty()) {
+        run_id_ = "rsi_" + producer_epoch_;
+      }
+      runtime_log_ready_.store(true, std::memory_order_release);
     }
     if (runtime_log_enabled_) {
       rsi_relay_running_.store(true);
       rsi_relay_thread_ = std::thread(&RSINode::rsi_relay_loop, this);
       RCLCPP_INFO(
         get_logger(), "RSI telemetry logging enabled, socket=%s",
+        runtime_log_socket_.empty() ? "<waiting for logger broadcast>" :
         runtime_log_socket_.c_str());
     }
 
@@ -654,7 +680,13 @@ private:
   void rsi_relay_loop()
   {
     auto next_connect = std::chrono::steady_clock::now();
+    auto next_status = std::chrono::steady_clock::now();
+    bool status_hello_sent = false;
     while (rsi_relay_running_.load()) {
+      if (!runtime_log_ready_.load(std::memory_order_acquire)) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        continue;
+      }
       bool did_work = false;
       while (auto item = rsi_ring_->try_pop()) {
         did_work = true;
@@ -663,6 +695,7 @@ private:
       {
         std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
         if (!rsi_ipc_.connected()) {
+          status_hello_sent = false;
           if (std::chrono::steady_clock::now() >= next_connect) {
             if (rsi_ipc_.connect_to(runtime_log_socket_)) {
               RCLCPP_INFO(
@@ -677,28 +710,88 @@ private:
           rsi_ipc_.drain();
         }
       }
+      if (rsi_ipc_.connected() &&
+        std::chrono::steady_clock::now() >= next_status)
+      {
+        send_producer_status(status_hello_sent ? "periodic" : "hello");
+        status_hello_sent = true;
+        next_status = std::chrono::steady_clock::now() +
+          std::chrono::seconds(1);
+      }
       if (!did_work) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2));
       }
     }
     // Drain remaining frames on shutdown.
-    while (auto item = rsi_ring_->try_pop()) {
-      process_rsi_frame(*item);
+    if (runtime_log_ready_.load(std::memory_order_acquire)) {
+      while (auto item = rsi_ring_->try_pop()) {
+        process_rsi_frame(*item);
+      }
+      send_final_producer_status();
     }
-    std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
-    rsi_ipc_.drain();
   }
 
   void process_rsi_frame(const runtime_logging::RsiTelemetryFrame & frame)
   {
-    const auto rec = runtime_logging::project_rsi_frame(
-      frame, rsi_record_seq_.load());
+    const uint64_t seq = rsi_record_seq_.load();
+    const auto rec = runtime_logging::project_rsi_frame(frame, seq);
     ++rsi_record_seq_;
     const std::string json = runtime_logging::encode_record_json(
       rec, run_id_, producer_id_, 1);
     std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+    if (rsi_ipc_.queue_message(json)) {
+      if (rsi_records_sent_.load() == 0) {
+        first_rsi_record_seq_ = seq;
+      }
+      ++rsi_records_sent_;
+    }
+  }
+
+  void send_producer_status(const char * phase)
+  {
+    runtime_logging::ProducerStatus st;
+    st.producer_id = producer_id_;
+    st.run_id = run_id_;
+    st.producer_epoch = 1;
+    st.phase = phase;
+    st.first_record_seq = first_rsi_record_seq_;
+    st.last_record_seq =
+      rsi_records_sent_.load() == 0 ? 0 : rsi_record_seq_.load() - 1;
+    st.sent_records = rsi_records_sent_.load();
+    st.ring_dropped = rsi_dropped_.load();
+    st.ipc_dropped = rsi_ipc_.dropped();
+    st.send_errors = rsi_ipc_.send_errors();
+    st.pending_messages = rsi_ipc_.pending();
+    st.pending_bytes = rsi_ipc_.pending_bytes();
+    st.connected = rsi_ipc_.connected();
+    const std::string json = runtime_logging::encode_producer_status_json(st);
+    std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
     rsi_ipc_.queue_message(json);
-    ++rsi_records_sent_;
+    if (rsi_ipc_.connected()) {
+      rsi_ipc_.drain();
+    }
+  }
+
+  void send_final_producer_status()
+  {
+    if (!rsi_ipc_.connected()) {
+      std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+      rsi_ipc_.connect_to(runtime_log_socket_);
+    }
+    send_producer_status("final");
+    const auto deadline = std::chrono::steady_clock::now() +
+      std::chrono::milliseconds(2000);
+    while (std::chrono::steady_clock::now() < deadline) {
+      bool empty = false;
+      {
+        std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+        if (!rsi_ipc_.connected()) {break;}
+        rsi_ipc_.drain();
+        empty = rsi_ipc_.pending() == 0;
+      }
+      if (empty) {break;}
+      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
   }
 
   std::optional<TrajectoryPoint> pop_next_traj()

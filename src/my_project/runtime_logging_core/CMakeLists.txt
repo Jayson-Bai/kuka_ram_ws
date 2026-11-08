@@ -12,6 +12,7 @@ add_library(runtime_logging_core STATIC
   src/bounded_ring.cpp
   src/whitelist.cpp
   src/ipc_client.cpp
+  src/producer_status.cpp
   src/rsi_parser.cpp
 )
 target_include_directories(runtime_logging_core PUBLIC
@@ -39,6 +40,8 @@ if(BUILD_TESTING)
   target_link_libraries(test_record_codec runtime_logging_core)
   ament_add_gtest(test_rsi_parser test/test_rsi_parser.cpp)
   target_link_libraries(test_rsi_parser runtime_logging_core)
+  ament_add_gtest(test_producer_status test/test_producer_status.cpp)
+  target_link_libraries(test_producer_status runtime_logging_core)
 endif()
 
 ament_package()
