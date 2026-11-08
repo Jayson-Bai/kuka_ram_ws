@@ -29,6 +29,7 @@
 #include <runtime_logging_core/bounded_ring.hpp>
 #include <runtime_logging_core/capture_record.hpp>
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/log_shutdown.hpp>
 #include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/whitelist.hpp>
 
@@ -160,6 +161,7 @@ private:
   rclcpp::Subscription<RuntimeLogConfig>::SharedPtr runtime_log_config_sub_;
   std::atomic<uint64_t> log_records_sent_{0};
   uint64_t first_log_record_seq_{0};
+  int shutdown_drain_ms_{runtime_logging::kDefaultShutdownDrainMs};
   std::mutex ui_cache_mutex_;
   UartTelemetryUi ui_cache_;
   bool ui_cache_valid_{false};
@@ -233,6 +235,9 @@ public:
     run_id_ = declare_parameter<std::string>("run_id", "");
     producer_epoch_ = make_producer_epoch();
     runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    shutdown_drain_ms_ = declare_parameter<int>(
+      "runtime_log_shutdown_timeout_ms",
+      runtime_logging::kDefaultShutdownDrainMs);
     const auto ring_capacity = declare_parameter<int>(
       "runtime_log_ring_capacity", 1024);
     capture_ring_ = std::make_unique<BoundedRing<CaptureRecord>>(
@@ -820,10 +825,22 @@ private:
       }
     }
     if (runtime_log_ready_.load(std::memory_order_acquire)) {
-      while (auto item = capture_ring_->try_pop()) {
+      const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(shutdown_drain_ms_);
+      while (std::chrono::steady_clock::now() < deadline) {
+        auto item = capture_ring_->try_pop();
+        if (!item) {break;}
         process_capture(*item);
       }
-      send_final_producer_status();
+      const size_t leftover = capture_ring_->size();
+      if (leftover > 0) {
+        capture_dropped_.fetch_add(leftover);
+        RCLCPP_WARN(
+          get_logger(),
+          "runtime log shutdown: %zu uart captures left in ring (dropped)",
+          leftover);
+      }
+      send_final_producer_status(deadline);
     }
   }
 
@@ -882,15 +899,16 @@ private:
     }
   }
 
-  void send_final_producer_status()
+  void send_final_producer_status(
+    const std::chrono::steady_clock::time_point & deadline)
   {
-    if (!ipc_client_.connected()) {
+    {
       std::lock_guard<std::mutex> lk(ipc_mutex_);
-      ipc_client_.connect_to(runtime_log_socket_);
+      if (!ipc_client_.connected()) {
+        ipc_client_.connect_to(runtime_log_socket_);
+      }
     }
     send_producer_status("final");
-    const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(12000);
     while (std::chrono::steady_clock::now() < deadline) {
       bool empty = false;
       {
@@ -901,6 +919,15 @@ private:
       }
       if (empty) {break;}
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    if (ipc_client_.pending() > 0 || !ipc_client_.connected()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "runtime log shutdown: final status not fully flushed "
+        "(pending=%zu bytes, connected=%d, errno=%d)",
+        ipc_client_.pending_bytes(), ipc_client_.connected() ? 1 : 0,
+        ipc_client_.last_errno());
     }
   }
 

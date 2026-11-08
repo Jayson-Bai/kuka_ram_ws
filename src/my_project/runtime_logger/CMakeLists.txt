@@ -46,6 +46,12 @@ if(BUILD_TESTING)
     src/integrity.cpp)
   target_include_directories(test_integrity PRIVATE include)
   target_compile_features(test_integrity PUBLIC cxx_std_17)
+
+  ament_add_gtest(test_session_manifest
+    test/test_session_manifest.cpp
+    src/session_manifest.cpp)
+  target_include_directories(test_session_manifest PRIVATE include)
+  target_compile_features(test_session_manifest PUBLIC cxx_std_17)
 endif()
 
 ament_package()

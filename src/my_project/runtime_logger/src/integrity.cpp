@@ -74,15 +74,23 @@ void Integrity::note_producer_status(const ProducerStatusUpdate & update)
   if (acc.producer_id.empty()) {
     acc.producer_id = update.producer_id;
   }
+  // The final frame is authoritative. Ignore any late periodic frame so
+  // ended/loss accounting cannot be downgraded by a reordered status.
+  if (acc.ended && update.phase != "final") {
+    return;
+  }
   acc.started = true;
   acc.producer_epoch = update.producer_epoch;
-  acc.status_phase = update.phase;
+  if (update.phase == "final" || !acc.ended) {
+    acc.status_phase = update.phase;
+  }
   acc.producer_first_seq = update.first_record_seq;
-  acc.producer_last_seq = update.last_record_seq;
-  acc.sent_records = update.sent_records;
-  acc.ring_dropped = update.ring_dropped;
-  acc.ipc_dropped = update.ipc_dropped;
-  acc.send_errors = update.send_errors;
+  acc.producer_last_seq = std::max(
+    acc.producer_last_seq, update.last_record_seq);
+  acc.sent_records = std::max(acc.sent_records, update.sent_records);
+  acc.ring_dropped = std::max(acc.ring_dropped, update.ring_dropped);
+  acc.ipc_dropped = std::max(acc.ipc_dropped, update.ipc_dropped);
+  acc.send_errors = std::max(acc.send_errors, update.send_errors);
   acc.pending_messages = update.pending_messages;
   acc.pending_bytes = update.pending_bytes;
   acc.connected = update.connected;

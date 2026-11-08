@@ -46,6 +46,7 @@
 #include <runtime_logging_core/bounded_ring.hpp>
 #include <runtime_logging_core/capture_record.hpp>
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/log_shutdown.hpp>
 #include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/rsi_telemetry.hpp>
 #include <runtime_logging_core/whitelist.hpp>
@@ -172,6 +173,7 @@ private:
   std::mutex rsi_ipc_mutex_;
   std::atomic<uint64_t> rsi_records_sent_{0};
   uint64_t first_rsi_record_seq_{0};
+  int shutdown_drain_ms_{runtime_logging::kDefaultShutdownDrainMs};
   std::atomic<bool> runtime_log_ready_{false};
   rclcpp::Subscription<RuntimeLogConfig>::SharedPtr runtime_log_config_sub_;
 
@@ -196,6 +198,9 @@ public:
     run_id_ = declare_parameter<std::string>("run_id", "");
     producer_epoch_ = make_producer_epoch();
     runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    shutdown_drain_ms_ = declare_parameter<int>(
+      "runtime_log_shutdown_timeout_ms",
+      runtime_logging::kDefaultShutdownDrainMs);
     const auto ring_capacity = declare_parameter<int>(
       "runtime_log_ring_capacity", 8192);
     rsi_ring_ = std::make_unique<runtime_logging::RsiTelemetryRing>(
@@ -724,10 +729,22 @@ private:
     }
     // Drain remaining frames on shutdown.
     if (runtime_log_ready_.load(std::memory_order_acquire)) {
-      while (auto item = rsi_ring_->try_pop()) {
+      const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(shutdown_drain_ms_);
+      while (std::chrono::steady_clock::now() < deadline) {
+        auto item = rsi_ring_->try_pop();
+        if (!item) {break;}
         process_rsi_frame(*item);
       }
-      send_final_producer_status();
+      const size_t leftover = rsi_ring_->size();
+      if (leftover > 0) {
+        rsi_dropped_.fetch_add(leftover);
+        RCLCPP_WARN(
+          get_logger(),
+          "RSI telemetry shutdown: %zu frames left in ring (dropped)",
+          leftover);
+      }
+      send_final_producer_status(deadline);
     }
   }
 
@@ -772,15 +789,16 @@ private:
     }
   }
 
-  void send_final_producer_status()
+  void send_final_producer_status(
+    const std::chrono::steady_clock::time_point & deadline)
   {
-    if (!rsi_ipc_.connected()) {
+    {
       std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
-      rsi_ipc_.connect_to(runtime_log_socket_);
+      if (!rsi_ipc_.connected()) {
+        rsi_ipc_.connect_to(runtime_log_socket_);
+      }
     }
     send_producer_status("final");
-    const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(12000);
     while (std::chrono::steady_clock::now() < deadline) {
       bool empty = false;
       {
@@ -791,6 +809,15 @@ private:
       }
       if (empty) {break;}
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::lock_guard<std::mutex> lk(rsi_ipc_mutex_);
+    if (rsi_ipc_.pending() > 0 || !rsi_ipc_.connected()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "RSI telemetry shutdown: final status not fully flushed "
+        "(pending=%zu bytes, connected=%d, errno=%d)",
+        rsi_ipc_.pending_bytes(), rsi_ipc_.connected() ? 1 : 0,
+        rsi_ipc_.last_errno());
     }
   }
 

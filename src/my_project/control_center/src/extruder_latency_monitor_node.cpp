@@ -18,6 +18,7 @@
 #include <my_project_interfaces/msg/uart_observation.hpp>
 
 #include <runtime_logging_core/ipc_client.hpp>
+#include <runtime_logging_core/log_shutdown.hpp>
 #include <runtime_logging_core/producer_status.hpp>
 #include <runtime_logging_core/whitelist.hpp>
 #include <runtime_logging_core/capture_record.hpp>
@@ -73,6 +74,9 @@ public:
     runtime_log_enabled_ = declare_parameter<bool>("runtime_log_enabled", true);
     run_id_ = declare_parameter<std::string>("run_id", "");
     runtime_log_socket_ = declare_parameter<std::string>("runtime_log_socket", "");
+    shutdown_drain_ms_ = declare_parameter<int>(
+      "runtime_log_shutdown_timeout_ms",
+      runtime_logging::kDefaultShutdownDrainMs);
     producer_id_ = "latency_node";
     producer_epoch_ = make_epoch();
     if (runtime_log_socket_.empty()) {
@@ -170,7 +174,9 @@ public:
     if (runtime_log_enabled_ &&
       runtime_log_ready_.load(std::memory_order_acquire))
     {
-      send_final_producer_status();
+      const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds(shutdown_drain_ms_);
+      send_final_producer_status(deadline);
     }
   }
 
@@ -769,11 +775,10 @@ private:
     }
   }
 
-  void send_final_producer_status()
+  void send_final_producer_status(
+    const std::chrono::steady_clock::time_point & deadline)
   {
     send_producer_status("final");
-    const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(12000);
     while (std::chrono::steady_clock::now() < deadline) {
       bool empty = false;
       {
@@ -784,6 +789,15 @@ private:
       }
       if (empty) {break;}
       std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::lock_guard<std::mutex> lk(ipc_mutex_);
+    if (ipc_client_.pending() > 0 || !ipc_client_.connected()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "latency log shutdown: final status not fully flushed "
+        "(pending=%zu bytes, connected=%d, errno=%d)",
+        ipc_client_.pending_bytes(), ipc_client_.connected() ? 1 : 0,
+        ipc_client_.last_errno());
     }
   }
 
@@ -831,6 +845,7 @@ private:
   uint64_t record_seq_{0};
   uint64_t first_latency_record_seq_{0};
   uint64_t latency_records_sent_{0};
+  int shutdown_drain_ms_{runtime_logging::kDefaultShutdownDrainMs};
   runtime_logging::IpcClient ipc_client_;
   std::mutex ipc_mutex_;
   std::atomic<bool> runtime_log_ready_{false};

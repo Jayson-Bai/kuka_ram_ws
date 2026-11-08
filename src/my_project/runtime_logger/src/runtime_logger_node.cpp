@@ -5,6 +5,8 @@
 
 #include "runtime_logger/collector.hpp"
 
+#include <runtime_logging_core/log_shutdown.hpp>
+
 #include <rclcpp/rclcpp.hpp>
 #include <my_project_interfaces/msg/runtime_log_config.hpp>
 #include <my_project_interfaces/msg/runtime_log_health.hpp>
@@ -66,7 +68,8 @@ public:
     rotate_bytes_ = static_cast<uint64_t>(declare_parameter<int>(
       "runtime_log_rotate_bytes", 64 * 1024 * 1024));
     shutdown_timeout_ms_ = declare_parameter<int>(
-      "runtime_log_shutdown_timeout_ms", 5000);
+      "runtime_log_shutdown_timeout_ms",
+      runtime_logging::kDefaultShutdownDrainMs);
     run_id_ = declare_parameter<std::string>("run_id", "");
     test_run_ = declare_parameter<bool>("runtime_log_test_run", false);
     // RSI experiment metadata; empty values are omitted from manifest.
@@ -142,12 +145,21 @@ private:
     }
     // Give producers a bounded window to flush their final status frame
     // so the integrity report can distinguish clean end from a crash.
+    const auto grace_ms = shutdown_timeout_ms_ +
+      runtime_logging::kShutdownGraceMarginMs;
     const auto deadline = std::chrono::steady_clock::now() +
-      std::chrono::milliseconds(shutdown_timeout_ms_);
+      std::chrono::milliseconds(grace_ms);
     while (!collector_.all_producers_ended() &&
       std::chrono::steady_clock::now() < deadline)
     {
       std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    if (!collector_.all_producers_ended()) {
+      RCLCPP_WARN(
+        get_logger(),
+        "runtime log shutdown: producers did not finish within %d ms; "
+        "session will be marked incomplete",
+        grace_ms);
     }
     collector_.stop();
     const bool complete =

@@ -102,6 +102,7 @@ def generate_launch_description():
             "run_id": run_id,
             "runtime_log_enabled": runtime_log_enabled,
             "runtime_log_socket": runtime_log_socket,
+            "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
         }],
     )
 
@@ -120,6 +121,7 @@ def generate_launch_description():
             "run_id": run_id,
             "runtime_log_enabled": runtime_log_enabled,
             "runtime_log_socket": runtime_log_socket,
+            "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
         }],
     )
 
@@ -169,6 +171,7 @@ def generate_launch_description():
             "run_id": run_id,
             "runtime_log_enabled": runtime_log_enabled,
             "runtime_log_socket": runtime_log_socket,
+            "runtime_log_shutdown_timeout_ms": runtime_log_shutdown_timeout_ms,
             "latency_history_limit": latency_history_limit,
             "latency_stats_window_limit": latency_stats_window_limit,
             "rsi_period_ms": rsi_period_ms,
@@ -519,10 +522,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "runtime_log_shutdown_timeout_ms",
-            default_value="15000",
+            default_value="5000",
             description=(
-                "关闭时排空日志的最长等待（毫秒）；uart_node 需要更多 "
-                "时间 drain UART 遥测并发送 final status。"),
+                "关闭时 producer 排空 ring/IPC 并发送 final status 的预算"
+                "（毫秒）；logger 额外等待 1 秒再 finalize。"),
         ),
         DeclareLaunchArgument(
             "runtime_ui_period_ms",
