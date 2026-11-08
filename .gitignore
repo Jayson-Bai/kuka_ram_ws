@@ -41,3 +41,8 @@
 
 # Head calibration offsets
 /data/head_calibration_offsets/
+
+# Runtime / diagnostic log output
+/data/
+**/data/runtime_logs/
+**/data/diagnostic_logs/

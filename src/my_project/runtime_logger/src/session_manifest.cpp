@@ -9,6 +9,7 @@
 
 #include <cstdio>
 #include <sstream>
+#include <string>
 
 namespace runtime_logger
 {
@@ -18,10 +19,37 @@ namespace
 
 bool mkdir_p(const std::string & path)
 {
-  if (::mkdir(path.c_str(), 0755) == 0) {
-    return true;
+  // Recursive: create each missing component like mkdir -p.
+  if (path.empty()) {
+    return false;
   }
-  return errno == EEXIST;
+  std::string cur;
+  cur.reserve(path.size());
+  size_t start = 0;
+  if (path[0] == '/') {
+    cur = "/";
+    start = 1;
+  }
+  while (start <= path.size()) {
+    size_t slash = path.find('/', start);
+    const size_t end =
+      slash == std::string::npos ? path.size() : slash;
+    const std::string comp = path.substr(start, end - start);
+    if (!comp.empty()) {
+      if (!cur.empty() && cur.back() != '/') {
+        cur += '/';
+      }
+      cur += comp;
+      if (::mkdir(cur.c_str(), 0755) != 0 && errno != EEXIST) {
+        return false;
+      }
+    }
+    if (slash == std::string::npos) {
+      break;
+    }
+    start = slash + 1;
+  }
+  return true;
 }
 
 }  // namespace

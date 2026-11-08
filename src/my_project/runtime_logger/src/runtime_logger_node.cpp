@@ -11,6 +11,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
 #include <random>
 #include <sstream>
 #include <string>
@@ -42,8 +43,16 @@ public:
   : Node("runtime_logger_node")
   {
     enabled_ = declare_parameter<bool>("runtime_log_enabled", true);
+    // Default log root is $HOME/kuka_ram_ws/data/runtime_logs so the
+    // same binary works on hosts with a different username or a
+    // relocated workspace without a launch override.
+    const char * home = std::getenv("HOME");
+    const std::string default_root =
+      (home && *home) ?
+        std::string(home) + "/kuka_ram_ws/data/runtime_logs" :
+        "/tmp/kuka_ram_ws/data/runtime_logs";
     root_ = declare_parameter<std::string>(
-      "runtime_log_root", "/home/jayson/kuka_ram_ws/data/runtime_logs");
+      "runtime_log_root", default_root);
     socket_path_ = declare_parameter<std::string>("runtime_log_socket", "");
     buffer_bytes_ = static_cast<size_t>(declare_parameter<int>(
       "runtime_log_buffer_bytes", 8 * 1024 * 1024));

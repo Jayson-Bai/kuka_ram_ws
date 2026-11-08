@@ -1,6 +1,6 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, TimerAction
-from launch.substitutions import LaunchConfiguration
+from launch.substitutions import EnvironmentVariable, LaunchConfiguration
 from launch_ros.actions import Node
 
 
@@ -480,7 +480,10 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             "runtime_log_root",
-            default_value="/home/jayson/kuka_ram_ws/data/runtime_logs",
+            default_value=[
+                EnvironmentVariable("HOME", default_value="/tmp"),
+                "/kuka_ram_ws/data/runtime_logs",
+            ],
             description="运行日志根目录。",
         ),
         DeclareLaunchArgument(
