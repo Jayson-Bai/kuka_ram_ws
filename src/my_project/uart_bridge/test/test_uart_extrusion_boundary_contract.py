@@ -140,15 +140,16 @@ def test_startup_launch_passes_extrusion_wire_mode_only_to_uart_node():
     assert uart_node.count(uart_parameter) == 1
 
     assert '"dispatch_policy": dispatch_policy,' in uart_node
-    assert '"uniform_rate_mm_per_s": uniform_rate_mm_per_s,' in uart_node
+    assert '"uniform_rate_tool1_mm_per_s": uniform_rate_tool1_mm_per_s,' in uart_node
+    assert '"uniform_rate_tool2_mm_per_s": uniform_rate_tool2_mm_per_s,' in uart_node
 
     extrude_to_abort_arguments = _between(
         source,
         '        DeclareLaunchArgument(\n            "extrude_scale",',
         '        DeclareLaunchArgument(\n            "abort_lift_mm",',
     )
-    # extrusion_wire_mode plus the two baseline-dispatch args
-    assert extrude_to_abort_arguments.count("DeclareLaunchArgument(") == 3
+    # extrusion_wire_mode plus policy and two per-tool baseline rates
+    assert extrude_to_abort_arguments.count("DeclareLaunchArgument(") == 4
     assert re.search(
         r'DeclareLaunchArgument\(\s*"extrusion_wire_mode",\s*'
         r'default_value="canonical_v1",\s*'
@@ -196,13 +197,19 @@ def test_dispatch_policy_parameters_are_read_only_startups():
         source,
     )
     assert re.search(
-        r'declare_parameter<double>\(\s*"uniform_rate_mm_per_s"'
+        r'declare_parameter<double>\(\s*"uniform_rate_tool1_mm_per_s"'
         r'\s*,\s*10\.0',
+        source,
+    )
+    assert re.search(
+        r'declare_parameter<double>\(\s*"uniform_rate_tool2_mm_per_s"'
+        r'\s*,\s*3\.945',
         source,
     )
     callback = _between(source, "add_on_set_parameters_callback(", "//订阅心跳包")
     assert 'p.get_name() == "dispatch_policy"' not in callback
-    assert 'p.get_name() == "uniform_rate_mm_per_s"' not in callback
+    assert 'p.get_name() == "uniform_rate_tool1_mm_per_s"' not in callback
+    assert 'p.get_name() == "uniform_rate_tool2_mm_per_s"' not in callback
 
 
 def test_uniform_feedforward_branch_in_on_heartbeat():
@@ -214,7 +221,10 @@ def test_uniform_feedforward_branch_in_on_heartbeat():
 
     assert 'dispatch_policy_ == "uniform_feedforward"' in heartbeat
     assert "uniform_channels_[" in heartbeat
-    assert "ch.e_abs += uniform_rate_mm_per_s_ * dt" in heartbeat
+    assert "uniform_rate_tool1_mm_per_s_" in heartbeat
+    assert "uniform_rate_tool2_mm_per_s_" in heartbeat
+    assert "ch.e_abs += rate * dt" in heartbeat
+    assert "hb.tool_id == 2" in heartbeat
     assert "ch.last_stamp = rclcpp::Time(hb.stamp)" in heartbeat
     assert "e_for_line = ch.e_abs" in heartbeat
 

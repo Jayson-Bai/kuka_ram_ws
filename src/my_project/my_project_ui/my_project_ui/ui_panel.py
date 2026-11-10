@@ -116,8 +116,10 @@ LAUNCH_PARAMS = [
     ("extrude_scale", "1.0", "UART 挤出倍率因子", "UART 节点"),
     ("dispatch_policy", "seq_bound",
      "挤出派发策略 (seq_bound/uniform_feedforward)", "UART 节点"),
-    ("uniform_rate_mm_per_s", "10.0",
-     "uniform_feedforward 基线挤出速率 mm/s", "UART 节点"),
+    ("uniform_rate_tool1_mm_per_s", "10.0",
+     "uniform_feedforward 纤维(tool1)几何挤出速率 mm/s", "UART 节点"),
+    ("uniform_rate_tool2_mm_per_s", "3.945",
+     "uniform_feedforward 树脂(tool2)几何挤出速率 mm/s", "UART 节点"),
     ("ui_publish_period_ms", "100", "UI 状态发布周期（ms）", "系统管理器"),
     ("heartbeat_timeout_s", "1.0", "心跳超时（秒）", "系统管理器"),
     ("traj_queue_limit", "5000", "UI 轨迹队列上限", "系统管理器"),
@@ -3436,7 +3438,7 @@ class _UiStatusWidget(QtWidgets.QWidget):
         self._uniform_baseline_check.setObjectName("chkUniformBaseline")
         self._uniform_baseline_check.setToolTip(
             "勾选后启动时以 uniform_feedforward 策略派发挤出："
-            "E 按心跳时间匀速累积、不再绑定 seq_used；"
+            "E 按心跳时间、按 tool 几何名义速率匀速累积、不再绑定 seq_used；"
             "仅用于 §4.3 ablation 对照打印。"
             "此参数为节点只读启动参数，打印途中不可切换。")
         baseline_row.addWidget(self._uniform_baseline_check)
@@ -6532,7 +6534,8 @@ class MyProjectUiPlugin(Plugin):
         policy = "uniform_feedforward" if checked else "seq_bound"
         self._launch_params["dispatch_policy"] = policy
         if checked:
-            self._launch_params.setdefault("uniform_rate_mm_per_s", "10.0")
+            self._launch_params.setdefault("uniform_rate_tool1_mm_per_s", "10.0")
+            self._launch_params.setdefault("uniform_rate_tool2_mm_per_s", "3.945")
             self._widget._launch_status.setText(
                 "已选择基线模式 (uniform_feedforward)，下次启动生效。")
         else:

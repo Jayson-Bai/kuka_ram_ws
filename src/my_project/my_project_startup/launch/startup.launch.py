@@ -80,7 +80,8 @@ def generate_launch_description():
     extrude_scale = LaunchConfiguration("extrude_scale")
     extrusion_wire_mode = LaunchConfiguration("extrusion_wire_mode")
     dispatch_policy = LaunchConfiguration("dispatch_policy")
-    uniform_rate_mm_per_s = LaunchConfiguration("uniform_rate_mm_per_s")
+    uniform_rate_tool1_mm_per_s = LaunchConfiguration("uniform_rate_tool1_mm_per_s")
+    uniform_rate_tool2_mm_per_s = LaunchConfiguration("uniform_rate_tool2_mm_per_s")
 
     rsi_node = Node(
         package="rsi_server",
@@ -117,7 +118,8 @@ def generate_launch_description():
             "extrude_scale": extrude_scale,
             "extrusion_wire_mode": extrusion_wire_mode,
             "dispatch_policy": dispatch_policy,
-            "uniform_rate_mm_per_s": uniform_rate_mm_per_s,
+            "uniform_rate_tool1_mm_per_s": uniform_rate_tool1_mm_per_s,
+            "uniform_rate_tool2_mm_per_s": uniform_rate_tool2_mm_per_s,
             "run_id": run_id,
             "runtime_log_enabled": runtime_log_enabled,
             "runtime_log_socket": runtime_log_socket,
@@ -438,9 +440,14 @@ def generate_launch_description():
             description="挤出派发策略: seq_bound/uniform_feedforward，默认 seq_bound。",
         ),
         DeclareLaunchArgument(
-            "uniform_rate_mm_per_s",
+            "uniform_rate_tool1_mm_per_s",
             default_value="10.0",
-            description="uniform_feedforward 基线的名义挤出速率 mm/s。",
+            description="uniform_feedforward 纤维(tool1)几何挤出速率 mm/s，默认 e_per_mm*v_nom=10。",
+        ),
+        DeclareLaunchArgument(
+            "uniform_rate_tool2_mm_per_s",
+            default_value="3.945",
+            description="uniform_feedforward 树脂(tool2)几何挤出速率 mm/s，默认 rho*v_nom=3.945。",
         ),
         DeclareLaunchArgument(
             "abort_lift_mm",

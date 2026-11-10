@@ -138,7 +138,8 @@ private:
   };
   std::array<UniformChannel, 3> uniform_channels_{};
   std::string dispatch_policy_{"seq_bound"};
-  double uniform_rate_mm_per_s_{10.0};
+  double uniform_rate_tool1_mm_per_s_{10.0};
+  double uniform_rate_tool2_mm_per_s_{3.945};
   rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_;
 
   // ---- runtime logging ----
@@ -187,8 +188,10 @@ public:
       "dispatch_policy", "seq_bound", dispatch_policy_descriptor);
     rcl_interfaces::msg::ParameterDescriptor uniform_rate_descriptor;
     uniform_rate_descriptor.read_only = true;
-    uniform_rate_mm_per_s_ = declare_parameter<double>(
-      "uniform_rate_mm_per_s", 10.0, uniform_rate_descriptor);
+    uniform_rate_tool1_mm_per_s_ = declare_parameter<double>(
+      "uniform_rate_tool1_mm_per_s", 10.0, uniform_rate_descriptor);
+    uniform_rate_tool2_mm_per_s_ = declare_parameter<double>(
+      "uniform_rate_tool2_mm_per_s", 3.945, uniform_rate_descriptor);
     if (dispatch_policy_ != "seq_bound" &&
       dispatch_policy_ != "uniform_feedforward")
     {
@@ -196,15 +199,19 @@ public:
               "unsupported dispatch_policy: " + dispatch_policy_);
     }
     if (dispatch_policy_ == "uniform_feedforward" &&
-      !(uniform_rate_mm_per_s_ > 0.0))
+      (!(uniform_rate_tool1_mm_per_s_ > 0.0) ||
+       !(uniform_rate_tool2_mm_per_s_ > 0.0)))
     {
       throw std::runtime_error(
-              "uniform_rate_mm_per_s must be > 0 when "
-              "dispatch_policy=uniform_feedforward");
+              "uniform_rate_tool1_mm_per_s and uniform_rate_tool2_mm_per_s "
+              "must be > 0 when dispatch_policy=uniform_feedforward");
     }
     RCLCPP_INFO(
-      get_logger(), "UART dispatch policy: %s (rate %.3f mm/s)",
-      dispatch_policy_.c_str(), uniform_rate_mm_per_s_);
+      get_logger(),
+      "UART dispatch policy: %s (tool1 %.3f mm/s, tool2 %.3f mm/s)",
+      dispatch_policy_.c_str(),
+      uniform_rate_tool1_mm_per_s_,
+      uniform_rate_tool2_mm_per_s_);
     RCLCPP_INFO(
       get_logger(), "UART extrusion wire mode: %s",
       uart_bridge::extrusion_wire_mode_name(extrusion_mode));
@@ -485,7 +492,10 @@ private:
         const double dt =
           (rclcpp::Time(hb.stamp) - ch.last_stamp).seconds();
         if (dt > 0.0) {
-          ch.e_abs += uniform_rate_mm_per_s_ * dt;
+          const double rate = (hb.tool_id == 2)
+            ? uniform_rate_tool2_mm_per_s_
+            : uniform_rate_tool1_mm_per_s_;
+          ch.e_abs += rate * dt;
           ch.last_stamp = rclcpp::Time(hb.stamp);
         }
       }
